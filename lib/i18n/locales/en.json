@@ -1,0 +1,415 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "saving": "Enregistrement...",
+    "delete": "Supprimer",
+    "deleting": "Suppression...",
+    "add": "Ajouter",
+    "adding": "Ajout...",
+    "edit": "Modifier",
+    "back": "Retour",
+    "send": "Envoyer",
+    "sending": "Envoi...",
+    "create": "Créer",
+    "creating": "Création...",
+    "creating_ellipsis": "Création…",
+    "continue": "Continuer",
+    "close": "Fermer",
+    "refresh": "Actualiser",
+    "see": "Voir",
+    "none": "—",
+    "pts": "pts",
+    "optional": "optionnel",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "phone": "Téléphone",
+    "civility": "Civilité",
+    "email": "Email",
+    "noResults": "Aucun résultat",
+    "errorPrefix": "Erreur : {{message}}"
+  },
+  "nav": {
+    "home": "Accueil",
+    "orders": "Commandes",
+    "appointments": "Rendez-vous",
+    "clients": "Clients",
+    "coupons": "Coupons",
+    "settings": "Paramètres"
+  },
+  "layout": {
+    "subtitle": "Dashboard vendeur",
+    "phase": "Phase 1 MVP"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "error": "Erreur : {{message}}"
+  },
+  "orders": {
+    "title": "Gestion des Commandes",
+    "subtitle": "Pingez les clients en un clic pour les commandes en cours.",
+    "newBtn": "Nouvelle commande",
+    "noOrders": "Aucune commande",
+    "columns": {
+      "reference": "Référence",
+      "client": "Client",
+      "amount": "Montant",
+      "date": "Date & Heure",
+      "whatsapp": "Rappel"
+    },
+    "tabs": {
+      "pending": "En cours",
+      "ready": "Prêtes",
+      "nonRetrieved": "Non récupérées",
+      "completed": "Récupérées"
+    },
+    "status": {
+      "pending": "En cours",
+      "ready": "Prête",
+      "completed": "Récupérée"
+    },
+    "message": {
+      "sent": "Envoyé",
+      "failed": "Échec",
+      "pending": "En attente"
+    },
+    "failedBanner": {
+      "singular": "1 notification WhatsApp n'a pas pu être envoyée",
+      "plural": "{{count}} notifications WhatsApp n'ont pas pu être envoyées"
+    },
+    "failedFilter": "Échecs uniquement",
+    "noRetrievedAfterReminders": "Aucune commande non récupérée après 3 rappels",
+    "reminders3": "3 rappels",
+    "nonRetrieved": "Non récupérée",
+    "markReady": "Marquer prête",
+    "markPending": "Remettre en attente",
+    "markPickedUp": "Marquer récupérée",
+    "readyBtn": "Prête",
+    "pickedUpBtn": "Récupérée",
+    "readyToast": "Commande marquée prête. Envoi du message dans 10s…",
+    "undoLabel": "Annuler",
+    "cancelledToast": "Annulé. Aucun message envoyé.",
+    "backToQueueToast": "Commande remise en attente.",
+    "deletedToast": "Commande déplacée dans la corbeille",
+    "createdToast": "Commande créée",
+    "createdAndPickedToast": "Commande créée et récupérée",
+    "remindersSingular": "{{count}} rappel envoyé",
+    "remindersPlural": "{{count}} rappels envoyés",
+    "timeline": {
+      "created": "Commande créée",
+      "ready": "Prête pour récupération",
+      "pickedUp": "Récupérée",
+      "historyTitle": "Historique"
+    },
+    "whatsappMessages": "Messages WhatsApp",
+    "readyNotif": "Notification « prête »",
+    "excuseMessage": "Message d'excuse",
+    "correctionDialog": {
+      "title": "Envoyer un message d'excuse ?",
+      "body": "Le message « Commande prête » a déjà été envoyé au client. Souhaitez-vous lui envoyer un message de correction ?",
+      "noSend": "Ne pas envoyer"
+    },
+    "deleteDialog": {
+      "title": "Supprimer la commande",
+      "body": "Déplacer la commande #{{ref}} dans la corbeille ?",
+      "bodyNoRef": "Déplacer la commande sans référence dans la corbeille ?"
+    },
+    "form": {
+      "searchPlaceholder": "Nom ou numéro de téléphone…",
+      "referenceLabel": "Référence commande",
+      "referenceHint": "optionnelle — auto-générée si vide",
+      "amountLabel": "Montant",
+      "immediateLabel": "Récupérée immédiatement (sur place)",
+      "immediateHint": "Aucune notification WhatsApp · points crédités maintenant",
+      "createBtn": "Créer la commande",
+      "creating": "Création..."
+    },
+    "pickedUpToast": "Commande{{ref}} récupérée{{pts}}"
+  },
+  "appointments": {
+    "title": "Rendez-vous",
+    "total": "{{count}} au total",
+    "newBtn": "Nouveau RDV",
+    "noAppointments": "Aucun rendez-vous",
+    "status": {
+      "scheduled": "Planifié",
+      "show": "Présent",
+      "no_show": "Absent"
+    },
+    "calendarView": "Calendrier",
+    "listView": "Liste",
+    "todayBtn": "Aujourd'hui",
+    "upcoming": "À venir",
+    "history": "Historique",
+    "filters": {
+      "all": "Tous",
+      "upcoming": "Planifié",
+      "show": "Présent",
+      "no_show": "Absent",
+      "errorWA": "Erreur WA"
+    },
+    "calModes": {
+      "1day": "1 j",
+      "3day": "3 j",
+      "7day": "7 j",
+      "month": "Mois"
+    },
+    "remindersTitle": "Messages de relance",
+    "remindersSingular": "{{count}} relance",
+    "remindersPlural": "{{count}} relances",
+    "reminderErrorBanner": {
+      "singular": "1 message de relance n'a pas pu être envoyé.",
+      "plural": "{{count}} messages de relance n'ont pas pu être envoyés."
+    },
+    "detail": {
+      "title": "Rendez-vous",
+      "client": "Client",
+      "date": "Date",
+      "time": "Heure",
+      "notes": "Notes",
+      "status": "Statut",
+      "showAt": "Honoré à",
+      "noShowAt": "Absent à",
+      "deleteBtn": "Supprimer ce RDV"
+    },
+    "actions": {
+      "absent": "Absent",
+      "present": "Présent",
+      "markAbsent": "Marquer absent",
+      "markPresent": "Marquer présent",
+      "resetScheduled": "Remettre planifié",
+      "correctStatus": "Corriger le statut"
+    },
+    "toast": {
+      "created": "Rendez-vous créé",
+      "show": "Présence confirmée",
+      "showPts": "Présence confirmée — {{pts}} pts crédités",
+      "noShow": "Absence enregistrée",
+      "forceShow": "Présence enregistrée",
+      "forceNoShow": "Absence enregistrée",
+      "forceScheduled": "Statut réinitialisé",
+      "statusUpdated": "Statut mis à jour",
+      "deleted": "RDV déplacé dans la corbeille"
+    },
+    "deleteDialog": {
+      "title": "Supprimer le RDV",
+      "body": "Déplacer le RDV du {{date}} dans la corbeille ?"
+    },
+    "amountModal": {
+      "title": "Montant de la prestation",
+      "perPoint": "— 1 point / {{amount}} {{currency}}",
+      "pointsPreview": "→ {{points}} point(s) crédités",
+      "validate": "Valider",
+      "validating": "Validation..."
+    },
+    "form": {
+      "searchPlaceholder": "Nom ou numéro de téléphone…",
+      "dateLabel": "Date",
+      "timeLabel": "Heure",
+      "notesLabel": "Notes",
+      "notesHint": "optionnel",
+      "createBtn": "Créer le rendez-vous",
+      "creating": "Création…",
+      "newApptTitle": "Nouveau rendez-vous",
+      "newClientTitle": "Nouveau client"
+    },
+    "failedWA": "Échec WA",
+    "moreItems": "+{{count}} autres",
+    "groupToday": "Aujourd'hui",
+    "groupTomorrow": "Demain"
+  },
+  "clients": {
+    "title": "Clients",
+    "clientCount": "{{count}} client",
+    "clientCountPlural": "{{count}} clients",
+    "searchPlaceholder": "Rechercher un client…",
+    "noClients": "Aucun client enregistré",
+    "addBtn": "Nouveau client",
+    "newClientTitle": "Nouveau client",
+    "addClientBtn": "Ajouter le client",
+    "columns": {
+      "client": "Client",
+      "email": "Email",
+      "status": "Statut",
+      "points": "Points",
+      "tier": "Palier en cours",
+      "actions": "Actions"
+    },
+    "status": {
+      "pending": "En cours",
+      "ready": "En attente",
+      "scheduled": "Planifié"
+    },
+    "maxTier": "Palier max atteint !",
+    "activeRewards": "Récompenses actives",
+    "historyTab": "Historique",
+    "fidelityTab": "Fidélité",
+    "noActivity": "Aucune activité",
+    "noProgram": "Aucun programme configuré",
+    "noTiers": "Aucun palier configuré.",
+    "pointsLog": {
+      "order": "Commande récupérée",
+      "appointment": "RDV honoré",
+      "manual": "Crédit manuel",
+      "undo": "Annulation"
+    },
+    "apptLabels": {
+      "scheduled": "Planifié",
+      "show": "RDV honoré",
+      "no_show": "Absent"
+    },
+    "memberSince": "Depuis le {{date}}",
+    "cycles": "{{count}} cycle",
+    "cyclesPlural": "{{count}} cycles",
+    "clientSheet": "Fiche client",
+    "ptsCycle": "pts cycle",
+    "ptsTotal": "pts total",
+    "actions": {
+      "editInfo": "Modifier les infos",
+      "editPoints": "Modifier les points",
+      "unlockReward": "Débloquer récompense",
+      "delete": "Supprimer",
+      "editInfoTitle": "Modifier les informations",
+      "editPointsTitle": "Modifier les points",
+      "unlockRewardTitle": "Débloquer une récompense",
+      "deleteTitle": "Supprimer le client"
+    },
+    "editPoints": {
+      "label": "Nombre de points",
+      "add": "Ajouter",
+      "remove": "Retirer"
+    },
+    "unlock": {
+      "createCoupon": "Créer manuellement un coupon pour {{name}}",
+      "tierLabel": "Palier / Récompense",
+      "chooseTier": "Choisir un palier...",
+      "unlockBtn": "Débloquer la récompense",
+      "unlocking": "Déblocage..."
+    },
+    "deleteConfirm": {
+      "body": "Confirmer la suppression de {{name}} ? Cette action est irréversible et supprimera toutes les données associées."
+    },
+    "form": {
+      "civility": "Civilité",
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "phone": "Téléphone WhatsApp",
+      "email": "Email",
+      "save": "Enregistrer",
+      "saving": "Mise à jour..."
+    },
+    "toast": {
+      "updated": "Informations mises à jour",
+      "rewardUnlocked": "Récompense débloquée",
+      "deleted": "Client supprimé",
+      "added": "Client ajouté",
+      "ptsApplied": "appliqués"
+    },
+    "magicLinkWarning": "Le lien magique client sera régénéré à cause du changement de numéro."
+  },
+  "coupons": {
+    "title": "Coupons",
+    "activeSingular": "{{count}} actif",
+    "activePlural": "{{count}} actifs",
+    "usedSingular": "{{count}} utilisé",
+    "usedPlural": "{{count}} utilisés",
+    "offerBtn": "Offrir un coupon",
+    "tabs": {
+      "active": "Actifs",
+      "expiring": "Expirent bientôt",
+      "used": "Utilisés",
+      "expired": "Expirés"
+    },
+    "columns": {
+      "client": "Client",
+      "reward": "Récompense",
+      "created": "Créé le",
+      "expires": "Expire le",
+      "usedCol": "Utilisé",
+      "expiredCol": "Expiré",
+      "delay": "Délai"
+    },
+    "noCoupons": "Aucun coupon",
+    "status": {
+      "active": "Actif",
+      "used": "Utilisé",
+      "expired": "Expiré"
+    },
+    "expiresDay": "Expire aujourd'hui",
+    "daysLeft": "{{count}}j restants",
+    "form": {
+      "searchPlaceholder": "Nom ou numéro de téléphone...",
+      "noClients": "Aucun client trouvé",
+      "createNew": "Créer un nouveau client",
+      "changeBtn": "Changer",
+      "noTiers": "Aucun palier de fidélité configuré.",
+      "rewardLabel": "Récompense à offrir",
+      "chooseReward": "Choisir une récompense...",
+      "chooseTitle": "Choisir la récompense",
+      "offerBtn": "Offrir le coupon",
+      "backBtn": "← Retour",
+      "phoneLabel": "Téléphone WhatsApp"
+    },
+    "toast": {
+      "offered": "Coupon offert à {{name}}"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "subtitle": "Configuration de votre espace",
+    "tabs": {
+      "infos": "Mes infos",
+      "modules": "Modules",
+      "rappels": "Rappels RDV",
+      "commandes": "Commandes",
+      "fidelite": "Fidélité",
+      "portail": "Portail client",
+      "calendrier": "Calendrier",
+      "corbeille": "Corbeille"
+    },
+    "saveBtn": "Enregistrer",
+    "saving": "Enregistrement...",
+    "saveInfos": "Enregistrer les informations",
+    "saveApptNotif": "Enregistrer les notifications RDV",
+    "saveOrderNotif": "Enregistrer les notifications",
+    "saveReminder": "Enregistrer le rappel",
+    "saveLoyalty": "Enregistrer le programme",
+    "saveAppearance": "Enregistrer l'apparence",
+    "open": "Ouvert",
+    "closed": "Fermé",
+    "connected": "Connecté",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "disconnect": "Déconnecter",
+    "disconnecting": "Déconnexion...",
+    "connectGoogle": "Connecter Google Calendar",
+    "connectOutlook": "Connecter Outlook Calendar",
+    "restore": "Restaurer",
+    "trashEmpty": "La corbeille est vide",
+    "deletedOrders": "Commandes supprimées",
+    "deletedAppts": "Rendez-vous supprimés",
+    "toast": {
+      "reminderSaved": "Rappel enregistré",
+      "restored": "Élément restauré",
+      "deletedPermanently": "Supprimé définitivement",
+      "infosSaved": "Informations enregistrées",
+      "appearanceSaved": "Apparence enregistrée",
+      "modulesSaved": "Modules mis à jour",
+      "orderNotifSaved": "Notifications commandes enregistrées",
+      "apptNotifSaved": "Notifications rendez-vous enregistrées",
+      "loyaltySaved": "Programme de fidélité enregistré",
+      "calendarDisconnected": "{{name}} déconnecté"
+    },
+    "errors": {
+      "atLeastOneModule": "Au moins un module doit rester actif",
+      "currencyRequired": "La devise est requise",
+      "fileTooLarge": "Le fichier ne doit pas dépasser 2 Mo",
+      "gmapsUrl": "Le lien Google Maps doit commencer par http(s)://",
+      "wazeUrl": "Le lien Waze doit commencer par http(s)://",
+      "pointsPerVisit": "Le nombre de points par passage doit être ≥ 1",
+      "amountPerPoint": "Le montant par point doit être > 0",
+      "tiersAscending": "Les paliers doivent avoir des points requis croissants"
+    }
+  }
+}
