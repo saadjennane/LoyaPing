@@ -312,14 +312,14 @@ export default function OnboardingStep6() {
   const hasSocial  = !!(profile.instagram_url || profile.tiktok_url || profile.facebook_url || profile.youtube_url)
   const hasAddress = !!(profile.address || profile.google_maps_url)
 
-  const filledFields: { key: keyof Visibility; label: string }[] = [
+  const filledFields = ([
     { key: 'logo',    label: 'Logo'            },
     { key: 'phone',   label: 'Téléphone'       },
     { key: 'address', label: 'Adresse'         },
     { key: 'email',   label: 'Email'           },
     { key: 'website', label: 'Site web'        },
     { key: 'social',  label: 'Réseaux sociaux' },
-  ].filter(({ key }) => {
+  ] as { key: keyof Visibility; label: string }[]).filter(({ key }) => {
     if (key === 'logo')    return !!profile.logo_url
     if (key === 'phone')   return !!profile.phone
     if (key === 'address') return hasAddress
