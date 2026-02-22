@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
-  Plus, Search, UserPlus, Gift, Clock, CheckCircle2, XCircle, Ticket, AlertCircle, QrCode, Trash2,
+  Plus, Search, UserPlus, Gift, Clock, CheckCircle2, XCircle, Ticket, AlertCircle, QrCode, Trash2, Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -73,6 +73,9 @@ export default function CouponsPage() {
 
   // Current tab (for bulk actions context)
   const [activeTab, setActiveTab] = useState('active')
+
+  // Mobile select mode
+  const [mobileSelectMode, setMobileSelectMode] = useState(false)
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -278,6 +281,72 @@ export default function CouponsPage() {
     setBulkUpdating(false)
   }
 
+  // ── Mobile card renderer ───────────────────────────────────────────────────
+  const renderMobileCards = (list: Coupon[], variant: 'active' | 'expiring' | 'used' | 'expired') => {
+    if (loading) return <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
+    if (list.length === 0) return (
+      <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
+        <Ticket className="h-8 w-8 opacity-30" />
+        <p className="text-sm">{t('coupons.noCoupons')}</p>
+      </div>
+    )
+    return (
+      <div className="space-y-2 p-3">
+        {list.map((coupon) => {
+          const client = coupon.client as Client | undefined
+          const tier = coupon.tier
+          const days = daysLeft(coupon)
+          const isSelected = selectedIds.has(coupon.id)
+          return (
+            <div
+              key={coupon.id}
+              className={`bg-card border rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-muted/30 transition-colors ${
+                isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-border'
+              }`}
+              onClick={() => { if (mobileSelectMode) toggleSelect(coupon.id) }}
+            >
+              {mobileSelectMode && (
+                <div className="shrink-0">
+                  <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                    isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-muted-foreground/40'
+                  }`}>
+                    {isSelected && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-medium text-sm truncate">{clientFullName(client)}</div>
+                  <CouponStatusBadge status={coupon.status} />
+                </div>
+                {client && <div className="text-xs text-muted-foreground">{client.phone_number}</div>}
+                <div className="text-sm text-muted-foreground mt-0.5 truncate">{tier?.reward_description ?? '—'}</div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {variant !== 'used' && (
+                    <span className={`text-xs ${days <= 3 && variant !== 'expired' ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                      {variant === 'expired'
+                        ? `Expiré le ${format(parseISO(coupon.expires_at), 'd MMM yyyy', { locale: fr })}`
+                        : `Expire le ${format(parseISO(coupon.expires_at), 'd MMM yyyy', { locale: fr })}`}
+                    </span>
+                  )}
+                  {variant === 'expiring' && (
+                    <Badge className={
+                      days <= 1 ? 'bg-red-100 text-red-700 hover:bg-red-100 text-[10px] px-1.5 py-0'
+                      : days <= 3 ? 'bg-orange-100 text-orange-700 hover:bg-orange-100 text-[10px] px-1.5 py-0'
+                      : 'bg-amber-100 text-amber-700 hover:bg-amber-100 text-[10px] px-1.5 py-0'
+                    }>
+                      {days === 0 ? t('coupons.expiresDay') : t('coupons.daysLeft', { count: days })}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   // ── Table renderer ─────────────────────────────────────────────────────────
   const renderTable = (list: Coupon[], variant: 'active' | 'expiring' | 'used' | 'expired') => {
     if (loading) {
@@ -405,7 +474,7 @@ export default function CouponsPage() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-3 md:p-6 space-y-3 md:space-y-4">
       {/* Loyalty not configured — blocking banner */}
       {status !== null && !status.loyalty_configured && (
         <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-4 py-4 flex items-start gap-3">
@@ -434,12 +503,12 @@ export default function CouponsPage() {
             {used.length !== 1 ? t('coupons.usedPlural', { count: used.length }) : t('coupons.usedSingular', { count: used.length })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setOfferOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />{t('coupons.offerBtn')}
-          </Button>
+        <div className="flex flex-col gap-1.5 items-end md:flex-row md:gap-2 md:items-center">
           <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => setRedeemOpen(true)}>
             <QrCode className="h-4 w-4 mr-2" />Valider un coupon
+          </Button>
+          <Button variant="outline" onClick={() => setOfferOpen(true)}>
+            <Gift className="h-4 w-4 mr-2" />{t('coupons.offerBtn')}
           </Button>
         </div>
       </div>
@@ -458,8 +527,32 @@ export default function CouponsPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="active" value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()) }} className="gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <TabsList className="w-full flex justify-start border-b border-border bg-transparent h-auto p-0 rounded-none px-2 md:px-6 overflow-x-auto">
+      <Tabs defaultValue="active" value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); setMobileSelectMode(false) }} className="gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        {/* Mobile filter bar */}
+        <div className="md:hidden flex items-center gap-2 p-3 border-b">
+          <Select value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); setMobileSelectMode(false) }}>
+            <SelectTrigger className="h-9 flex-1 font-medium text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">{t('coupons.tabs.active')} ({active.length})</SelectItem>
+              <SelectItem value="expiring">{t('coupons.tabs.expiring')} ({expiring.length})</SelectItem>
+              <SelectItem value="used">{t('coupons.tabs.used')} ({used.length})</SelectItem>
+              <SelectItem value="expired">{t('coupons.tabs.expired')} ({expired.length})</SelectItem>
+            </SelectContent>
+          </Select>
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0"
+            onClick={() => {
+              if (mobileSelectMode) { setMobileSelectMode(false); setSelectedIds(new Set()) }
+              else setMobileSelectMode(true)
+            }}
+          >
+            {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
+          </button>
+        </div>
+
+        <TabsList className="hidden md:flex w-full justify-start border-b border-border bg-transparent h-auto p-0 rounded-none md:px-6 overflow-x-auto">
           <TabsTrigger value="active" className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">
             <Gift className="h-3.5 w-3.5" />
             {t('coupons.tabs.active')}<CountBadge n={active.length} />
@@ -479,19 +572,23 @@ export default function CouponsPage() {
         </TabsList>
 
         <TabsContent value="active" className="mt-0">
-          {renderTable(active, 'active')}
+          <div className="md:hidden">{renderMobileCards(active, 'active')}</div>
+          <div className="hidden md:block">{renderTable(active, 'active')}</div>
         </TabsContent>
 
         <TabsContent value="expiring" className="mt-0">
-          {renderTable(expiring, 'expiring')}
+          <div className="md:hidden">{renderMobileCards(expiring, 'expiring')}</div>
+          <div className="hidden md:block">{renderTable(expiring, 'expiring')}</div>
         </TabsContent>
 
         <TabsContent value="used" className="mt-0">
-          {renderTable(used, 'used')}
+          <div className="md:hidden">{renderMobileCards(used, 'used')}</div>
+          <div className="hidden md:block">{renderTable(used, 'used')}</div>
         </TabsContent>
 
         <TabsContent value="expired" className="mt-0">
-          {renderTable(expired, 'expired')}
+          <div className="md:hidden">{renderMobileCards(expired, 'expired')}</div>
+          <div className="hidden md:block">{renderTable(expired, 'expired')}</div>
         </TabsContent>
       </Tabs>
 
@@ -650,7 +747,7 @@ export default function CouponsPage() {
 
       {/* ── Bulk floating action bar ──────────────────────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{selectedIds.size} sélectionné(s)</span>
           <div className="w-px h-4 bg-border" />
           {(activeTab === 'active' || activeTab === 'expiring') && (
@@ -667,7 +764,7 @@ export default function CouponsPage() {
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />Supprimer
           </Button>
           <div className="w-px h-4 bg-border" />
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Désélectionner</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setSelectedIds(new Set()); setMobileSelectMode(false) }}>Désélectionner</Button>
         </div>
       )}
 
