@@ -58,6 +58,8 @@ export async function creditPoints({
         client_id: clientId,
         tier_id: tier.id,
         status: 'active',
+        source: 'tier_unlock' as const,
+        used_at: null,
         redemption_code: null,
         redemption_code_expires_at: null,
         expires_at: expiresAt.toISOString(),
