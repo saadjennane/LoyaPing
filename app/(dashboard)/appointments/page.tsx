@@ -299,6 +299,7 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
+  const [pendingGotoDate,       setPendingGotoDate]        = useState('')
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -726,15 +727,15 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => setListTab('upcoming')}
-                className={`px-4 py-1.5 text-sm font-medium ${
+                onClick={() => { setListTab('upcoming'); setPendingGotoDate('') }}
+                className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
               >
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => setListTab('history')}
+                onClick={() => { setListTab('history'); setPendingGotoDate('') }}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -827,17 +828,41 @@ export default function AppointmentsPage() {
 
             {/* Go-to date */}
             <div className="ml-auto flex items-center gap-1.5">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Aller à une date</span>
-              <Input
-                type="date"
-                value={listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate}
-                onChange={(e) => listTab === 'upcoming' ? setUpcomingGotoDate(e.target.value) : setHistoryGotoDate(e.target.value)}
-                className="h-8 w-40 text-sm"
-              />
-              {(listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate) && (
-                <Button size="sm" variant="ghost" onClick={() => listTab === 'upcoming' ? setUpcomingGotoDate('') : setHistoryGotoDate('')}>
-                  ✕
-                </Button>
+              <div className="flex items-center h-8 border border-input rounded-md px-2 gap-1.5 bg-background text-sm">
+                <span className="text-muted-foreground whitespace-nowrap text-xs">Aller à une date</span>
+                <input
+                  type="date"
+                  value={pendingGotoDate}
+                  onChange={(e) => setPendingGotoDate(e.target.value)}
+                  className="bg-transparent border-0 p-0 text-sm focus:outline-none w-32"
+                />
+              </div>
+              {pendingGotoDate && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                    onClick={() => {
+                      if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
+                      else setHistoryGotoDate(pendingGotoDate)
+                    }}
+                  >
+                    ✓
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    onClick={() => {
+                      setPendingGotoDate('')
+                      if (listTab === 'upcoming') setUpcomingGotoDate('')
+                      else setHistoryGotoDate('')
+                    }}
+                  >
+                    ✕
+                  </Button>
+                </>
               )}
             </div>
           </div>
