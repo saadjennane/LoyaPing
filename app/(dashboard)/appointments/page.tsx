@@ -787,11 +787,6 @@ export default function AppointmentsPage() {
         // ── List View — sub-tabs: À venir / Historique ─────────────────────
         <div className="space-y-4">
 
-          {/* Backdrop: closes date picker when tapping outside */}
-          {gotoPickerOpen && (
-            <div className="fixed inset-0 z-10" onClick={() => setGotoPickerOpen(false)} />
-          )}
-
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-3">
             {/* Status pills */}
@@ -836,15 +831,6 @@ export default function AppointmentsPage() {
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
 
-              const confirmDate = () => {
-                const val = gotoInputRef.current?.value
-                if (val) {
-                  if (listTab === 'upcoming') setUpcomingGotoDate(val)
-                  else setHistoryGotoDate(val)
-                }
-                setGotoPickerOpen(false)
-              }
-              const cancelDate = () => setGotoPickerOpen(false)
               const clear = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
@@ -852,16 +838,26 @@ export default function AppointmentsPage() {
 
               if (gotoPickerOpen) {
                 return (
-                  <div className="ml-auto flex items-center gap-1.5 relative z-20">
+                  <div className="ml-auto flex items-center gap-1.5">
                     <input
                       ref={gotoInputRef}
                       type="date"
                       autoFocus
-                      defaultValue={appliedDate}
                       className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
+                      onBlur={(e) => {
+                        // e.target.value is the committed DOM value:
+                        // set only when user taps Done in the iOS picker,
+                        // stays "" if user taps outside without Done.
+                        const val = e.target.value
+                        setTimeout(() => {
+                          if (val) {
+                            if (listTab === 'upcoming') setUpcomingGotoDate(val)
+                            else setHistoryGotoDate(val)
+                          }
+                          setGotoPickerOpen(false)
+                        }, 50)
+                      }}
                     />
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700 relative z-20" onClick={confirmDate}>✓</Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 relative z-20" onClick={cancelDate}>✕</Button>
                   </div>
                 )
               }
