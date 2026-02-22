@@ -702,46 +702,48 @@ export default function AppointmentsPage() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* View toggle */}
-        <div className="flex rounded-md border overflow-hidden">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${
-              viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-            }`}
-          >
-            <List className="h-3.5 w-3.5" />{t('appointments.listView')}
-          </button>
-          <button
-            onClick={() => setViewMode('calendar')}
-            className={`px-3 py-1.5 text-sm flex items-center gap-1.5 border-l ${
-              viewMode === 'calendar' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-            }`}
-          >
-            <Calendar className="h-3.5 w-3.5" />{t('appointments.calendarView')}
-          </button>
-        </div>
-
-        {viewMode === 'list' && (
+        {/* View toggle + list sub-tabs on the same row */}
+        <div className="flex items-center gap-2">
           <div className="flex rounded-md border overflow-hidden">
             <button
-              onClick={() => setListTab('upcoming')}
-              className={`px-4 py-1.5 text-sm font-medium ${
-                listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${
+                viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
               }`}
             >
-              {t('appointments.upcoming')}
+              <List className="h-3.5 w-3.5" />{t('appointments.listView')}
             </button>
             <button
-              onClick={() => setListTab('history')}
-              className={`px-4 py-1.5 text-sm font-medium border-l ${
-                listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 border-l ${
+                viewMode === 'calendar' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
               }`}
             >
-              {t('appointments.history')}
+              <Calendar className="h-3.5 w-3.5" />{t('appointments.calendarView')}
             </button>
           </div>
-        )}
+
+          {viewMode === 'list' && (
+            <div className="flex rounded-md border overflow-hidden">
+              <button
+                onClick={() => setListTab('upcoming')}
+                className={`px-4 py-1.5 text-sm font-medium ${
+                  listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                {t('appointments.upcoming')}
+              </button>
+              <button
+                onClick={() => setListTab('history')}
+                className={`px-4 py-1.5 text-sm font-medium border-l ${
+                  listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                {t('appointments.history')}
+              </button>
+            </div>
+          )}
+        </div>
 
         {viewMode === 'calendar' && (
           <>
