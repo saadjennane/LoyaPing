@@ -7,15 +7,18 @@ import { useClientFieldConfig, type ClientFieldConfig, DEFAULT_CLIENT_FIELD_CONF
 function Toggle({
   checked,
   onChange,
+  disabled = false,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
+  disabled?: boolean
 }) {
   return (
     <button
       type="button" role="switch" aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${checked ? 'bg-green-500' : 'bg-muted-foreground/30'}`}
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${checked ? 'bg-green-500' : 'bg-muted-foreground/30'}`}
     >
       <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
@@ -27,19 +30,21 @@ function SettingRow({
   description,
   checked,
   onChange,
+  disabled = false,
 }: {
   label: string
   description: string
   checked: boolean
   onChange: (v: boolean) => void
+  disabled?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b last:border-b-0">
+    <div className={`flex items-center justify-between gap-4 py-3 border-b last:border-b-0 ${disabled ? 'opacity-50' : ''}`}>
       <div className="space-y-0.5">
         <div className="text-sm font-medium">{label}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
       </div>
-      <Toggle checked={checked} onChange={onChange} />
+      <Toggle checked={checked} onChange={onChange} disabled={disabled} />
     </div>
   )
 }
@@ -159,18 +164,21 @@ export default function SettingsClientsPage() {
             description="Affiche la colonne Email dans la liste."
             checked={config.list_email}
             onChange={() => toggle('list_email')}
+            disabled={!config.detail_email}
           />
           <SettingRow
             label="Anniversaire"
             description="Affiche la colonne Anniversaire dans la liste."
             checked={config.list_birthday}
             onChange={() => toggle('list_birthday')}
+            disabled={!config.detail_birthday}
           />
           <SettingRow
             label="Dernière activité"
             description="Affiche la date de la dernière interaction (commande ou RDV)."
             checked={config.list_last_activity}
             onChange={() => toggle('list_last_activity')}
+            disabled={!config.detail_last_activity}
           />
         </div>
       </div>
