@@ -299,8 +299,8 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const gotoChangedRef  = useRef(false) // true if a real onChange fired (Done was tapped)
-  const gotoFocusTimeRef = useRef(0)   // timestamp of last focus, to filter spurious iOS initial change
+  const [gotoPickerOpen, setGotoPickerOpen] = useState(false)
+  const gotoInputRef = useRef<HTMLInputElement>(null)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -787,6 +787,11 @@ export default function AppointmentsPage() {
         // ── List View — sub-tabs: À venir / Historique ─────────────────────
         <div className="space-y-4">
 
+          {/* Backdrop: closes date picker when tapping outside */}
+          {gotoPickerOpen && (
+            <div className="fixed inset-0 z-10" onClick={() => setGotoPickerOpen(false)} />
+          )}
+
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-3">
             {/* Status pills */}
@@ -827,50 +832,50 @@ export default function AppointmentsPage() {
               )
             })()}
 
-            {/* Go-to date — hidden input overlays the button so iOS picker opens on tap */}
+            {/* Go-to date */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
+
+              const confirmDate = () => {
+                const val = gotoInputRef.current?.value
+                if (val) {
+                  if (listTab === 'upcoming') setUpcomingGotoDate(val)
+                  else setHistoryGotoDate(val)
+                }
+                setGotoPickerOpen(false)
+              }
+              const cancelDate = () => setGotoPickerOpen(false)
               const clear = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
               }
+
+              if (gotoPickerOpen) {
+                return (
+                  <div className="ml-auto flex items-center gap-1.5 relative z-20">
+                    <input
+                      ref={gotoInputRef}
+                      type="date"
+                      autoFocus
+                      defaultValue={appliedDate}
+                      className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
+                    />
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700 relative z-20" onClick={confirmDate}>✓</Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 relative z-20" onClick={cancelDate}>✕</Button>
+                  </div>
+                )
+              }
+
               return (
                 <div className="ml-auto flex items-center gap-1.5">
-                  <div className="relative">
-                    <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap pointer-events-none select-none">
-                      {appliedDate
-                        ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
-                        : 'Aller à une date'}
-                    </button>
-                    <input
-                      key={appliedDate + listTab}
-                      type="date"
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                      defaultValue={appliedDate}
-                      onFocus={() => {
-                        gotoFocusTimeRef.current = Date.now()
-                        gotoChangedRef.current = false
-                      }}
-                      onChange={(e) => {
-                        // iOS fires a spurious change immediately on open (default date).
-                        // Ignore any change within 150ms of focus — that's the iOS initialisation, not Done.
-                        if (Date.now() - gotoFocusTimeRef.current < 150) return
-                        gotoChangedRef.current = true
-                        if (listTab === 'upcoming') setUpcomingGotoDate(e.target.value)
-                        else setHistoryGotoDate(e.target.value)
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => {
-                          if (!gotoChangedRef.current) {
-                            // No real Done → user tapped outside → repos
-                            if (listTab === 'upcoming') setUpcomingGotoDate('')
-                            else setHistoryGotoDate('')
-                          }
-                          gotoChangedRef.current = false
-                        }, 0)
-                      }}
-                    />
-                  </div>
+                  <button
+                    onClick={() => setGotoPickerOpen(true)}
+                    className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap"
+                  >
+                    {appliedDate
+                      ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
+                      : 'Aller à une date'}
+                  </button>
                   {appliedDate && (
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clear}>✕</Button>
                   )}
