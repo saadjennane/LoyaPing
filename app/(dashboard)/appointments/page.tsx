@@ -299,9 +299,9 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const [pendingGotoDate,       setPendingGotoDate]        = useState('')
   const [datePickerOpen,        setDatePickerOpen]         = useState(false)
-  const dateConfirmingRef = useRef(false)
+  const dateConfirmingRef  = useRef(false)
+  const pendingGotoDateRef = useRef('')  // ref → no re-render on date selection
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -729,7 +729,7 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => { setListTab('upcoming'); setPendingGotoDate(''); setDatePickerOpen(false) }}
+                onClick={() => { setListTab('upcoming'); pendingGotoDateRef.current = ''; setDatePickerOpen(false) }}
                 className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -737,7 +737,7 @@ export default function AppointmentsPage() {
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => { setListTab('history'); setPendingGotoDate(''); setDatePickerOpen(false) }}
+                onClick={() => { setListTab('history'); pendingGotoDateRef.current = ''; setDatePickerOpen(false) }}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -831,16 +831,17 @@ export default function AppointmentsPage() {
             {/* Go-to date */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
-              const openPicker = () => { setDatePickerOpen(true); setPendingGotoDate(appliedDate) }
-              const confirm = () => {
-                if (pendingGotoDate) {
-                  if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
-                  else setHistoryGotoDate(pendingGotoDate)
+              const openPicker  = () => { pendingGotoDateRef.current = appliedDate; setDatePickerOpen(true) }
+              const confirm     = () => {
+                const val = pendingGotoDateRef.current
+                if (val) {
+                  if (listTab === 'upcoming') setUpcomingGotoDate(val)
+                  else setHistoryGotoDate(val)
                 }
+                pendingGotoDateRef.current = ''
                 setDatePickerOpen(false)
-                setPendingGotoDate('')
               }
-              const cancel = () => { setDatePickerOpen(false); setPendingGotoDate('') }
+              const cancel = () => { pendingGotoDateRef.current = ''; setDatePickerOpen(false) }
               const clear  = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
@@ -852,15 +853,14 @@ export default function AppointmentsPage() {
                     <input
                       type="date"
                       autoFocus
-                      value={pendingGotoDate}
-                      onChange={(e) => setPendingGotoDate(e.target.value)}
+                      // Uncontrolled — browser manages display, no re-render on selection → no flash
+                      defaultValue={appliedDate}
+                      onChange={(e) => { pendingGotoDateRef.current = e.target.value }}
                       onBlur={() => {
-                        // Defer so onPointerDown on buttons fires first
                         setTimeout(() => {
                           if (!dateConfirmingRef.current) {
-                            // Tap outside — return to repos without applying
+                            pendingGotoDateRef.current = ''
                             setDatePickerOpen(false)
-                            setPendingGotoDate('')
                           }
                           dateConfirmingRef.current = false
                         }, 0)
