@@ -129,7 +129,7 @@ export default function Sidebar() {
   return (
     <aside
       ref={asideRef}
-      className={`hidden lg:flex h-screen ${
+      className={`hidden lg:flex sticky top-0 h-screen ${
         collapsed ? 'w-[68px]' : 'w-56'
       } transition-all duration-200 bg-sidebar border-r border-sidebar-border flex-col shrink-0 [overflow:clip]`}
     >
