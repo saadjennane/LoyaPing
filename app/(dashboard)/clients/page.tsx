@@ -559,6 +559,7 @@ export default function ClientsPage() {
               <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noClients')}</p>
             ) : clients.map((client) => {
               const { progress, current, target } = getProgress(client, tiers)
+              const statuses = statusOn ? getClientStatuses(client.id) : []
               return (
                 <div
                   key={client.id}
@@ -572,6 +573,15 @@ export default function ClientsPage() {
                       <div className="mt-1.5 space-y-0.5">
                         <div className="text-xs text-muted-foreground tabular-nums">{current}/{target} pts</div>
                         <Progress value={progress} className="h-1" />
+                      </div>
+                    )}
+                    {statuses.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {statuses.map((s) => (
+                          <Badge key={s} variant={STATUS_CONFIG[s].variant} className="text-[10px] px-1.5 py-0">
+                            {t(STATUS_CONFIG[s].labelKey)}
+                          </Badge>
+                        ))}
                       </div>
                     )}
                   </div>
