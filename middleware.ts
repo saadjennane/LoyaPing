@@ -2,6 +2,9 @@ import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // ⚠️ TEMPORARILY DISABLED for Lighthouse audit — remove this line after testing!
+  return NextResponse.next()
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -36,6 +39,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // ⚠️ TEMPORARILY DISABLED for Lighthouse audit — re-enable after testing!
-  matcher: [],
+  matcher: [
+    '/((?!login|auth|u/|c/|onboarding|api/|_next/static|_next/image|favicon\\.ico).*)',
+  ],
 }
