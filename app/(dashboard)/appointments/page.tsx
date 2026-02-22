@@ -302,6 +302,7 @@ export default function AppointmentsPage() {
   const [datePickerOpen,        setDatePickerOpen]         = useState(false)
   const dateConfirmingRef  = useRef(false)
   const pendingGotoDateRef = useRef('')  // ref → no re-render on date selection
+  const dateFormRef        = useRef<HTMLDivElement>(null)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -849,14 +850,17 @@ export default function AppointmentsPage() {
 
               if (datePickerOpen) {
                 return (
-                  <div className="ml-auto flex items-center gap-1.5">
+                  <div ref={dateFormRef} className="ml-auto flex items-center gap-1.5">
                     <input
                       type="date"
                       autoFocus
-                      // Uncontrolled — browser manages display, no re-render on selection → no flash
                       defaultValue={appliedDate}
                       onChange={(e) => { pendingGotoDateRef.current = e.target.value }}
                       onBlur={() => {
+                        // Synchronous: hide immediately before React re-renders → no flash
+                        if (!dateConfirmingRef.current && dateFormRef.current) {
+                          dateFormRef.current.style.visibility = 'hidden'
+                        }
                         setTimeout(() => {
                           if (!dateConfirmingRef.current) {
                             pendingGotoDateRef.current = ''
