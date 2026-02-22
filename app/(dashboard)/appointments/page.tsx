@@ -299,6 +299,7 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
+  const [pendingGotoDate,       setPendingGotoDate]        = useState('')
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -726,7 +727,7 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => setListTab('upcoming')}
+                onClick={() => { setListTab('upcoming'); setPendingGotoDate('') }}
                 className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -734,7 +735,7 @@ export default function AppointmentsPage() {
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => setListTab('history')}
+                onClick={() => { setListTab('history'); setPendingGotoDate('') }}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -828,31 +829,43 @@ export default function AppointmentsPage() {
             {/* Go-to date */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
-              const clearDate = () => listTab === 'upcoming' ? setUpcomingGotoDate('') : setHistoryGotoDate('')
+              // pendingGotoDate = date sélectionnée dans le picker mais pas encore confirmée
+              const displayDate = appliedDate // la box affiche toujours la date confirmée
+              const hasPending  = pendingGotoDate !== '' && pendingGotoDate !== appliedDate
+              const confirm = () => {
+                if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
+                else setHistoryGotoDate(pendingGotoDate)
+                setPendingGotoDate('')
+              }
+              const cancel = () => setPendingGotoDate('')
+              const clear  = () => {
+                if (listTab === 'upcoming') setUpcomingGotoDate('')
+                else setHistoryGotoDate('')
+                setPendingGotoDate('')
+              }
               return (
                 <div className="ml-auto flex items-center gap-1.5">
                   <div className="relative h-8 border border-input rounded-md px-2 bg-background flex items-center min-w-[9rem]">
                     <span className="text-xs whitespace-nowrap pointer-events-none select-none text-muted-foreground">
-                      {appliedDate
-                        ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
+                      {displayDate
+                        ? format(parseISO(displayDate), 'd MMM yyyy', { locale: fr })
                         : 'Aller à une date'}
                     </span>
                     <input
                       type="date"
-                      value={appliedDate}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        if (listTab === 'upcoming') setUpcomingGotoDate(val)
-                        else setHistoryGotoDate(val)
-                      }}
+                      value={pendingGotoDate || appliedDate}
+                      onChange={(e) => setPendingGotoDate(e.target.value)}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full"
                     />
                   </div>
-                  {appliedDate && (
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clearDate}>
-                      ✕
-                    </Button>
-                  )}
+                  {hasPending ? (
+                    <>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700" onClick={confirm}>✓</Button>
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={cancel}>✕</Button>
+                    </>
+                  ) : appliedDate ? (
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clear}>✕</Button>
+                  ) : null}
                 </div>
               )
             })()}
