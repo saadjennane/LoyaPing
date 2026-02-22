@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Calendar as CalendarPicker } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -299,8 +301,7 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const [gotoPickerOpen, setGotoPickerOpen] = useState(false)
-  const gotoInputRef = useRef<HTMLInputElement>(null)
+  const [gotoOpen, setGotoOpen] = useState(false)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -827,51 +828,51 @@ export default function AppointmentsPage() {
               )
             })()}
 
-            {/* Go-to date */}
+            {/* Go-to date — custom calendar popover, click-outside ferme sans appliquer */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
+              const selectedDay = appliedDate ? parseISO(appliedDate) : undefined
 
               const clear = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
               }
 
-              if (gotoPickerOpen) {
-                return (
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <input
-                      ref={gotoInputRef}
-                      type="date"
-                      autoFocus
-                      className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
-                      onBlur={(e) => {
-                        // e.target.value is the committed DOM value:
-                        // set only when user taps Done in the iOS picker,
-                        // stays "" if user taps outside without Done.
-                        const val = e.target.value
-                        setTimeout(() => {
-                          if (val) {
-                            if (listTab === 'upcoming') setUpcomingGotoDate(val)
-                            else setHistoryGotoDate(val)
-                          }
-                          setGotoPickerOpen(false)
-                        }, 50)
-                      }}
-                    />
-                  </div>
-                )
-              }
-
               return (
                 <div className="ml-auto flex items-center gap-1.5">
-                  <button
-                    onClick={() => setGotoPickerOpen(true)}
-                    className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap"
-                  >
-                    {appliedDate
-                      ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
-                      : 'Aller à une date'}
-                  </button>
+                  <Popover open={gotoOpen} onOpenChange={(open) => {
+                    setGotoOpen(open)
+                    if (!open && !appliedDate) {
+                      // Fermé sans sélection → repos (déjà vide)
+                    }
+                    if (!open && appliedDate) {
+                      // Fermé après sélection → on garde la date
+                    }
+                  }}>
+                    <PopoverTrigger asChild>
+                      <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap">
+                        {appliedDate
+                          ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
+                          : 'Aller à une date'}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <CalendarPicker
+                        mode="single"
+                        selected={selectedDay}
+                        locale={fr}
+                        onSelect={(day) => {
+                          if (day) {
+                            const iso = format(day, 'yyyy-MM-dd')
+                            if (listTab === 'upcoming') setUpcomingGotoDate(iso)
+                            else setHistoryGotoDate(iso)
+                          }
+                          setGotoOpen(false)
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                   {appliedDate && (
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clear}>✕</Button>
                   )}
