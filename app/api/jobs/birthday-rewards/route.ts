@@ -5,7 +5,11 @@ import { processBirthdayRewards } from '@/lib/services/birthday-rewards'
 // Cron worker: runs daily, finds clients with today's birthday,
 // creates a birthday coupon and sends a WhatsApp message (if configured).
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret')
+  const auth = req.headers.get('authorization')
+  const secret =
+    (auth?.startsWith('Bearer ') ? auth.slice(7) : null) ??
+    req.headers.get('x-cron-secret') ??
+    req.nextUrl.searchParams.get('secret')
   if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

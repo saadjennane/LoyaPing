@@ -26,7 +26,9 @@ import { claimDueMessages, markSent, markFailed } from '@/lib/services/outbox'
 const BATCH_SIZE = 20
 
 export async function GET(req: NextRequest) {
+  const auth = req.headers.get('authorization')
   const secret =
+    (auth?.startsWith('Bearer ') ? auth.slice(7) : null) ??
     req.headers.get('x-cron-secret') ??
     req.nextUrl.searchParams.get('secret')
 

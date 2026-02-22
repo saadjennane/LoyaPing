@@ -20,7 +20,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret')
+  const auth = req.headers.get('authorization')
+  const secret =
+    (auth?.startsWith('Bearer ') ? auth.slice(7) : null) ??
+    req.headers.get('x-cron-secret') ??
+    req.nextUrl.searchParams.get('secret')
   if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
