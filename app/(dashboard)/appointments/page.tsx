@@ -299,7 +299,6 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const [pendingGotoDate,       setPendingGotoDate]        = useState('')
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -727,7 +726,7 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => { setListTab('upcoming'); setPendingGotoDate('') }}
+                onClick={() => setListTab('upcoming')}
                 className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -735,7 +734,7 @@ export default function AppointmentsPage() {
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => { setListTab('history'); setPendingGotoDate('') }}
+                onClick={() => setListTab('history')}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -827,44 +826,36 @@ export default function AppointmentsPage() {
             })()}
 
             {/* Go-to date */}
-            <div className="ml-auto flex items-center gap-1.5">
-              <div className="flex items-center h-8 border border-input rounded-md px-2 gap-1.5 bg-background text-sm">
-                <span className="text-muted-foreground whitespace-nowrap text-xs">Aller à une date</span>
-                <input
-                  type="date"
-                  value={pendingGotoDate}
-                  onChange={(e) => setPendingGotoDate(e.target.value)}
-                  className="bg-transparent border-0 p-0 text-sm focus:outline-none w-32"
-                />
-              </div>
-              {pendingGotoDate && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
-                    onClick={() => {
-                      if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
-                      else setHistoryGotoDate(pendingGotoDate)
-                    }}
-                  >
-                    ✓
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0"
-                    onClick={() => {
-                      setPendingGotoDate('')
-                      if (listTab === 'upcoming') setUpcomingGotoDate('')
-                      else setHistoryGotoDate('')
-                    }}
-                  >
-                    ✕
-                  </Button>
-                </>
-              )}
-            </div>
+            {(() => {
+              const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
+              const clearDate = () => listTab === 'upcoming' ? setUpcomingGotoDate('') : setHistoryGotoDate('')
+              return (
+                <div className="ml-auto flex items-center gap-1.5">
+                  <div className="relative h-8 border border-input rounded-md px-2 bg-background flex items-center min-w-[9rem]">
+                    <span className="text-xs whitespace-nowrap pointer-events-none select-none text-muted-foreground">
+                      {appliedDate
+                        ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
+                        : 'Aller à une date'}
+                    </span>
+                    <input
+                      type="date"
+                      value={appliedDate}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (listTab === 'upcoming') setUpcomingGotoDate(val)
+                        else setHistoryGotoDate(val)
+                      }}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                    />
+                  </div>
+                  {appliedDate && (
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clearDate}>
+                      ✕
+                    </Button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Day-grouped content */}
