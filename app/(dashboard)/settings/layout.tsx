@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users } from 'lucide-react'
+import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
 
@@ -108,8 +108,22 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       </aside>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-auto">
-        {children}
+      <div className="flex-1 overflow-auto flex flex-col min-h-0">
+        {/* Mobile back bar — visible on sub-pages only */}
+        {pathname !== '/settings' && (
+          <div className="md:hidden flex items-center gap-1 px-4 py-3 border-b shrink-0">
+            <Link
+              href="/settings"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Paramètres
+            </Link>
+          </div>
+        )}
+        <div className="flex-1 overflow-auto">
+          {children}
+        </div>
       </div>
     </div>
   )
