@@ -1066,8 +1066,9 @@ export default function ClientsPage() {
             {detailView === 'main' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                  <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
                     <MoreHorizontal className="h-4 w-4" />
+                    Actions
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -1331,17 +1332,33 @@ export default function ClientsPage() {
                                     const statusLabel = isActive ? 'Actif' : isUsed ? 'Utilisé' : 'Expiré'
                                     return (
                                       <div key={coupon.id} className={`rounded-md border px-3 py-2 text-sm ${isActive ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30' : 'border-border bg-muted/30'}`}>
-                                        <div className="flex items-center justify-between">
+                                        <div className="flex items-center justify-between gap-2">
                                           <span className={`font-medium ${isActive ? 'text-green-900 dark:text-green-300' : 'text-muted-foreground'}`}>
                                             {coupon.tier?.reward_description ?? '—'}
                                           </span>
-                                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
-                                            {statusLabel}
-                                          </span>
+                                          <div className="flex items-center gap-1.5 shrink-0">
+                                            {coupon.source === 'manual' && (
+                                              <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400">
+                                                Offert
+                                              </span>
+                                            )}
+                                            {coupon.source === 'birthday' && (
+                                              <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-400">
+                                                Anniversaire
+                                              </span>
+                                            )}
+                                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                                              {statusLabel}
+                                            </span>
+                                          </div>
                                         </div>
-                                        <div className="flex gap-4 mt-0.5 text-xs text-muted-foreground">
+                                        <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
                                           <span>Débloqué le {format(parseISO(coupon.created_at), 'd MMM yyyy', { locale: fr })}</span>
-                                          {!isUsed && (
+                                          {isUsed ? (
+                                            coupon.used_at && (
+                                              <span>Utilisé le {format(parseISO(coupon.used_at), 'd MMM yyyy', { locale: fr })}</span>
+                                            )
+                                          ) : (
                                             <span>{isActive ? 'Expire le' : 'Expiré le'} {format(parseISO(coupon.expires_at), 'd MMM yyyy', { locale: fr })}</span>
                                           )}
                                         </div>

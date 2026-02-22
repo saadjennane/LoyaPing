@@ -64,9 +64,11 @@ export type Coupon = {
   client_id: string
   tier_id: string
   status: 'active' | 'used' | 'expired'
+  source: 'tier_unlock' | 'birthday' | 'manual' | null
   redemption_code: string | null
   redemption_code_expires_at: string | null
   expires_at: string
+  used_at: string | null
   created_at: string
   // joined
   tier?: LoyaltyTier
