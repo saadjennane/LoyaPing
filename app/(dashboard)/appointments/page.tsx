@@ -299,7 +299,8 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const gotoChangedRef = useRef(false) // true if onChange fired (Done was tapped in iOS picker)
+  const gotoChangedRef  = useRef(false) // true if a real onChange fired (Done was tapped)
+  const gotoFocusTimeRef = useRef(0)   // timestamp of last focus, to filter spurious iOS initial change
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -846,7 +847,14 @@ export default function AppointmentsPage() {
                       type="date"
                       className="absolute inset-0 opacity-0 cursor-pointer w-full"
                       defaultValue={appliedDate}
+                      onFocus={() => {
+                        gotoFocusTimeRef.current = Date.now()
+                        gotoChangedRef.current = false
+                      }}
                       onChange={(e) => {
+                        // iOS fires a spurious change immediately on open (default date).
+                        // Ignore any change within 150ms of focus — that's the iOS initialisation, not Done.
+                        if (Date.now() - gotoFocusTimeRef.current < 150) return
                         gotoChangedRef.current = true
                         if (listTab === 'upcoming') setUpcomingGotoDate(e.target.value)
                         else setHistoryGotoDate(e.target.value)
@@ -854,7 +862,7 @@ export default function AppointmentsPage() {
                       onBlur={() => {
                         setTimeout(() => {
                           if (!gotoChangedRef.current) {
-                            // No Done → user tapped outside → return to repos
+                            // No real Done → user tapped outside → repos
                             if (listTab === 'upcoming') setUpcomingGotoDate('')
                             else setHistoryGotoDate('')
                           }
