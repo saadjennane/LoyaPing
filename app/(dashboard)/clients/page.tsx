@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, Edit2, Coins, Gift, Trash2, ExternalLink, Minus,
   Phone, Mail, Star, CalendarDays, ArrowLeft, MoreHorizontal,
-  Cake, FileText, Activity, Check,
+  Cake, FileText, Activity, Check, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +35,8 @@ import { useClientFieldConfig } from '@/lib/context/client-field-config'
 import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : ''
+
+const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
 const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 
@@ -1077,7 +1079,7 @@ export default function ClientsPage() {
                       detailClient.birthday ? (
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                           <Cake className="h-3.5 w-3.5" />
-                          {format(parseISO(detailClient.birthday), 'd MMM yyyy', { locale: fr })}
+                          {format(parseISO(detailClient.birthday), 'd MMM', { locale: fr })}
                         </span>
                       ) : (
                         <button
@@ -1320,6 +1322,16 @@ function ClientFormFields({
   showNotes?: boolean
 }) {
   const { t } = useI18n()
+
+  const bdMonth = form.birthday ? parseInt(form.birthday.substring(5, 7), 10) : 0
+  const bdDay   = form.birthday ? parseInt(form.birthday.substring(8, 10), 10) : 0
+  const maxDays = bdMonth ? new Date(2000, bdMonth, 0).getDate() : 31
+
+  function setBirthday(month: number, day: number) {
+    if (!month || !day) onChange({ ...form, birthday: '' })
+    else onChange({ ...form, birthday: `2000-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` })
+  }
+
   return (
     <>
       <div className="grid grid-cols-3 gap-2">
@@ -1361,12 +1373,41 @@ function ClientFormFields({
       </div>
       {showBirthday && (
         <div className="space-y-1">
-          <Label>Date d&apos;anniversaire</Label>
-          <Input
-            type="date"
-            value={form.birthday}
-            onChange={(e) => onChange({ ...form, birthday: e.target.value })}
-          />
+          <Label>Anniversaire</Label>
+          <div className="flex gap-2">
+            <Select
+              value={bdMonth ? String(bdMonth) : ''}
+              onValueChange={(v) => {
+                const m = parseInt(v, 10)
+                const maxD = new Date(2000, m, 0).getDate()
+                setBirthday(m, Math.min(bdDay || 1, maxD))
+              }}
+            >
+              <SelectTrigger className="flex-1"><SelectValue placeholder="Mois" /></SelectTrigger>
+              <SelectContent>
+                {MONTHS_FR.map((name, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={bdDay ? String(bdDay) : ''}
+              disabled={!bdMonth}
+              onValueChange={(v) => setBirthday(bdMonth, parseInt(v, 10))}
+            >
+              <SelectTrigger className="w-20"><SelectValue placeholder="Jour" /></SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: maxDays }, (_, i) => i + 1).map((d) => (
+                  <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {form.birthday && (
+              <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={() => onChange({ ...form, birthday: '' })}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {showNotes && (
