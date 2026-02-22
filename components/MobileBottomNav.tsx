@@ -2,40 +2,40 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, ShoppingBag, Calendar, Users, Gift, Settings } from 'lucide-react'
+import { LayoutGrid, Package, CalendarDays, UsersRound, Tag, Settings2 } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
+
+const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean }) => [
+  { href: '/',             icon: LayoutGrid,  label: 'Dashboard',  gradient: 'from-red-400 to-orange-400',       show: true },
+  { href: '/clients',      icon: UsersRound,  label: 'Clients',    gradient: 'from-emerald-400 to-teal-500',     show: true },
+  { href: '/orders',       icon: Package,     label: 'Commandes',  gradient: 'from-blue-400 to-cyan-500',        show: modules.orders_enabled },
+  { href: '/appointments', icon: CalendarDays,label: 'RDV',        gradient: 'from-violet-400 to-purple-500',    show: modules.appointments_enabled },
+  { href: '/coupons',      icon: Tag,         label: 'Fidélité',   gradient: 'from-fuchsia-400 to-pink-500',     show: modules.loyalty_enabled },
+  { href: '/settings',     icon: Settings2,   label: 'Paramètres', gradient: 'from-slate-400 to-slate-600',      show: true },
+].filter(item => item.show)
 
 export default function MobileBottomNav() {
   const { modules } = useModules()
   const pathname = usePathname()
 
-  const navItems = [
-    { href: '/',             icon: LayoutDashboard, label: 'Dashboard',    show: true },
-    { href: '/clients',      icon: Users,           label: 'Clients',      show: true },
-    { href: '/orders',       icon: ShoppingBag,     label: 'Commandes',    show: modules.orders_enabled },
-    { href: '/appointments', icon: Calendar,        label: 'RDV',          show: modules.appointments_enabled },
-    { href: '/coupons',      icon: Gift,            label: 'Fidélité',     show: modules.loyalty_enabled },
-    { href: '/settings',     icon: Settings,        label: 'Paramètres',   show: true },
-  ].filter(item => item.show)
-
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border">
       <div className="flex pb-safe">
-        {navItems.map((item) => {
-          const isActive = item.href === '/'
-            ? pathname === '/'
-            : pathname.startsWith(item.href)
+        {navItems(modules).map((item) => {
+          const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
           const Icon = item.icon
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors ${
-                isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className="flex-1 flex flex-col items-center justify-center py-2 gap-1"
             >
-              <Icon className="h-5 w-5" />
-              <span className="text-[10px] leading-none">{item.label}</span>
+              <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-35'}`}>
+                <Icon className="h-4 w-4 text-white" strokeWidth={2} />
+              </div>
+              <span className={`text-[10px] leading-none transition-colors ${isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                {item.label}
+              </span>
             </Link>
           )
         })}
