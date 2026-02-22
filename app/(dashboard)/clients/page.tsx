@@ -1311,7 +1311,7 @@ export default function ClientsPage() {
                               <div className="space-y-2">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Paliers</p>
                                 {detailData.tiers.map((tier) => {
-                                  const reached = detailClient.loyalty_points >= tier.required_points
+                                  const reached = detailClient.current_cycle_points >= tier.required_points
                                   return (
                                     <div key={tier.id} className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${reached ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30' : 'border-border bg-muted/30'}`}>
                                       <span className={`font-medium ${reached ? 'text-green-900 dark:text-green-300' : 'text-muted-foreground'}`}>{tier.reward_description}</span>
