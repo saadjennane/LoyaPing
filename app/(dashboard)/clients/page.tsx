@@ -125,6 +125,14 @@ export default function ClientsPage() {
   const [dvUnlockTierId, setDvUnlockTierId] = useState('')
   const [dvSubmitting, setDvSubmitting] = useState(false)
 
+  // Inline editing in Infos tab
+  const [inlineEditField, setInlineEditField] = useState<'email' | 'birthday' | null>(null)
+  const [inlineEmailValue, setInlineEmailValue] = useState('')
+  const [inlineBdMonth, setInlineBdMonth] = useState(0)
+  const [inlineBdDay, setInlineBdDay] = useState(0)
+  const [inlineNotes, setInlineNotes] = useState('')
+  const [inlineSaving, setInlineSaving] = useState(false)
+
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState<InfoForm>(EMPTY_INFO)
@@ -217,6 +225,45 @@ export default function ClientsPage() {
     if (view === 'unlock_reward') setDvUnlockTierId('')
     setDetailView(view)
   }
+
+  // Reset inline state when client changes
+  useEffect(() => {
+    setInlineNotes(detailClient?.notes ?? '')
+    setInlineEditField(null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailClient?.id])
+
+  const saveInlineField = useCallback(async (patch: Record<string, string | null>) => {
+    if (!detailClient) return false
+    setInlineSaving(true)
+    const res = await fetch(`/api/clients/${detailClient.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_info', ...patch }),
+    }).then(r => r.json())
+    if (res.error) { toast.error(res.error); setInlineSaving(false); return false }
+    setDetailClient((c) => c ? { ...c, ...patch } : c)
+    setInlineSaving(false)
+    return true
+  }, [detailClient])
+
+  const saveInlineEmail = useCallback(async () => {
+    if (!inlineEmailValue || !isValidEmail(inlineEmailValue)) { toast.error('Adresse email invalide'); return }
+    const ok = await saveInlineField({ email: inlineEmailValue })
+    if (ok) setInlineEditField(null)
+  }, [inlineEmailValue, saveInlineField])
+
+  const saveInlineBirthday = useCallback(async () => {
+    if (!inlineBdMonth || !inlineBdDay) return
+    const birthday = `2000-${String(inlineBdMonth).padStart(2, '0')}-${String(inlineBdDay).padStart(2, '0')}`
+    const ok = await saveInlineField({ birthday })
+    if (ok) setInlineEditField(null)
+  }, [inlineBdMonth, inlineBdDay, saveInlineField])
+
+  const saveInlineNotes = useCallback(async () => {
+    if (!detailClient || inlineNotes === (detailClient.notes ?? '')) return
+    await saveInlineField({ notes: inlineNotes || null })
+  }, [detailClient, inlineNotes, saveInlineField])
 
   // ── Inline: Edit info ─────────────────────────────────────────────────
   const handleDvInfoSubmit = async (e: React.FormEvent) => {
@@ -1086,60 +1133,100 @@ export default function ClientsPage() {
                     </TabsList>
 
                     {/* ── Infos ── */}
-                    <TabsContent value="infos" className="mt-3 space-y-3 text-sm">
+                    <TabsContent value="infos" className="mt-3 space-y-4 text-sm">
+                      {/* Email */}
                       {config.detail_email && (
                         detailClient.email ? (
                           <div className="flex items-center gap-2 text-muted-foreground">
                             <Mail className="h-4 w-4 shrink-0" />{detailClient.email}
                           </div>
+                        ) : inlineEditField === 'email' ? (
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              autoFocus type="email" placeholder="client@email.com"
+                              value={inlineEmailValue}
+                              onChange={(e) => setInlineEmailValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEmail(); if (e.key === 'Escape') setInlineEditField(null) }}
+                              className="h-8 text-sm"
+                            />
+                            <Button size="sm" disabled={inlineSaving} onClick={saveInlineEmail}>
+                              {inlineSaving ? '…' : 'OK'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setInlineEditField(null)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         ) : (
                           <button
-                            onClick={() => goToDetailView('edit_info')}
+                            onClick={() => { setInlineEmailValue(''); setInlineEditField('email') }}
                             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Plus className="h-3 w-3" /> Ajouter un email
                           </button>
                         )
                       )}
+
+                      {/* Birthday */}
                       {config.detail_birthday && !detailClient.birthday && (
-                        <button
-                          onClick={() => goToDetailView('edit_info')}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <Plus className="h-3 w-3" /> Ajouter un anniversaire
-                        </button>
+                        inlineEditField === 'birthday' ? (
+                          <div className="flex gap-2 items-center">
+                            <Select value={inlineBdMonth ? String(inlineBdMonth) : ''} onValueChange={(v) => setInlineBdMonth(parseInt(v, 10))}>
+                              <SelectTrigger className="flex-1 h-8 text-sm"><SelectValue placeholder="Mois" /></SelectTrigger>
+                              <SelectContent>
+                                {MONTHS_FR.map((name, i) => (
+                                  <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={inlineBdDay ? String(inlineBdDay) : ''} disabled={!inlineBdMonth} onValueChange={(v) => setInlineBdDay(parseInt(v, 10))}>
+                              <SelectTrigger className="w-20 h-8 text-sm"><SelectValue placeholder="Jour" /></SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: inlineBdMonth ? new Date(2000, inlineBdMonth, 0).getDate() : 31 }, (_, i) => i + 1).map((d) => (
+                                  <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" disabled={inlineSaving || !inlineBdMonth || !inlineBdDay} onClick={saveInlineBirthday}>
+                              {inlineSaving ? '…' : 'OK'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setInlineEditField(null)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setInlineBdMonth(0); setInlineBdDay(0); setInlineEditField('birthday') }}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <Plus className="h-3 w-3" /> Ajouter un anniversaire
+                          </button>
+                        )
                       )}
-                      {loyaltyOn && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Star className="h-4 w-4 shrink-0" />
-                          <strong className="text-foreground">{detailClient.loyalty_points}</strong>&nbsp;pts
-                          &nbsp;·&nbsp;{detailClient.total_cycles_completed} cycle{detailClient.total_cycles_completed !== 1 ? 's' : ''}
-                        </div>
-                      )}
+
+                      {/* Last activity */}
                       {config.detail_last_activity && detailClient.last_activity && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Activity className="h-4 w-4 shrink-0" />
                           {format(parseISO(detailClient.last_activity), 'd MMM yyyy', { locale: fr })}
                         </div>
                       )}
+
+                      {/* Member since */}
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <CalendarDays className="h-4 w-4 shrink-0" />
                         {t('clients.memberSince', { date: format(parseISO(detailClient.created_at), 'd MMM yyyy', { locale: fr }) })}
                       </div>
+
+                      {/* Notes — always editable */}
                       {config.detail_notes && (
-                        detailClient.notes ? (
-                          <div className="rounded-lg bg-muted/50 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
-                            <FileText className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-                            {detailClient.notes}
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => goToDetailView('edit_info')}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <Plus className="h-3 w-3" /> Ajouter une note
-                          </button>
-                        )
+                        <textarea
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                          rows={4}
+                          placeholder="Notes sur ce client…"
+                          value={inlineNotes}
+                          onChange={(e) => setInlineNotes(e.target.value)}
+                          onBlur={saveInlineNotes}
+                        />
                       )}
                     </TabsContent>
 
@@ -1187,8 +1274,26 @@ export default function ClientsPage() {
                           <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noProgram')}</p>
                         ) : (() => {
                           const { progress, nextTier, current, target } = getProgress(detailClient, detailData.tiers)
+                          const activeCount  = detailData.coupons.filter(c => c.status === 'active').length
+                          const usedCount    = detailData.coupons.filter(c => c.status === 'used').length
+                          const expiredCount = detailData.coupons.filter(c => c.status === 'expired').length
                           return (
                             <>
+                              {/* Coupon counts */}
+                              {detailData.coupons.length > 0 && (
+                                <div className="flex gap-4 text-sm">
+                                  <span className="flex items-center gap-1.5 font-medium text-green-600">
+                                    <span className="h-2 w-2 rounded-full bg-green-500" />{activeCount} actif{activeCount !== 1 ? 's' : ''}
+                                  </span>
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />{usedCount} utilisé{usedCount !== 1 ? 's' : ''}
+                                  </span>
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />{expiredCount} expiré{expiredCount !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              )}
+
                               {/* Progress */}
                               <div className="space-y-2">
                                 <div className="flex justify-between text-sm">
