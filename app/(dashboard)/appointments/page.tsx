@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
@@ -299,6 +299,7 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
+  const gotoChangedRef = useRef(false) // true if onChange fired (Done was tapped in iOS picker)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -845,8 +846,19 @@ export default function AppointmentsPage() {
                       className="absolute inset-0 opacity-0 cursor-pointer w-full"
                       value={appliedDate}
                       onChange={(e) => {
+                        gotoChangedRef.current = true
                         if (listTab === 'upcoming') setUpcomingGotoDate(e.target.value)
                         else setHistoryGotoDate(e.target.value)
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (!gotoChangedRef.current) {
+                            // No Done → user tapped outside → return to repos
+                            if (listTab === 'upcoming') setUpcomingGotoDate('')
+                            else setHistoryGotoDate('')
+                          }
+                          gotoChangedRef.current = false
+                        }, 0)
                       }}
                     />
                   </div>
