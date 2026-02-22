@@ -300,9 +300,7 @@ export default function AppointmentsPage() {
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
   const [datePickerOpen,        setDatePickerOpen]         = useState(false)
-  const dateConfirmingRef  = useRef(false)
   const pendingGotoDateRef = useRef('')  // ref → no re-render on date selection
-  const dateFormRef        = useRef<HTMLDivElement>(null)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -850,37 +848,21 @@ export default function AppointmentsPage() {
 
               if (datePickerOpen) {
                 return (
-                  <div ref={dateFormRef} className="ml-auto flex items-center gap-1.5">
+                  <div className="ml-auto flex items-center gap-1.5">
                     <input
                       type="date"
-                      autoFocus
                       defaultValue={appliedDate}
                       onChange={(e) => { pendingGotoDateRef.current = e.target.value }}
-                      onBlur={() => {
-                        // Synchronous: hide immediately before React re-renders → no flash
-                        if (!dateConfirmingRef.current && dateFormRef.current) {
-                          dateFormRef.current.style.visibility = 'hidden'
-                        }
-                        setTimeout(() => {
-                          if (!dateConfirmingRef.current) {
-                            pendingGotoDateRef.current = ''
-                            setDatePickerOpen(false)
-                          }
-                          dateConfirmingRef.current = false
-                        }, 0)
-                      }}
                       className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
                     />
                     <Button
                       size="sm" variant="ghost"
                       className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700"
-                      onPointerDown={() => { dateConfirmingRef.current = true }}
                       onClick={confirm}
                     >✓</Button>
                     <Button
                       size="sm" variant="ghost"
                       className="h-8 w-8 p-0 shrink-0"
-                      onPointerDown={() => { dateConfirmingRef.current = true }}
                       onClick={cancel}
                     >✕</Button>
                   </div>
