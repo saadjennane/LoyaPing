@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
-  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search,
+  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -567,6 +567,7 @@ export default function AppointmentsPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // Bulk selection
+  const [mobileSelectMode, setMobileSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -790,23 +791,50 @@ export default function AppointmentsPage() {
 
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Status pills */}
-            {([ 'all', 'upcoming', 'show', 'no_show'] as StatusFilter[]).map((key) => {
-              const label   = t(`appointments.filters.${key}`)
+            {/* Status filter — dropdown on mobile, pills on desktop */}
+            {(() => {
               const current = listTab === 'upcoming' ? upcomingStatusFilter : historyStatusFilter
-              const active  = current === key
+              const setFilter = (key: StatusFilter) =>
+                listTab === 'upcoming' ? setUpcomingStatusFilter(key) : setHistoryStatusFilter(key)
               return (
-                <button
-                  key={key}
-                  onClick={() => listTab === 'upcoming' ? setUpcomingStatusFilter(key) : setHistoryStatusFilter(key)}
-                  className={`rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
-                    active ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'
-                  }`}
-                >
-                  {label}
-                </button>
+                <>
+                  {/* Mobile dropdown */}
+                  <div className="md:hidden flex items-center gap-2 w-full">
+                    <Select value={current} onValueChange={(v) => setFilter(v as StatusFilter)}>
+                      <SelectTrigger className="h-9 flex-1 font-medium text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['all', 'upcoming', 'show', 'no_show'] as StatusFilter[]).map((key) => (
+                          <SelectItem key={key} value={key}>{t(`appointments.filters.${key}`)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0"
+                      onClick={() => {
+                        if (mobileSelectMode) { setMobileSelectMode(false); setSelectedIds(new Set()) }
+                        else setMobileSelectMode(true)
+                      }}
+                    >
+                      {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
+                    </button>
+                  </div>
+                  {/* Desktop pills */}
+                  {(['all', 'upcoming', 'show', 'no_show'] as StatusFilter[]).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setFilter(key)}
+                      className={`hidden md:inline-flex rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
+                        current === key ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'
+                      }`}
+                    >
+                      {t(`appointments.filters.${key}`)}
+                    </button>
+                  ))}
+                </>
               )
-            })}
+            })()}
 
             {/* WhatsApp error toggle */}
             {(() => {
@@ -895,7 +923,89 @@ export default function AppointmentsPage() {
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 capitalize">
                     {label === 'groupToday' ? t('appointments.groupToday') : label === 'groupTomorrow' ? t('appointments.groupTomorrow') : label}
                   </h3>
-                  <div className="border rounded-lg overflow-hidden divide-y">
+                  {/* Mobile : cartes */}
+                  <div className="md:hidden space-y-2">
+                    {dayItems.map((item) => {
+                      const isSelected = selectedIds.has(item.id)
+                      return (
+                        <div
+                          key={item.id}
+                          className={`bg-card border rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-muted/30 transition-colors ${
+                            isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-border'
+                          }`}
+                          onClick={() => {
+                            if (mobileSelectMode) { toggleSelect(item.id); return }
+                            const full = appointments.find((a) => a.id === item.id)
+                            if (full) { setSelected(full); setDetailOpen(true) }
+                          }}
+                        >
+                          {/* Checkbox en mode sélection */}
+                          {mobileSelectMode && (
+                            <div className="shrink-0">
+                              <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-muted-foreground/40'
+                              }`}>
+                                {isSelected && <Check className="h-3 w-3 text-white" />}
+                              </div>
+                            </div>
+                          )}
+                          {/* Heure */}
+                          <span className="tabular-nums text-sm font-bold w-12 shrink-0 text-muted-foreground">
+                            {format(parseISO(item.scheduled_at), 'HH:mm')}
+                          </span>
+                          {/* Infos client */}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{item.client_name}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <Badge variant={statusVariant(item.status)} className="text-[10px] px-1.5 py-0">
+                                {statusLabel(item.status, t)}
+                              </Badge>
+                              {item.notification_failed && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium">
+                                  <AlertTriangle className="h-3 w-3" />{t('appointments.failedWA')}
+                                </span>
+                              )}
+                              {item.reminders_sent > 0 && !item.notification_failed && (
+                                <span className="text-[10px] text-green-600 font-medium">
+                                  {item.reminders_sent > 1
+                                    ? t('appointments.remindersPlural', { count: item.reminders_sent })
+                                    : t('appointments.remindersSingular', { count: item.reminders_sent })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {/* Actions — masquées en mode sélection */}
+                          {!mobileSelectMode && (
+                            <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              {item.status === 'scheduled' && (
+                                <>
+                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title={t('appointments.actions.absent')} onClick={() => markNoShow(item.id)}>
+                                    <UserX className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title={t('appointments.actions.present')} onClick={() => markShow(item.id)}>
+                                    <UserCheck className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                size="icon" variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                  const full = appointments.find((a) => a.id === item.id)
+                                  if (full) setDeleteAppt(full)
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Desktop : lignes */}
+                  <div className="hidden md:block border rounded-lg overflow-hidden divide-y">
                     {dayItems.map((item) => (
                       <div
                         key={item.id}
@@ -905,7 +1015,6 @@ export default function AppointmentsPage() {
                           if (full) { setSelected(full); setDetailOpen(true) }
                         }}
                       >
-                        {/* Checkbox */}
                         <div onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
@@ -914,17 +1023,13 @@ export default function AppointmentsPage() {
                             onChange={() => toggleSelect(item.id)}
                           />
                         </div>
-                        {/* Time */}
                         <span className="tabular-nums text-sm font-semibold w-12 shrink-0 text-muted-foreground">
                           {format(parseISO(item.scheduled_at), 'HH:mm')}
                         </span>
-                        {/* Client */}
                         <span className="flex-1 text-sm font-medium truncate">{item.client_name}</span>
-                        {/* Status badge */}
                         <Badge variant={statusVariant(item.status)}>
                           {statusLabel(item.status, t)}
                         </Badge>
-                        {/* Reminders sent */}
                         {item.reminders_sent > 0 && !item.notification_failed && (
                           <span className="text-xs text-green-600 font-medium shrink-0">
                             {item.reminders_sent > 1
@@ -932,13 +1037,11 @@ export default function AppointmentsPage() {
                               : t('appointments.remindersSingular', { count: item.reminders_sent })}
                           </span>
                         )}
-                        {/* WA error badge */}
                         {item.notification_failed && (
                           <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium shrink-0">
                             <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
                           </span>
                         )}
-                        {/* Quick actions */}
                         <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                           {item.status === 'scheduled' && (
                             <>
@@ -953,7 +1056,6 @@ export default function AppointmentsPage() {
                           <Button
                             size="icon" variant="ghost"
                             className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            title={t('common.delete')}
                             onClick={() => {
                               const full = appointments.find((a) => a.id === item.id)
                               if (full) setDeleteAppt(full)
@@ -1318,7 +1420,7 @@ export default function AppointmentsPage() {
 
       {/* ── Bulk floating action bar (list view only) ──────────────────────── */}
       {viewMode === 'list' && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{selectedIds.size} sélectionné(s)</span>
           <div className="w-px h-4 bg-border" />
           <Button size="sm" variant="outline" disabled={bulkStatusUpdating} onClick={() => handleBulkStatusUpdate('show')}>
@@ -1331,7 +1433,7 @@ export default function AppointmentsPage() {
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />Supprimer
           </Button>
           <div className="w-px h-4 bg-border" />
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Désélectionner</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setSelectedIds(new Set()); setMobileSelectMode(false) }}>Désélectionner</Button>
         </div>
       )}
 
