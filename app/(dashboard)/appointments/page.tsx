@@ -842,9 +842,10 @@ export default function AppointmentsPage() {
                         : 'Aller à une date'}
                     </button>
                     <input
+                      key={appliedDate + listTab}
                       type="date"
                       className="absolute inset-0 opacity-0 cursor-pointer w-full"
-                      value={appliedDate}
+                      defaultValue={appliedDate}
                       onChange={(e) => {
                         gotoChangedRef.current = true
                         if (listTab === 'upcoming') setUpcomingGotoDate(e.target.value)
