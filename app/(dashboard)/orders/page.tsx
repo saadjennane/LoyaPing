@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, CheckCircle, Package, ArrowLeft,
-  AlertTriangle, MessageSquare, Trash2, BellOff, Undo2, AlertCircle, Search,
+  AlertTriangle, MessageSquare, Trash2, BellOff, Undo2, AlertCircle, Search, Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -130,6 +130,7 @@ export default function OrdersPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // Bulk selection
+  const [mobileSelectMode, setMobileSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -578,12 +579,28 @@ export default function OrdersPage() {
           ) : displayList.map(order => {
             const client = order.client as Client | undefined
             const isNonRetrieved = (order.reminders_count ?? 0) >= 3 && order.status === 'ready'
+            const isSelected = selectedIds.has(order.id)
             return (
               <div
                 key={order.id}
-                className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-muted/50 shadow-sm"
-                onClick={() => { setSelectedOrder(order); setDetailOpen(true) }}
+                className={`bg-card border rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-muted/50 shadow-sm transition-colors ${
+                  isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-border'
+                }`}
+                onClick={() => {
+                  if (mobileSelectMode) toggleSelect(order.id)
+                  else { setSelectedOrder(order); setDetailOpen(true) }
+                }}
               >
+                {/* Checkbox en mode sélection */}
+                {mobileSelectMode && (
+                  <div className="shrink-0">
+                    <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                      isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-muted-foreground/40'
+                    }`}>
+                      {isSelected && <Check className="h-3 w-3 text-white" />}
+                    </div>
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-sm">{order.reference ? `#${order.reference}` : '—'}</span>
@@ -597,18 +614,20 @@ export default function OrdersPage() {
                   <div className="text-xs text-muted-foreground truncate">{client ? clientFullName(client) : '—'}</div>
                   <div className="text-xs text-muted-foreground">{format(new Date(order.created_at), 'dd MMM, HH:mm', { locale: fr })}</div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                  {order.status === 'pending' && (
-                    <Button size="sm" className="h-8 text-xs bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white gap-1" onClick={e => markReady(order.id, e)}>
-                      <CheckCircle className="h-3.5 w-3.5" />{t('orders.readyBtn')}
-                    </Button>
-                  )}
-                  {order.status === 'ready' && (
-                    <Button size="sm" className="h-8 text-xs" onClick={e => markPickedUp(order.id, order.reference ?? '', e)}>
-                      <Package className="h-3.5 w-3.5 mr-1" />{t('orders.pickedUpBtn')}
-                    </Button>
-                  )}
-                </div>
+                {!mobileSelectMode && (
+                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    {order.status === 'pending' && (
+                      <Button size="sm" className="h-8 text-xs bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white gap-1" onClick={e => markReady(order.id, e)}>
+                        <CheckCircle className="h-3.5 w-3.5" />{t('orders.readyBtn')}
+                      </Button>
+                    )}
+                    {order.status === 'ready' && (
+                      <Button size="sm" className="h-8 text-xs" onClick={e => markPickedUp(order.id, order.reference ?? '', e)}>
+                        <Package className="h-3.5 w-3.5 mr-1" />{t('orders.pickedUpBtn')}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -908,8 +927,33 @@ export default function OrdersPage() {
       {loading ? (
         <div className="text-muted-foreground text-sm">{t('common.loading')}</div>
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          <TabsList className="w-full flex justify-start border-b border-border bg-transparent h-auto p-0 rounded-none px-2 md:px-6 overflow-x-auto">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); setMobileSelectMode(false) }} className="gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          {/* Mobile : dropdown + bouton Sélectionner */}
+          <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-border">
+            <Select value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); setMobileSelectMode(false) }}>
+              <SelectTrigger className="flex-1 h-9 font-medium text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">{t('orders.tabs.pending')} ({filteredPending.length})</SelectItem>
+                <SelectItem value="ready">{t('orders.tabs.ready')} ({filteredReady.length})</SelectItem>
+                <SelectItem value="non_retrieved">{t('orders.tabs.nonRetrieved')} ({filteredNonRetrieved.length})</SelectItem>
+                <SelectItem value="completed">{t('orders.tabs.completed')} ({filteredCompleted.length})</SelectItem>
+              </SelectContent>
+            </Select>
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0"
+              onClick={() => {
+                if (mobileSelectMode) { setMobileSelectMode(false); setSelectedIds(new Set()) }
+                else setMobileSelectMode(true)
+              }}
+            >
+              {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
+            </button>
+          </div>
+
+          {/* Desktop : onglets */}
+          <TabsList className="hidden md:flex w-full justify-start border-b border-border bg-transparent h-auto p-0 rounded-none px-6 overflow-x-auto">
             <TabsTrigger
               value="pending"
               className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2"
@@ -1101,7 +1145,7 @@ export default function OrdersPage() {
 
       {/* ── Bulk floating action bar ──────────────────────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{selectedIds.size} sélectionnée(s)</span>
           <div className="w-px h-4 bg-border" />
           {activeTab === 'pending' && (
@@ -1118,7 +1162,7 @@ export default function OrdersPage() {
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />Supprimer
           </Button>
           <div className="w-px h-4 bg-border" />
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Désélectionner</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setSelectedIds(new Set()); setMobileSelectMode(false) }}>Désélectionner</Button>
         </div>
       )}
 
