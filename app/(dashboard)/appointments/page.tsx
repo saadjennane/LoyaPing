@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
@@ -300,7 +300,7 @@ export default function AppointmentsPage() {
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
   const [datePickerOpen,        setDatePickerOpen]         = useState(false)
-  const pendingGotoDateRef = useRef('')  // ref → no re-render on date selection
+  const [pendingGotoDate,       setPendingGotoDate]         = useState('')
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -728,7 +728,7 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => { setListTab('upcoming'); pendingGotoDateRef.current = ''; setDatePickerOpen(false) }}
+                onClick={() => { setListTab('upcoming'); setDatePickerOpen(false) }}
                 className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -736,7 +736,7 @@ export default function AppointmentsPage() {
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => { setListTab('history'); pendingGotoDateRef.current = ''; setDatePickerOpen(false) }}
+                onClick={() => { setListTab('history'); setDatePickerOpen(false) }}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -830,45 +830,11 @@ export default function AppointmentsPage() {
             {/* Go-to date */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
-              const openPicker  = () => { pendingGotoDateRef.current = appliedDate; setDatePickerOpen(true) }
-              const confirm     = () => {
-                const val = pendingGotoDateRef.current
-                if (val) {
-                  if (listTab === 'upcoming') setUpcomingGotoDate(val)
-                  else setHistoryGotoDate(val)
-                }
-                pendingGotoDateRef.current = ''
-                setDatePickerOpen(false)
-              }
-              const cancel = () => { pendingGotoDateRef.current = ''; setDatePickerOpen(false) }
-              const clear  = () => {
+              const openPicker  = () => { setPendingGotoDate(appliedDate); setDatePickerOpen(true) }
+              const clear       = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
               }
-
-              if (datePickerOpen) {
-                return (
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <input
-                      type="date"
-                      defaultValue={appliedDate}
-                      onChange={(e) => { pendingGotoDateRef.current = e.target.value }}
-                      className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
-                    />
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700"
-                      onClick={confirm}
-                    >✓</Button>
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-8 w-8 p-0 shrink-0"
-                      onClick={cancel}
-                    >✕</Button>
-                  </div>
-                )
-              }
-
               return (
                 <div className="ml-auto flex items-center gap-1.5">
                   <button
@@ -1351,6 +1317,41 @@ export default function AppointmentsPage() {
               <Button variant="outline" onClick={() => setBulkDeleteConfirm(false)}>Annuler</Button>
               <Button variant="destructive" disabled={bulkDeleting} onClick={handleBulkDelete}>
                 {bulkDeleting ? 'Suppression...' : `Supprimer (${selectedIds.size})`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Date picker dialog ─────────────────────────────────────────────── */}
+      <Dialog open={datePickerOpen} onOpenChange={(o) => { if (!o) setDatePickerOpen(false) }}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Aller à une date</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <input
+              type="date"
+              autoFocus
+              value={pendingGotoDate}
+              onChange={(e) => setPendingGotoDate(e.target.value)}
+              className="w-full h-10 border border-input rounded-md px-3 text-sm bg-background focus:outline-none"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={() => setDatePickerOpen(false)}>
+                Annuler
+              </Button>
+              <Button
+                disabled={!pendingGotoDate}
+                onClick={() => {
+                  if (pendingGotoDate) {
+                    if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
+                    else setHistoryGotoDate(pendingGotoDate)
+                  }
+                  setDatePickerOpen(false)
+                }}
+              >
+                Confirmer
               </Button>
             </div>
           </div>
