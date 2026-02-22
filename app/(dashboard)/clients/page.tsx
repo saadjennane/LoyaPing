@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, Edit2, Coins, Gift, Trash2, ExternalLink, Minus,
   Phone, Mail, Star, CalendarDays, ArrowLeft, MoreHorizontal,
-  Cake, FileText, Activity,
+  Cake, FileText, Activity, Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -148,6 +148,7 @@ export default function ClientsPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // Bulk selection
+  const [mobileSelectMode, setMobileSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -557,47 +558,111 @@ export default function ClientsPage() {
           <div className="md:hidden space-y-2">
             {clients.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noClients')}</p>
-            ) : clients.map((client) => {
-              const { progress, current, target } = getProgress(client, tiers)
-              const statuses = statusOn ? getClientStatuses(client.id) : []
-              return (
-                <div
-                  key={client.id}
-                  className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 cursor-pointer active:bg-muted/30"
-                  onClick={() => openDetail(client)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{clientFullName(client)}</div>
-                    <div className="text-xs text-muted-foreground">{client.phone_number}</div>
-                    {loyaltyOn && tiers.length > 0 && (
-                      <div className="mt-1.5 space-y-0.5">
-                        <div className="text-xs text-muted-foreground tabular-nums">{current}/{target} pts</div>
-                        <Progress value={progress} className="h-1" />
-                      </div>
-                    )}
-                    {statuses.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {statuses.map((s) => (
-                          <Badge key={s} variant={STATUS_CONFIG[s].variant} className="text-[10px] px-1.5 py-0">
-                            {t(STATUS_CONFIG[s].labelKey)}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {loyaltyOn && (
-                    <span className="text-sm font-semibold tabular-nums text-indigo-600">
-                      {client.loyalty_points}<span className="text-xs font-normal text-muted-foreground ml-0.5">pts</span>
-                    </span>
-                    )}
-                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => openEditInfo(client, e)}>
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+            ) : (
+              <>
+                {/* Sélectionner / Annuler toggle */}
+                <div className="flex justify-end">
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground py-1"
+                    onClick={() => {
+                      if (mobileSelectMode) { setMobileSelectMode(false); setSelectedIds(new Set()) }
+                      else setMobileSelectMode(true)
+                    }}
+                  >
+                    {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
+                  </button>
                 </div>
-              )
-            })}
+
+                {clients.map((client) => {
+                  const { progress, current, target } = getProgress(client, tiers)
+                  const statuses = statusOn ? getClientStatuses(client.id) : []
+                  const isSelected = selectedIds.has(client.id)
+                  return (
+                    <div
+                      key={client.id}
+                      className={`bg-card border rounded-lg p-3 flex items-center gap-3 cursor-pointer active:bg-muted/30 transition-colors ${
+                        isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-border'
+                      }`}
+                      onClick={() => {
+                        if (mobileSelectMode) toggleSelect(client.id)
+                        else openDetail(client)
+                      }}
+                    >
+                      {/* Checkbox en mode sélection */}
+                      {mobileSelectMode && (
+                        <div className="shrink-0">
+                          <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-muted-foreground/40'
+                          }`}>
+                            {isSelected && <Check className="h-3 w-3 text-white" />}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{clientFullName(client)}</div>
+                        <div className="text-xs text-muted-foreground">{client.phone_number}</div>
+                        {loyaltyOn && tiers.length > 0 && (
+                          <div className="mt-1.5 space-y-0.5">
+                            <div className="text-xs text-muted-foreground tabular-nums">{current}/{target} pts</div>
+                            <Progress value={progress} className="h-1" />
+                          </div>
+                        )}
+                        {statuses.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {statuses.map((s) => (
+                              <Badge key={s} variant={STATUS_CONFIG[s].variant} className="text-[10px] px-1.5 py-0">
+                                {t(STATUS_CONFIG[s].labelKey)}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions — masquées en mode sélection */}
+                      {!mobileSelectMode && (
+                        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {loyaltyOn && (
+                            <span className="text-sm font-semibold tabular-nums text-indigo-600">
+                              {client.loyalty_points}<span className="text-xs font-normal text-muted-foreground ml-0.5">pts</span>
+                            </span>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={(e) => openEditInfo(client, e)}>
+                                <Edit2 className="h-4 w-4 mr-2" />{t('clients.actions.editInfo')}
+                              </DropdownMenuItem>
+                              {loyaltyOn && (
+                                <DropdownMenuItem onClick={(e) => openEditPoints(client, e)}>
+                                  <Coins className="h-4 w-4 mr-2" />{t('clients.actions.editPoints')}
+                                </DropdownMenuItem>
+                              )}
+                              {loyaltyOn && (
+                                <DropdownMenuItem onClick={(e) => openUnlock(client, e)}>
+                                  <Gift className="h-4 w-4 mr-2" />{t('clients.actions.unlockReward')}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => window.open(`${BASE_URL}/u/${client.magic_token}`, '_blank')}>
+                                <ExternalLink className="h-4 w-4 mr-2" />{t('clients.clientSheet')}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={(e) => openDelete(client, e)}>
+                                <Trash2 className="h-4 w-4 mr-2" />{t('clients.actions.delete')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </div>
 
           {/* Desktop table */}
@@ -876,7 +941,7 @@ export default function ClientsPage() {
 
       {/* ── Bulk floating action bar ──────────────────────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{selectedIds.size} sélectionné(s)</span>
           <div className="w-px h-4 bg-border" />
           {loyaltyOn && (
@@ -888,7 +953,7 @@ export default function ClientsPage() {
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />Supprimer
           </Button>
           <div className="w-px h-4 bg-border" />
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Désélectionner</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setSelectedIds(new Set()); setMobileSelectMode(false) }}>Désélectionner</Button>
         </div>
       )}
 
