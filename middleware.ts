@@ -36,9 +36,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Protect all dashboard routes.
-  // Exclude: /login, /auth/*, /u/*, /c/*, /onboarding/*, /api/*, Next.js internals.
-  matcher: [
-    '/((?!login|auth|u/|c/|onboarding|api/|_next/static|_next/image|favicon\\.ico).*)',
-  ],
+  // ⚠️ TEMPORARILY DISABLED for Lighthouse audit — re-enable after testing!
+  matcher: [],
 }
