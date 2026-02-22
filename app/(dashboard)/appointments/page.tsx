@@ -300,6 +300,7 @@ export default function AppointmentsPage() {
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
   const [pendingGotoDate,       setPendingGotoDate]        = useState('')
+  const [datePickerOpen,        setDatePickerOpen]         = useState(false)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -727,7 +728,7 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => { setListTab('upcoming'); setPendingGotoDate('') }}
+                onClick={() => { setListTab('upcoming'); setPendingGotoDate(''); setDatePickerOpen(false) }}
                 className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -735,7 +736,7 @@ export default function AppointmentsPage() {
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => { setListTab('history'); setPendingGotoDate('') }}
+                onClick={() => { setListTab('history'); setPendingGotoDate(''); setDatePickerOpen(false) }}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -829,43 +830,50 @@ export default function AppointmentsPage() {
             {/* Go-to date */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
-              // pendingGotoDate = date sélectionnée dans le picker mais pas encore confirmée
-              const displayDate = appliedDate // la box affiche toujours la date confirmée
-              const hasPending  = pendingGotoDate !== '' && pendingGotoDate !== appliedDate
+              const openPicker = () => { setDatePickerOpen(true); setPendingGotoDate(appliedDate) }
               const confirm = () => {
-                if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
-                else setHistoryGotoDate(pendingGotoDate)
+                if (pendingGotoDate) {
+                  if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
+                  else setHistoryGotoDate(pendingGotoDate)
+                }
+                setDatePickerOpen(false)
                 setPendingGotoDate('')
               }
-              const cancel = () => setPendingGotoDate('')
+              const cancel = () => { setDatePickerOpen(false); setPendingGotoDate('') }
               const clear  = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
-                setPendingGotoDate('')
               }
-              return (
-                <div className="ml-auto flex items-center gap-1.5">
-                  <div className="relative h-8 border border-input rounded-md px-2 bg-background flex items-center min-w-[9rem]">
-                    <span className="text-xs whitespace-nowrap pointer-events-none select-none text-muted-foreground">
-                      {displayDate
-                        ? format(parseISO(displayDate), 'd MMM yyyy', { locale: fr })
-                        : 'Aller à une date'}
-                    </span>
+
+              if (datePickerOpen) {
+                return (
+                  <div className="ml-auto flex items-center gap-1.5">
                     <input
                       type="date"
-                      value={pendingGotoDate || appliedDate}
+                      autoFocus
+                      value={pendingGotoDate}
                       onChange={(e) => setPendingGotoDate(e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                      className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
                     />
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700" onClick={confirm}>✓</Button>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={cancel}>✕</Button>
                   </div>
-                  {hasPending ? (
-                    <>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700" onClick={confirm}>✓</Button>
-                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={cancel}>✕</Button>
-                    </>
-                  ) : appliedDate ? (
+                )
+              }
+
+              return (
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button
+                    onClick={openPicker}
+                    className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap"
+                  >
+                    {appliedDate
+                      ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
+                      : 'Aller à une date'}
+                  </button>
+                  {appliedDate && (
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clear}>✕</Button>
-                  ) : null}
+                  )}
                 </div>
               )
             })()}
