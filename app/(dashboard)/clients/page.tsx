@@ -998,7 +998,7 @@ export default function ClientsPage() {
 
       {/* ── Detail Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={!!detailClient} onOpenChange={(o) => !o && closeDetail()}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
 
           {/* ── Header ─────────────────────────────────────────────────── */}
           <DialogHeader className="flex-row items-center gap-2 pr-8 space-y-0">
@@ -1056,86 +1056,93 @@ export default function ClientsPage() {
               {/* ── Main view ────────────────────────────────────────── */}
               {detailView === 'main' && detailData && (
                 <div className="space-y-4 mt-1">
-                  {/* Key info chips */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                  {/* Compact header info */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
                       <Phone className="h-3.5 w-3.5" />{detailClient.phone_number}
                     </span>
-                    {config.detail_email && (
-                      detailClient.email ? (
-                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <Mail className="h-3.5 w-3.5" />{detailClient.email}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => goToDetailView('edit_info')}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <Plus className="h-3 w-3" /> Ajouter un email
-                        </button>
-                      )
+                    {config.detail_birthday && detailClient.birthday && (
+                      <span className="flex items-center gap-1.5">
+                        <Cake className="h-3.5 w-3.5" />
+                        {format(parseISO(detailClient.birthday), 'd MMM', { locale: fr })}
+                      </span>
                     )}
-                    {config.detail_birthday && (
-                      detailClient.birthday ? (
-                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <Cake className="h-3.5 w-3.5" />
-                          {format(parseISO(detailClient.birthday), 'd MMM', { locale: fr })}
-                        </span>
-                      ) : (
+                    {loyaltyOn && (
+                      <span className="flex items-center gap-1.5">
+                        <Star className="h-3.5 w-3.5" />
+                        <strong className="text-foreground">{detailClient.loyalty_points}</strong> pts
+                        &nbsp;·&nbsp;{detailClient.total_cycles_completed} cycle{detailClient.total_cycles_completed !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Tabs */}
+                  <Tabs defaultValue="infos">
+                    <TabsList className="w-full flex justify-start border-b border-border bg-transparent h-auto p-0 rounded-none overflow-x-auto">
+                      <TabsTrigger value="infos" className="rounded-none px-5 py-5 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">Infos</TabsTrigger>
+                      <TabsTrigger value="historique" className="rounded-none px-5 py-5 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">{t('clients.historyTab')}</TabsTrigger>
+                      {loyaltyOn && <TabsTrigger value="fidelite" className="rounded-none px-5 py-5 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">{t('clients.fidelityTab')}</TabsTrigger>}
+                    </TabsList>
+
+                    {/* ── Infos ── */}
+                    <TabsContent value="infos" className="mt-3 space-y-3 text-sm">
+                      {config.detail_email && (
+                        detailClient.email ? (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Mail className="h-4 w-4 shrink-0" />{detailClient.email}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => goToDetailView('edit_info')}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <Plus className="h-3 w-3" /> Ajouter un email
+                          </button>
+                        )
+                      )}
+                      {config.detail_birthday && !detailClient.birthday && (
                         <button
                           onClick={() => goToDetailView('edit_info')}
                           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <Plus className="h-3 w-3" /> Ajouter un anniversaire
                         </button>
-                      )
-                    )}
-                    {loyaltyOn && (
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Star className="h-3.5 w-3.5" />
-                        <strong className="text-foreground">{detailClient.loyalty_points}</strong> pts
-                        &nbsp;·&nbsp;{detailClient.total_cycles_completed} cycle{detailClient.total_cycles_completed !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {config.detail_last_activity && detailClient.last_activity && (
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Activity className="h-3.5 w-3.5" />
-                        {format(parseISO(detailClient.last_activity), 'd MMM yyyy', { locale: fr })}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      {t('clients.memberSince', { date: format(parseISO(detailClient.created_at), 'd MMM yyyy', { locale: fr }) })}
-                    </span>
-                  </div>
-
-                  {/* Notes block */}
-                  {config.detail_notes && (
-                    <div className="text-sm">
-                      {detailClient.notes ? (
-                        <div className="rounded-lg bg-muted/50 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
-                          <FileText className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-                          {detailClient.notes}
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => goToDetailView('edit_info')}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <Plus className="h-3 w-3" /> Ajouter une note
-                        </button>
                       )}
-                    </div>
-                  )}
+                      {loyaltyOn && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Star className="h-4 w-4 shrink-0" />
+                          <strong className="text-foreground">{detailClient.loyalty_points}</strong>&nbsp;pts
+                          &nbsp;·&nbsp;{detailClient.total_cycles_completed} cycle{detailClient.total_cycles_completed !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                      {config.detail_last_activity && detailClient.last_activity && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Activity className="h-4 w-4 shrink-0" />
+                          {format(parseISO(detailClient.last_activity), 'd MMM yyyy', { locale: fr })}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <CalendarDays className="h-4 w-4 shrink-0" />
+                        {t('clients.memberSince', { date: format(parseISO(detailClient.created_at), 'd MMM yyyy', { locale: fr }) })}
+                      </div>
+                      {config.detail_notes && (
+                        detailClient.notes ? (
+                          <div className="rounded-lg bg-muted/50 px-3 py-2 text-muted-foreground whitespace-pre-wrap">
+                            <FileText className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
+                            {detailClient.notes}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => goToDetailView('edit_info')}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <Plus className="h-3 w-3" /> Ajouter une note
+                          </button>
+                        )
+                      )}
+                    </TabsContent>
 
-                  {/* Tabs */}
-                  <Tabs defaultValue="historique">
-                    <TabsList className="w-full flex justify-start border-b border-border bg-transparent h-auto p-0 rounded-none overflow-x-auto">
-                      <TabsTrigger value="historique" className="rounded-none px-5 py-5 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">{t('clients.historyTab')}</TabsTrigger>
-                      {loyaltyOn && <TabsTrigger value="fidelite" className="rounded-none px-5 py-5 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">{t('clients.fidelityTab')}</TabsTrigger>}
-                    </TabsList>
-
-                    {/* Historique */}
+                    {/* ── Historique ── */}
                     <TabsContent value="historique" className="mt-3 max-h-72 overflow-y-auto">
                       {detailData.pointsLog.length === 0 && detailData.appointments.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noActivity')}</p>
@@ -1172,42 +1179,76 @@ export default function ClientsPage() {
                       )}
                     </TabsContent>
 
-                    {/* Fidélité */}
-                    {loyaltyOn && <TabsContent value="fidelite" className="mt-3 space-y-4">
-                      {detailData.tiers.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noProgram')}</p>
-                      ) : (() => {
-                        const { progress, nextTier, current, target } = getProgress(detailClient, detailData.tiers)
-                        return (
-                          <>
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span className="tabular-nums font-medium">{current} / {target} pts</span>
-                                {nextTier ? (
-                                  <span className="text-muted-foreground text-xs">→ {nextTier.reward_description}</span>
-                                ) : (
-                                  <span className="text-green-600 font-medium text-xs">{t('clients.maxTier')}</span>
-                                )}
+                    {/* ── Fidélité ── */}
+                    {loyaltyOn && (
+                      <TabsContent value="fidelite" className="mt-3 space-y-5">
+                        {detailData.tiers.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noProgram')}</p>
+                        ) : (() => {
+                          const { progress, nextTier, current, target } = getProgress(detailClient, detailData.tiers)
+                          return (
+                            <>
+                              {/* Progress */}
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                  <span className="tabular-nums font-medium">{current} / {target} pts</span>
+                                  {nextTier ? (
+                                    <span className="text-muted-foreground text-xs">→ {nextTier.reward_description}</span>
+                                  ) : (
+                                    <span className="text-green-600 font-medium text-xs">{t('clients.maxTier')}</span>
+                                  )}
+                                </div>
+                                <Progress value={progress} className="h-2" />
                               </div>
-                              <Progress value={progress} className="h-2" />
-                            </div>
-                            {detailData.coupons.length > 0 && (
-                              <div className="space-y-2 pt-1">
-                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('clients.activeRewards')}</p>
-                                {(detailData.coupons as Coupon[]).map((coupon) => (
-                                  <div key={coupon.id} className="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm">
-                                    <span className="font-medium text-green-900">{coupon.tier?.reward_description ?? '—'}</span>
-                                    <span className="text-xs text-green-700">
-                                      exp. {format(parseISO(coupon.expires_at), 'd MMM yyyy', { locale: fr })}
-                                    </span>
-                                  </div>
-                                ))}
+
+                              {/* Paliers */}
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Paliers</p>
+                                {detailData.tiers.map((tier) => {
+                                  const reached = detailClient.loyalty_points >= tier.required_points
+                                  return (
+                                    <div key={tier.id} className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${reached ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30' : 'border-border bg-muted/30'}`}>
+                                      <span className={`font-medium ${reached ? 'text-green-900 dark:text-green-300' : 'text-muted-foreground'}`}>{tier.reward_description}</span>
+                                      <span className="text-xs text-muted-foreground">{tier.required_points} pts</span>
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </TabsContent>}
+
+                              {/* Récompenses */}
+                              {detailData.coupons.length > 0 && (
+                                <div className="space-y-2">
+                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Récompenses</p>
+                                  {(detailData.coupons as Coupon[]).map((coupon) => {
+                                    const isActive  = coupon.status === 'active'
+                                    const isUsed    = coupon.status === 'used'
+                                    const statusLabel = isActive ? 'Actif' : isUsed ? 'Utilisé' : 'Expiré'
+                                    return (
+                                      <div key={coupon.id} className={`rounded-md border px-3 py-2 text-sm ${isActive ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30' : 'border-border bg-muted/30'}`}>
+                                        <div className="flex items-center justify-between">
+                                          <span className={`font-medium ${isActive ? 'text-green-900 dark:text-green-300' : 'text-muted-foreground'}`}>
+                                            {coupon.tier?.reward_description ?? '—'}
+                                          </span>
+                                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                                            {statusLabel}
+                                          </span>
+                                        </div>
+                                        <div className="flex gap-4 mt-0.5 text-xs text-muted-foreground">
+                                          <span>Débloqué le {format(parseISO(coupon.created_at), 'd MMM yyyy', { locale: fr })}</span>
+                                          {!isUsed && (
+                                            <span>{isActive ? 'Expire le' : 'Expiré le'} {format(parseISO(coupon.expires_at), 'd MMM yyyy', { locale: fr })}</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </TabsContent>
+                    )}
                   </Tabs>
                 </div>
               )}
