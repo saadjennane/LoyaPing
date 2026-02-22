@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
@@ -301,6 +301,7 @@ export default function AppointmentsPage() {
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
   const [pendingGotoDate,       setPendingGotoDate]        = useState('')
   const [datePickerOpen,        setDatePickerOpen]         = useState(false)
+  const dateConfirmingRef = useRef(false)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -853,10 +854,31 @@ export default function AppointmentsPage() {
                       autoFocus
                       value={pendingGotoDate}
                       onChange={(e) => setPendingGotoDate(e.target.value)}
+                      onBlur={() => {
+                        // Defer so onPointerDown on buttons fires first
+                        setTimeout(() => {
+                          if (!dateConfirmingRef.current) {
+                            // Tap outside — return to repos without applying
+                            setDatePickerOpen(false)
+                            setPendingGotoDate('')
+                          }
+                          dateConfirmingRef.current = false
+                        }, 0)
+                      }}
                       className="h-8 border border-input rounded-md px-2 text-sm bg-background focus:outline-none"
                     />
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700" onClick={confirm}>✓</Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={cancel}>✕</Button>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-8 w-8 p-0 shrink-0 text-green-600 hover:text-green-700"
+                      onPointerDown={() => { dateConfirmingRef.current = true }}
+                      onClick={confirm}
+                    >✓</Button>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-8 w-8 p-0 shrink-0"
+                      onPointerDown={() => { dateConfirmingRef.current = true }}
+                      onClick={cancel}
+                    >✕</Button>
                   </div>
                 )
               }
