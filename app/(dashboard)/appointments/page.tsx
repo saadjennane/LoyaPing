@@ -37,8 +37,8 @@ type ListTab      = 'upcoming' | 'history'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show'
 type NotifFilter  = 'all' | 'failed_only'
 
-const HOUR_START = 7
-const HOUR_END = 21
+const HOUR_START = 0
+const HOUR_END = 24
 const HOUR_HEIGHT = 64 // px per hour
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,45 +86,35 @@ function TimeGrid({
   appointments: Appointment[]
   onSelect: (a: Appointment) => void
 }) {
-  const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i)
+  const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => i) // 0..23
   const totalHeight = hours.length * HOUR_HEIGHT
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Scroll to 8am on mount
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 8 * HOUR_HEIGHT
+    }
+  }, [])
 
   function apptTop(appt: Appointment): number {
     const d = parseISO(appt.scheduled_at)
-    const dayStart = setMinutes(setHours(startOfDay(d), HOUR_START), 0)
+    const dayStart = setMinutes(setHours(startOfDay(d), 0), 0)
     const mins = differenceInMinutes(d, dayStart)
     return Math.max(0, (mins / 60) * HOUR_HEIGHT)
   }
 
   return (
-    <div className="flex border rounded-lg overflow-hidden">
-      {/* Time axis */}
-      <div className="w-14 shrink-0 border-r bg-muted/20">
-        <div className="h-10 border-b" />
-        <div className="relative" style={{ height: totalHeight }}>
-          {hours.map((h) => (
+    <div className="flex flex-col border rounded-lg overflow-hidden">
+      {/* ── Header figé ── */}
+      <div className="flex shrink-0 border-b">
+        <div className="w-14 shrink-0 border-r bg-muted/20" />
+        {days.map((day) => {
+          const isToday = isSameDay(day, new Date())
+          return (
             <div
-              key={h}
-              className="absolute w-full border-t text-[11px] text-muted-foreground px-1 pt-0.5"
-              style={{ top: (h - HOUR_START) * HOUR_HEIGHT }}
-            >
-              {h}:00
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Day columns */}
-      {days.map((day) => {
-        const dayAppts = appointments.filter((a) =>
-          isSameDay(parseISO(a.scheduled_at), day)
-        )
-        const isToday = isSameDay(day, new Date())
-
-        return (
-          <div key={day.toISOString()} className="flex-1 border-r last:border-r-0 min-w-0">
-            <div
-              className={`h-10 border-b flex flex-col items-center justify-center text-xs font-medium ${
+              key={day.toISOString()}
+              className={`flex-1 border-r last:border-r-0 h-10 flex flex-col items-center justify-center text-xs font-medium ${
                 isToday ? 'bg-primary/10' : ''
               }`}
             >
@@ -135,12 +125,41 @@ function TimeGrid({
                 {format(day, 'd')}
               </span>
             </div>
-            <div className="relative" style={{ height: totalHeight }}>
+          )
+        })}
+      </div>
+
+      {/* ── Scrollable body ── */}
+      <div ref={scrollRef} className="flex overflow-y-auto max-h-[65vh]">
+        {/* Axe horaire */}
+        <div className="w-14 shrink-0 border-r bg-muted/20 relative" style={{ height: totalHeight }}>
+          {hours.map((h) => (
+            <div
+              key={h}
+              className="absolute w-full border-t text-[11px] text-muted-foreground px-1 pt-0.5"
+              style={{ top: h * HOUR_HEIGHT }}
+            >
+              {String(h).padStart(2, '0')}:00
+            </div>
+          ))}
+        </div>
+
+        {/* Colonnes de jours */}
+        {days.map((day) => {
+          const dayAppts = appointments.filter((a) =>
+            isSameDay(parseISO(a.scheduled_at), day)
+          )
+          return (
+            <div
+              key={day.toISOString()}
+              className="flex-1 border-r last:border-r-0 relative"
+              style={{ height: totalHeight }}
+            >
               {hours.map((h) => (
                 <div
                   key={h}
                   className="absolute w-full border-t border-dashed border-muted"
-                  style={{ top: (h - HOUR_START) * HOUR_HEIGHT }}
+                  style={{ top: h * HOUR_HEIGHT }}
                 />
               ))}
               {dayAppts.map((appt) => (
@@ -158,9 +177,9 @@ function TimeGrid({
                 </button>
               ))}
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -640,12 +659,6 @@ export default function AppointmentsPage() {
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
     : listItems
 
-  // Switch to list view automatically on small screens
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setViewMode('list')
-    }
-  }, [])
 
   return (
     <div className="p-3 md:p-6 space-y-3 md:space-y-4">
