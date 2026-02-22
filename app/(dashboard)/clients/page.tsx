@@ -998,10 +998,10 @@ export default function ClientsPage() {
 
       {/* ── Detail Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={!!detailClient} onOpenChange={(o) => !o && closeDetail()}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] flex flex-col p-0 gap-0">
 
           {/* ── Header ─────────────────────────────────────────────────── */}
-          <DialogHeader className="flex-row items-center gap-2 pr-8 space-y-0">
+          <DialogHeader className="flex-row items-center gap-2 pr-14 space-y-0 px-6 pt-6 pb-4 shrink-0 border-b">
             {detailView !== 'main' && (
               <Button
                 variant="ghost" size="icon"
@@ -1049,6 +1049,7 @@ export default function ClientsPage() {
             )}
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto px-6 py-4">
           {detailLoading ? (
             <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
           ) : detailClient ? (
@@ -1143,7 +1144,7 @@ export default function ClientsPage() {
                     </TabsContent>
 
                     {/* ── Historique ── */}
-                    <TabsContent value="historique" className="mt-3 max-h-96 overflow-y-auto">
+                    <TabsContent value="historique" className="mt-3">
                       {detailData.pointsLog.length === 0 && detailData.appointments.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noActivity')}</p>
                       ) : (
@@ -1343,6 +1344,7 @@ export default function ClientsPage() {
               )}
             </>
           ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
