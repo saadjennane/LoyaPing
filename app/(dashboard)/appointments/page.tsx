@@ -299,8 +299,6 @@ export default function AppointmentsPage() {
   const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
   const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
   const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const [datePickerOpen,        setDatePickerOpen]         = useState(false)
-  const [pendingGotoDate,       setPendingGotoDate]         = useState('')
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -728,7 +726,7 @@ export default function AppointmentsPage() {
           {viewMode === 'list' && (
             <div className="flex rounded-md border overflow-hidden">
               <button
-                onClick={() => { setListTab('upcoming'); setDatePickerOpen(false) }}
+                onClick={() => setListTab('upcoming')}
                 className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -736,7 +734,7 @@ export default function AppointmentsPage() {
                 {t('appointments.upcoming')}
               </button>
               <button
-                onClick={() => { setListTab('history'); setDatePickerOpen(false) }}
+                onClick={() => setListTab('history')}
                 className={`px-4 py-1.5 text-sm font-medium border-l ${
                   listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
@@ -827,24 +825,31 @@ export default function AppointmentsPage() {
               )
             })()}
 
-            {/* Go-to date */}
+            {/* Go-to date — hidden input overlays the button so iOS picker opens on tap */}
             {(() => {
               const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
-              const openPicker  = () => { setPendingGotoDate(appliedDate); setDatePickerOpen(true) }
-              const clear       = () => {
+              const clear = () => {
                 if (listTab === 'upcoming') setUpcomingGotoDate('')
                 else setHistoryGotoDate('')
               }
               return (
                 <div className="ml-auto flex items-center gap-1.5">
-                  <button
-                    onClick={openPicker}
-                    className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap"
-                  >
-                    {appliedDate
-                      ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
-                      : 'Aller à une date'}
-                  </button>
+                  <div className="relative">
+                    <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap pointer-events-none select-none">
+                      {appliedDate
+                        ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
+                        : 'Aller à une date'}
+                    </button>
+                    <input
+                      type="date"
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                      value={appliedDate}
+                      onChange={(e) => {
+                        if (listTab === 'upcoming') setUpcomingGotoDate(e.target.value)
+                        else setHistoryGotoDate(e.target.value)
+                      }}
+                    />
+                  </div>
                   {appliedDate && (
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clear}>✕</Button>
                   )}
@@ -1323,40 +1328,7 @@ export default function AppointmentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Date picker dialog ─────────────────────────────────────────────── */}
-      <Dialog open={datePickerOpen} onOpenChange={(o) => { if (!o) setDatePickerOpen(false) }}>
-        <DialogContent className="max-w-xs">
-          <DialogHeader>
-            <DialogTitle>Aller à une date</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <input
-              type="date"
-              autoFocus
-              value={pendingGotoDate}
-              onChange={(e) => setPendingGotoDate(e.target.value)}
-              className="w-full h-10 border border-input rounded-md px-3 text-sm bg-background focus:outline-none"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={() => setDatePickerOpen(false)}>
-                Annuler
-              </Button>
-              <Button
-                disabled={!pendingGotoDate}
-                onClick={() => {
-                  if (pendingGotoDate) {
-                    if (listTab === 'upcoming') setUpcomingGotoDate(pendingGotoDate)
-                    else setHistoryGotoDate(pendingGotoDate)
-                  }
-                  setDatePickerOpen(false)
-                }}
-              >
-                Confirmer
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
     </div>
   )
 }
