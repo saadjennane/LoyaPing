@@ -998,7 +998,7 @@ export default function ClientsPage() {
 
       {/* ── Detail Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={!!detailClient} onOpenChange={(o) => !o && closeDetail()}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
 
           {/* ── Header ─────────────────────────────────────────────────── */}
           <DialogHeader className="flex-row items-center gap-2 pr-8 space-y-0">
@@ -1143,7 +1143,7 @@ export default function ClientsPage() {
                     </TabsContent>
 
                     {/* ── Historique ── */}
-                    <TabsContent value="historique" className="mt-3 max-h-72 overflow-y-auto">
+                    <TabsContent value="historique" className="mt-3 max-h-96 overflow-y-auto">
                       {detailData.pointsLog.length === 0 && detailData.appointments.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-8">{t('clients.noActivity')}</p>
                       ) : (
