@@ -28,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <ClientProviders initialModules={modules} initialFieldConfig={fieldConfig}>
-      <div className="flex bg-background">
+      <div className="flex min-h-screen bg-background">
         {/* Sidebar — desktop only */}
         <Sidebar />
 
