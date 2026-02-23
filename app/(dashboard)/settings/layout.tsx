@@ -62,8 +62,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <div className="flex h-full min-h-0">
       {/* ── Secondary nav ── */}
-      <aside className="hidden md:flex flex-col w-52 shrink-0 border-r border-border h-full">
-        <div className="flex-1 overflow-y-auto p-3 space-y-0.5">
+      <aside className="hidden md:flex flex-col w-52 shrink-0 border-r border-border sticky top-0 h-screen">
+        <div className="flex-1 p-3 space-y-0.5">
           <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Paramètres
           </p>
