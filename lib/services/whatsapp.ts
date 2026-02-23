@@ -43,8 +43,10 @@ async function sendViaCloudApi(msg: WhatsAppMessage) {
     text: { body: msg.text },
   }
 
+  const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v22.0'
+
   const res = await fetch(
-    `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
     {
       method: 'POST',
       headers: {
