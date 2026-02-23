@@ -5,10 +5,6 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/jobs/order-ready-notifications",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/jobs/appointment-reminders",
       "schedule": "* * * * *"
     },

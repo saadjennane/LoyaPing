@@ -1,10 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { processScheduledReadyNotifications } from '@/lib/services/orders'
+/**
+ * DEPRECATED — /api/jobs/order-ready-notifications
+ *
+ * This endpoint previously processed order_scheduled_notifications rows.
+ * It has been superseded by the Outbox pattern:
+ *   - Order-ready messages are now written into scheduled_messages via
+ *     PATCH /api/orders/:id/ready.
+ *   - Sending is handled exclusively by:
+ *     GET /api/jobs/dispatch-scheduled-messages
+ *
+ * This endpoint is kept as a no-op. The cron entry has been removed from
+ * vercel.json.
+ */
 
-// GET /api/jobs/order-ready-notifications?secret=CRON_SECRET
-// Cron worker: picks up all SCHEDULED READY notifications past their scheduled_for
-// and sends the WhatsApp messages (or cancels if order is no longer READY).
-// Run every minute via vercel.json cron.
+import { NextRequest, NextResponse } from 'next/server'
+
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   const secret =
@@ -15,10 +24,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  try {
-    const result = await processScheduledReadyNotifications()
-    return NextResponse.json({ data: result })
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
-  }
+  return NextResponse.json({
+    deprecated: true,
+    message:    'Use /api/jobs/dispatch-scheduled-messages instead.',
+    sent:       0,
+    failed:     0,
+  })
 }

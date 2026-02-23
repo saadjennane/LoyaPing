@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { markOrderReady, markOrderPickedUp, downgradeReadyToPending, downgradeCompletedToReady } from '@/lib/services/orders'
+import { markOrderPickedUp, downgradeReadyToPending, downgradeCompletedToReady } from '@/lib/services/orders'
 import { createServerClient } from '@/lib/supabase/server'
 
 type Params = { params: Promise<{ id: string }> }
 
 // PATCH /api/orders/:id — update status
+// Note: marking an order "ready" uses PATCH /api/orders/:id/ready (outbox pattern)
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
     const { status } = await req.json()
 
-    // Schedule WhatsApp send (10s delay), returns { order, notificationId, scheduledFor }
-    if (status === 'ready') {
-      const result = await markOrderReady(id)
-      return NextResponse.json({ data: result })
-    }
-
-    // Downgrade READY → PENDING; auto-cancels any scheduled notif
-    // Returns { readyMessageSent } so the UI can offer a correction message
+    // Downgrade READY → PENDING; auto-cancels any SCHEDULED outbox message.
+    // Returns { readyMessageSent } so the UI can offer a correction message.
     if (status === 'pending') {
       const result = await downgradeReadyToPending(id)
       return NextResponse.json({ data: result })
@@ -35,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ data: result })
     }
 
-    return NextResponse.json({ error: 'Invalid status. Use "ready", "pending", "picked_up", or "ready_revert"' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid status. Use "pending", "picked_up", or "ready_revert". To mark as ready use PATCH /api/orders/:id/ready.' }, { status: 400 })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

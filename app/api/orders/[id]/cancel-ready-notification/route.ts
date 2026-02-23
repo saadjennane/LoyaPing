@@ -1,17 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { cancelReadyNotification } from '@/lib/services/orders'
+/**
+ * DEPRECATED — POST /api/orders/:id/cancel-ready-notification
+ *
+ * Previously cancelled a legacy order_scheduled_notifications row.
+ * The UI now calls POST /api/scheduled-messages/:id/cancel instead.
+ *
+ * Kept as a no-op to avoid 404s from any lingering clients.
+ */
 
-type Params = { params: Promise<{ id: string }> }
+import { NextResponse } from 'next/server'
 
-// POST /api/orders/:id/cancel-ready-notification
-// Cancels the pending SCHEDULED READY notification and reverts the order to PENDING.
-// Only works within the 10-second undo window.
-export async function POST(_req: NextRequest, { params }: Params) {
-  try {
-    const { id } = await params
-    await cancelReadyNotification(id)
-    return NextResponse.json({ data: { success: true } })
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 400 })
-  }
+export async function POST() {
+  return NextResponse.json({
+    deprecated: true,
+    message:    'Use /api/scheduled-messages/:id/cancel instead.',
+    success:    false,
+  })
 }

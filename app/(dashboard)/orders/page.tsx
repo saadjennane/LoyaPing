@@ -261,21 +261,11 @@ export default function OrdersPage() {
     setSubmitting(false)
   }
 
-  // ── Cancel the scheduled READY notification (Undo within 10s) ──────────────
-  const cancelReadyMessage = async (id: string) => {
-    const res = await fetch(`/api/orders/${id}/cancel-ready-notification`, { method: 'POST' })
-    const json = await res.json()
-    if (json.error) {
-      toast.error(`Annulation impossible : ${json.error}`)
-      return
-    }
-    setOrders(prev => prev.map(o =>
-      o.id === id ? { ...o, status: 'pending' as const, ready_at: null } : o
-    ))
-    toast.success(t('orders.cancelledToast'))
-  }
-
-  // ── Mark order as READY (optimistic) + schedule WhatsApp (10s delay) ───────
+  // ── Mark order as READY — outbox hybrid 10s flow ──────────────────────────
+  // 1. PATCH /api/orders/:id/ready → marks ready + creates outbox row (60s cron fallback)
+  // 2. Show 10s countdown toast with Annuler
+  // 3. If user cancels → cancel outbox row + revert order to pending
+  // 4. After 10s → send-now dispatches immediately (before cron fires at +60s)
   const markReady = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
 
@@ -293,35 +283,66 @@ export default function OrdersPage() {
     ))
     setDetailOpen(false)
 
-    const res = await fetch(`/api/orders/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'ready' }),
-    })
+    const res = await fetch(`/api/orders/${id}/ready`, { method: 'PATCH' })
     const json = await res.json()
 
     if (json.error) {
       toast.error(json.error)
-      // Revert optimistic update
       setOrders(prev => prev.map(o =>
         o.id === id ? { ...o, status: 'pending' as const, ready_at: null } : o
       ))
       return
     }
 
-    // Show countdown toast for the 10-second undo window
+    const { scheduledMessageId } = json.data ?? {}
+    if (!scheduledMessageId) {
+      // Should not happen — cron fallback will send at +60s anyway
+      toast.success(t('orders.readyToast'))
+      return
+    }
+
+    const handle = { timer: undefined as ReturnType<typeof setTimeout> | undefined }
+
+    // Undo: cancel the outbox message + revert order to pending
+    const doCancel = async () => {
+      clearTimeout(handle.timer)
+      await fetch(`/api/scheduled-messages/${scheduledMessageId}/cancel`, { method: 'POST' })
+      const r2 = await fetch(`/api/orders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'pending' }),
+      })
+      const j2 = await r2.json()
+      if (j2.error) { toast.error(`Annulation impossible : ${j2.error}`); return }
+      setOrders(prev => prev.map(o =>
+        o.id === id ? { ...o, status: 'pending' as const, ready_at: null } : o
+      ))
+      toast.success(t('orders.cancelledToast'))
+    }
+
     toast.custom(
       (toastId) => (
         <CountdownToast
           toastId={toastId}
           message={t('orders.readyToast')}
           icon={CheckCircle}
-          onUndo={() => cancelReadyMessage(id)}
+          onUndo={doCancel}
           undoLabel={t('orders.undoLabel')}
         />
       ),
       { duration: 10_000 },
     )
+
+    // After 10s: call send-now for immediate dispatch.
+    // 409 = already sent by cron or cancelled by user — both fine.
+    handle.timer = setTimeout(async () => {
+      try {
+        await fetch(`/api/scheduled-messages/${scheduledMessageId}/send-now`, { method: 'POST' })
+      } catch {
+        // Cron fallback at +60s will handle any network failure here
+      }
+      fetchOrders()
+    }, 10_000)
   }
 
   // ── Downgrade READY → PENDING; proposes correction message if already sent ─

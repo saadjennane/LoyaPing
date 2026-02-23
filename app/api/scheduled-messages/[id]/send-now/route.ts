@@ -10,10 +10,12 @@
  *      Returns 409 if it has already been claimed/sent/cancelled.
  *   2. Send via sendWhatsAppMessage().
  *   3. Mark SENT on success, FAILED (with retry logic) on error.
+ *   4. On success, update entity-specific timestamps (e.g. orders.ready_sent_at).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import { createServerClient } from '@/lib/supabase/server'
 import {
   claimMessageNow,
   markSent,
@@ -50,6 +52,19 @@ export async function POST(_req: NextRequest, { params }: Params) {
     })
 
     await markSent(claimed.id, claimToken)
+
+    // ── Entity-specific post-send updates ─────────────────────────────────
+    if (claimed.message_type === 'order_ready') {
+      try {
+        const db = createServerClient()
+        await db
+          .from('orders')
+          .update({ ready_sent_at: new Date().toISOString() })
+          .eq('id', claimed.entity_id)
+      } catch (dbErr) {
+        console.error('[send-now] failed to update orders.ready_sent_at', dbErr)
+      }
+    }
 
     return NextResponse.json({ data: { sent: true, messageId: result.messageId } })
   } catch (sendErr) {
