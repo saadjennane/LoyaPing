@@ -9,8 +9,13 @@
  *     two overlapping cron invocations claim disjoint sets of rows.
  *   - claim_token stored on each row means only the claiming worker can
  *     transition it to SENT/FAILED, preventing stale-run interference.
- *   - markFailed reschedules with exponential backoff (up to MAX_ATTEMPTS = 3),
+ *   - markFailed reschedules with exponential backoff (up to MAX_ATTEMPTS = 4),
  *     then permanently marks FAILED so dead messages are auditable.
+ *
+ * Auth: CRON_SECRET environment variable is REQUIRED.
+ *   - Missing → 500 (mis-configuration, do not run the job)
+ *   - Present but wrong → 401
+ * Vercel Cron sends: Authorization: Bearer {CRON_SECRET}
  *
  * Idempotency:
  *   Calling this endpoint multiple times is safe. The SKIP LOCKED + status
@@ -26,13 +31,23 @@ import { claimDueMessages, markSent, markFailed } from '@/lib/services/outbox'
 const BATCH_SIZE = 20
 
 export async function GET(req: NextRequest) {
+  // ── Auth — CRON_SECRET is mandatory ───────────────────────────────────────
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    console.error('[dispatch] CRON_SECRET is not configured')
+    return NextResponse.json(
+      { error: 'CRON_SECRET is not configured' },
+      { status: 500 },
+    )
+  }
+
   const auth = req.headers.get('authorization')
   const secret =
     (auth?.startsWith('Bearer ') ? auth.slice(7) : null) ??
     req.headers.get('x-cron-secret') ??
     req.nextUrl.searchParams.get('secret')
 
-  if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+  if (secret !== cronSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

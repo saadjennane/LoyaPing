@@ -13,8 +13,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json()
     const { status, amount, scheduled_at } = body
 
-    // Force status override — used for corrections (show↔no_show↔scheduled)
-    // No points logic, no WhatsApp, just a direct DB update with timestamp
+    // ── Force override (silent correction) ──────────────────────────────────
+    // Corrects a wrong status (show↔no_show↔scheduled) without triggering
+    // points logic or WhatsApp messages. Useful for data-entry mistakes.
+    // The outbox is NOT touched — any pending SCHEDULED post messages are left
+    // as-is and will fire unless the caller cancels them separately.
+    // For normal appointment flow, omit force and use status='show'/'no_show'.
     if (body.force && ['show', 'no_show', 'scheduled'].includes(status)) {
       const db = createServerClient()
       const now = new Date().toISOString()
@@ -24,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (status === 'scheduled') { updates.show_at = null; updates.no_show_at = null }
       const { error } = await db.from('appointments').update(updates).eq('id', id)
       if (error) throw error
-      return NextResponse.json({ data: { id, status } })
+      return NextResponse.json({ data: { id, status, forced: true, whatsappQueued: false } })
     }
 
     if (status === 'show') {

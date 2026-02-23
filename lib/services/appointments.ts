@@ -1,6 +1,9 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { creditPoints } from '@/lib/services/loyalty'
-import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import {
+  cancelExistingScheduledForEntity,
+  createScheduledMessage,
+} from '@/lib/services/outbox'
 import type { Appointment, AppointmentListItem, Client, LoyaltyProgram } from '@/lib/types'
 
 // =========================================
@@ -16,10 +19,10 @@ export async function markAppointmentShow(
     .from('appointments')
     .select('*, client:clients(*)')
     .eq('id', appointmentId)
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'no_show'])   // allow flip no_show → show
     .single()
 
-  if (error || !appt) throw new Error('Appointment not found or not scheduled')
+  if (error || !appt) throw new Error('Appointment not found or already marked as show')
   if (appt.points_credited) throw new Error('Points already credited')
 
   const now = new Date().toISOString()
@@ -69,7 +72,7 @@ export async function markAppointmentShow(
     })
   }
 
-  // Send post-show WhatsApp message (best-effort)
+  // Queue post-show WhatsApp message via outbox (retry-safe, auditable)
   try {
     const { data: notifSettings } = await db
       .from('appointment_notification_settings')
@@ -79,10 +82,34 @@ export async function markAppointmentShow(
 
     const phone = (appt.client as Client | undefined)?.phone_number
     if (phone && notifSettings?.post_messages_enabled && notifSettings?.post_show_message) {
-      await sendWhatsAppMessage({ to: phone, text: notifSettings.post_show_message })
+      // Status flip: cancel any pending post_no_show from a previous no_show marking
+      await cancelExistingScheduledForEntity('appointment', appointmentId, 'appointment_post_no_show')
+
+      // Idempotency: skip if a post_show was already delivered
+      const { data: sentRows } = await db
+        .from('scheduled_messages')
+        .select('id')
+        .eq('entity_type',  'appointment')
+        .eq('entity_id',    appointmentId)
+        .eq('message_type', 'appointment_post_show')
+        .eq('status',       'SENT')
+        .limit(1)
+
+      if (!(sentRows?.length)) {
+        // Cancel any stale SCHEDULED post_show before re-enqueuing
+        await cancelExistingScheduledForEntity('appointment', appointmentId, 'appointment_post_show')
+        await createScheduledMessage({
+          entityType:  'appointment',
+          entityId:    appointmentId,
+          messageType: 'appointment_post_show',
+          to:          phone,
+          body:        notifSettings.post_show_message,
+          sendAt:      new Date(),
+        })
+      }
     }
   } catch (e) {
-    console.error('[appointments] Failed to send post-show message:', e)
+    console.error('[appointments] Failed to queue post-show message:', e)
   }
 
   return { ...(appt as Appointment), pointsCredited: pointsToCredit }
@@ -94,23 +121,24 @@ export async function markAppointmentShow(
 export async function markNoShow(appointmentId: string): Promise<void> {
   const db = createServerClient()
 
-  // Fetch appointment before updating (need business_id + client phone)
+  // Fetch appointment before updating (need business_id + client phone).
+  // Allowed source statuses: 'scheduled' and 'show' (normal flip show → no_show).
   const { data: appt } = await db
     .from('appointments')
     .select('business_id, client:clients(phone_number)')
     .eq('id', appointmentId)
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'show'])
     .maybeSingle()
 
   const { error } = await db
     .from('appointments')
     .update({ status: 'no_show', no_show_at: new Date().toISOString() })
     .eq('id', appointmentId)
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'show'])
 
   if (error) throw error
 
-  // Send post-no-show WhatsApp message (best-effort)
+  // Queue post-no-show WhatsApp message via outbox (retry-safe, auditable)
   if (appt) {
     try {
       const { data: notifSettings } = await db
@@ -122,10 +150,34 @@ export async function markNoShow(appointmentId: string): Promise<void> {
       const clientData = appt.client as unknown as { phone_number: string } | null
       const phone = clientData?.phone_number
       if (phone && notifSettings?.post_messages_enabled && notifSettings?.post_no_show_message) {
-        await sendWhatsAppMessage({ to: phone, text: notifSettings.post_no_show_message })
+        // Status flip: cancel any pending post_show from a previous show marking
+        await cancelExistingScheduledForEntity('appointment', appointmentId, 'appointment_post_show')
+
+        // Idempotency: skip if a post_no_show was already delivered
+        const { data: sentRows } = await db
+          .from('scheduled_messages')
+          .select('id')
+          .eq('entity_type',  'appointment')
+          .eq('entity_id',    appointmentId)
+          .eq('message_type', 'appointment_post_no_show')
+          .eq('status',       'SENT')
+          .limit(1)
+
+        if (!(sentRows?.length)) {
+          // Cancel any stale SCHEDULED post_no_show before re-enqueuing
+          await cancelExistingScheduledForEntity('appointment', appointmentId, 'appointment_post_no_show')
+          await createScheduledMessage({
+            entityType:  'appointment',
+            entityId:    appointmentId,
+            messageType: 'appointment_post_no_show',
+            to:          phone,
+            body:        notifSettings.post_no_show_message,
+            sendAt:      new Date(),
+          })
+        }
       }
     } catch (e) {
-      console.error('[appointments] Failed to send post-no-show message:', e)
+      console.error('[appointments] Failed to queue post-no-show message:', e)
     }
   }
 }
