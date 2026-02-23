@@ -45,7 +45,8 @@ export type ScheduledMessage = {
 }
 
 // Max send attempts before a message is permanently marked FAILED.
-const MAX_ATTEMPTS = 3
+// 4 = 1 initial attempt + 3 retries at 30 s / 60 s / 90 s backoff.
+const MAX_ATTEMPTS = 4
 
 // ── Create ────────────────────────────────────────────────────────────────────
 

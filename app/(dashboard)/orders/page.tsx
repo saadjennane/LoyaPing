@@ -303,10 +303,23 @@ export default function OrdersPage() {
 
     const handle = { timer: undefined as ReturnType<typeof setTimeout> | undefined }
 
-    // Undo: cancel the outbox message + revert order to pending
+    // Undo: cancel the outbox message + revert order to pending.
+    // If cancel returns 409, the message was already claimed/sent — do NOT
+    // revert and offer a correction message instead.
     const doCancel = async () => {
       clearTimeout(handle.timer)
-      await fetch(`/api/scheduled-messages/${scheduledMessageId}/cancel`, { method: 'POST' })
+      const cancelRes = await fetch(`/api/scheduled-messages/${scheduledMessageId}/cancel`, { method: 'POST' })
+      const cancelJson = await cancelRes.json()
+
+      if (!cancelJson.cancelled) {
+        // Too late — notification already dispatched or being dispatched.
+        toast.error('Trop tard : notification déjà envoyée ou en cours d\'envoi.', { duration: 5_000 })
+        setCorrectionOrderId(id)
+        setCorrectionOpen(true)
+        return
+      }
+
+      // Successfully cancelled — revert order to pending.
       const r2 = await fetch(`/api/orders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -374,7 +387,7 @@ export default function OrdersPage() {
   const handleSendCorrection = async () => {
     if (!correctionOrderId) return
     setCorrectionSending(true)
-    const res = await fetch(`/api/orders/${correctionOrderId}/send-ready-correction`, { method: 'POST' })
+    const res = await fetch(`/api/orders/${correctionOrderId}/ready-correction`, { method: 'POST' })
     const json = await res.json()
     if (json.error) toast.error(`Erreur : ${json.error}`)
     else toast.success("Message d\u2019excuse envoy\u00e9.")

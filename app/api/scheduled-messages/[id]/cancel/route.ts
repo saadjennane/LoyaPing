@@ -2,11 +2,12 @@
  * POST /api/scheduled-messages/:id/cancel
  *
  * Cancels a scheduled message only if it is still in SCHEDULED status.
- * Returns 409 if the message has already been claimed (PROCESSING),
- * sent (SENT), or was previously cancelled (CANCELLED).
  *
- * The UI calls this when the user clicks "Annuler" within the
- * cancel-window countdown (typically 10 seconds).
+ * Response:
+ *   200 { cancelled: true }  — successfully cancelled
+ *   409 { cancelled: false, reason: 'already_processing_or_sent' }
+ *       — message was already claimed by a worker or sent; caller must NOT
+ *         revert the order status and should offer a correction message instead.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,14 +22,13 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const { cancelled } = await cancelScheduledMessage(id)
 
     if (!cancelled) {
-      // Row was not in SCHEDULED status — too late to cancel.
       return NextResponse.json(
-        { error: 'Too late: message is already being sent, has been sent, or was already cancelled' },
+        { cancelled: false, reason: 'already_processing_or_sent' },
         { status: 409 },
       )
     }
 
-    return NextResponse.json({ data: { cancelled: true } })
+    return NextResponse.json({ cancelled: true })
   } catch (err) {
     console.error('[scheduled-messages/cancel]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
