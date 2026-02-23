@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
+import { createBrowserClient } from '@supabase/ssr'
+import { useMemo } from 'react'
 
 const ALWAYS_ITEMS = [
   { href: '/settings/organization', label: 'Organisation',   icon: Building2 },
@@ -40,8 +42,19 @@ const MODULE_ITEMS = [
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname   = usePathname()
+  const router     = useRouter()
   const { modules } = useModules()
   const { status }  = useConfigStatus()
+
+  const supabase = useMemo(() => createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  ), [])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/')
@@ -104,6 +117,17 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               )}
             </>
           )}
+        </div>
+
+        {/* Logout */}
+        <div className="p-3 border-t border-border mt-auto">
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span>Se déconnecter</span>
+          </button>
         </div>
       </aside>
 
