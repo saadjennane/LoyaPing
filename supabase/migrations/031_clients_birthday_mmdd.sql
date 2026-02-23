@@ -16,9 +16,14 @@
 -- guard needed (EQ on NULL never matches a concrete 'MM-DD' value).
 -- ============================================================
 
+-- to_char() is STABLE (locale-sensitive) and cannot be used in a generated
+-- column. EXTRACT(MONTH/DAY FROM date) is IMMUTABLE — no locale dependency.
 ALTER TABLE clients
   ADD COLUMN IF NOT EXISTS birthday_mmdd TEXT
-    GENERATED ALWAYS AS (to_char(birthday, 'MM-DD')) STORED;
+    GENERATED ALWAYS AS (
+      lpad((EXTRACT(MONTH FROM birthday)::integer)::text, 2, '0') || '-' ||
+      lpad((EXTRACT(DAY   FROM birthday)::integer)::text, 2, '0')
+    ) STORED;
 
 -- Composite index for the cron query pattern:
 --   WHERE business_id = ? AND birthday_mmdd = 'MM-DD'
