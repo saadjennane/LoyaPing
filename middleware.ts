@@ -2,9 +2,6 @@ import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // ⚠️ TEMPORARILY DISABLED for Lighthouse audit — remove this line after testing!
-  return NextResponse.next()
-
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
