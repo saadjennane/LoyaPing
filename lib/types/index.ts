@@ -381,6 +381,7 @@ export type DashboardOrderItem = {
   client_name:     string
   ready_at:        string | null
   reminders_count: number
+  status:          'pending' | 'ready'
 }
 
 export type DashboardApptItem = {

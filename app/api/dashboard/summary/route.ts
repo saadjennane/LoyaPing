@@ -132,12 +132,24 @@ export async function GET() {
       const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string } | null) =>
         c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number) : '—'
 
-      const list: DashboardOrderItem[] = readyRows.slice(0, 10).map((r) => ({
+      // Sort pending rows by created_at desc (most recent first)
+      const pendingRowsSorted = [...pendingRows].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      )
+
+      // List: ready orders first (oldest = most urgent), then recent pending
+      const listRows = [
+        ...readyRows.slice(0, 5),
+        ...pendingRowsSorted.slice(0, 5),
+      ].slice(0, 10)
+
+      const list: DashboardOrderItem[] = listRows.map((r) => ({
         id:              r.id,
         reference:       r.reference,
         client_name:     clientName(Array.isArray(r.client) ? r.client[0] : r.client),
         ready_at:        r.ready_at,
         reminders_count: r.reminders_count,
+        status:          r.status as 'pending' | 'ready',
       }))
 
       ordersSection = {

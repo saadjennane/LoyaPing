@@ -53,6 +53,7 @@ function CountBadge({ n }: { n: number }) {
 }
 
 type DialogStep = 'search' | 'new_client' | 'reward'
+type DetailMode = 'detail' | 'extend' | 'delete'
 type NewClientForm = { civility: string; first_name: string; last_name: string; phone_number: string }
 const EMPTY_NEW_CLIENT: NewClientForm = { civility: '', first_name: '', last_name: '', phone_number: '' }
 
@@ -85,6 +86,12 @@ export default function CouponsPage() {
   const [bulkExtendOpen, setBulkExtendOpen] = useState(false)
   const [bulkDays, setBulkDays] = useState('30')
   const [bulkUpdating, setBulkUpdating] = useState(false)
+
+  // Single coupon detail (mobile tap) — uses one dialog with internal mode switching
+  const [detailCoupon, setDetailCoupon] = useState<Coupon | null>(null)
+  const [detailMode, setDetailMode] = useState<DetailMode>('detail')
+  const [detailExtendDays, setDetailExtendDays] = useState('7')
+  const [detailUpdating, setDetailUpdating] = useState(false)
 
   // Offer dialog
   const [offerOpen, setOfferOpen] = useState(false)
@@ -215,6 +222,46 @@ export default function CouponsPage() {
     setSubmitting(false)
   }
 
+  // ── Single coupon actions ──────────────────────────────────────────────────
+  const handleDetailExtend = async () => {
+    if (!detailCoupon) return
+    setDetailUpdating(true)
+    const action = detailCoupon.status === 'expired' ? 'reactivate' : 'extend'
+    const res = await fetch('/api/loyalty/coupons/bulk', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [detailCoupon.id], action, extend_days: parseInt(detailExtendDays) || 7 }),
+    })
+    const json = await res.json()
+    if (json.error) toast.error(json.error)
+    else {
+      toast.success(action === 'reactivate' ? 'Coupon réactivé' : `Coupon prolongé de ${detailExtendDays} jour(s)`)
+      setDetailCoupon(null)
+      setDetailMode('detail')
+      fetchCoupons()
+    }
+    setDetailUpdating(false)
+  }
+
+  const handleDetailDelete = async () => {
+    if (!detailCoupon) return
+    setDetailUpdating(true)
+    const res = await fetch('/api/loyalty/coupons/bulk', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [detailCoupon.id] }),
+    })
+    const json = await res.json()
+    if (json.error) toast.error(json.error)
+    else {
+      toast.success('Coupon supprimé')
+      setDetailCoupon(null)
+      setDetailMode('detail')
+      fetchCoupons()
+    }
+    setDetailUpdating(false)
+  }
+
   // ── Bulk helpers ───────────────────────────────────────────────────────────
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -303,7 +350,10 @@ export default function CouponsPage() {
               className={`bg-card border rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-muted/30 transition-colors ${
                 isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-border'
               }`}
-              onClick={() => { if (mobileSelectMode) toggleSelect(coupon.id) }}
+              onClick={() => {
+                if (mobileSelectMode) toggleSelect(coupon.id)
+                else { setDetailCoupon(coupon); setDetailMode('detail'); setDetailExtendDays('7') }
+              }}
             >
               {mobileSelectMode && (
                 <div className="shrink-0">
@@ -821,6 +871,95 @@ export default function CouponsPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Single coupon detail dialog (unified) ───────────────────────────── */}
+      <Dialog open={!!detailCoupon} onOpenChange={(o) => { if (!o) { setDetailCoupon(null); setDetailMode('detail') } }}>
+        <DialogContent className="max-w-sm">
+          {detailCoupon && (() => {
+            const dc = detailCoupon
+            const dcClient = dc.client as Client | undefined
+            const dcTier = dc.tier
+            const days = daysLeft(dc)
+
+            if (detailMode === 'extend') return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{dc.status === 'expired' ? 'Réactiver le coupon' : 'Étendre le coupon'}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <p className="text-sm text-muted-foreground">
+                    {dc.status === 'expired'
+                      ? 'Le statut repassera à « Actif » et la date d\'expiration sera repoussée.'
+                      : 'La date d\'expiration sera repoussée du nombre de jours indiqué.'}
+                  </p>
+                  <div className="space-y-1">
+                    <Label>Prolonger de (jours)</Label>
+                    <Input type="number" min="1" value={detailExtendDays} onChange={(e) => setDetailExtendDays(e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" onClick={() => setDetailMode('detail')}>Annuler</Button>
+                    <Button disabled={detailUpdating || !detailExtendDays} onClick={handleDetailExtend}>
+                      {detailUpdating ? 'En cours...' : dc.status === 'expired' ? 'Réactiver' : 'Étendre'}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )
+
+            if (detailMode === 'delete') return (
+              <>
+                <DialogHeader><DialogTitle>Supprimer ce coupon ?</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" onClick={() => setDetailMode('detail')}>Annuler</Button>
+                    <Button variant="destructive" disabled={detailUpdating} onClick={handleDetailDelete}>
+                      {detailUpdating ? 'Suppression...' : 'Supprimer'}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Coupon fidélité</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <div className="bg-muted/40 rounded-xl p-4 space-y-1.5">
+                    <div className="text-sm font-semibold">{clientFullName(dcClient)}</div>
+                    {dcClient?.phone_number && (
+                      <div className="text-xs text-muted-foreground">{dcClient.phone_number}</div>
+                    )}
+                    <div className="text-sm text-foreground mt-1">{dcTier?.reward_description ?? '—'}</div>
+                    {dc.status !== 'used' && (
+                      <div className={`text-xs font-medium ${days <= 3 && dc.status !== 'expired' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                        {dc.status === 'expired'
+                          ? `Expiré le ${format(parseISO(dc.expires_at), 'd MMM yyyy', { locale: fr })}`
+                          : `Expire le ${format(parseISO(dc.expires_at), 'd MMM yyyy', { locale: fr })}`}
+                      </div>
+                    )}
+                    <div className="mt-1">
+                      <CouponStatusBadge status={dc.status} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {(dc.status === 'active' || dc.status === 'expired') && (
+                      <Button variant="outline" className="flex-1" onClick={() => { setDetailExtendDays('7'); setDetailMode('extend') }}>
+                        {dc.status === 'expired' ? 'Réactiver' : 'Étendre'}
+                      </Button>
+                    )}
+                    <Button variant="destructive" className="flex-1" onClick={() => setDetailMode('delete')}>
+                      Supprimer
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 

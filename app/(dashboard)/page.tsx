@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   RefreshCw, ShoppingBag, Calendar, Ticket,
-  AlertTriangle, Clock, CheckCircle2, XCircle, Sparkles, ArrowRight,
+  AlertTriangle, Clock, CheckCircle2, XCircle, Sparkles, ArrowRight, CheckCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import type { DashboardSummary } from '@/lib/types'
 import { useI18n } from '@/lib/i18n/provider'
 
@@ -61,7 +62,7 @@ function SkeletonFocus() {
           {[0, 1, 2].map((i) => <div key={i} className="h-16 bg-muted rounded-xl" />)}
         </div>
         <div className="space-y-2">
-          {[0, 1, 2].map((i) => <div key={i} className="h-7 bg-muted/50 rounded" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="h-14 bg-muted/50 rounded-xl" />)}
         </div>
       </div>
     </div>
@@ -96,7 +97,13 @@ const APPT_META = {
   no_show:   { Icon: XCircle,       color: 'text-red-400' },
 } as const
 
-function FocusOrders({ data }: { data: NonNullable<DashboardSummary['orders']> }) {
+function FocusOrders({
+  data,
+  onMarkReady,
+}: {
+  data: NonNullable<DashboardSummary['orders']>
+  onMarkReady?: (id: string) => Promise<void>
+}) {
   const { metrics, list } = data
   const hasUncollected = metrics.uncollected_3reminders > 0
   return (
@@ -134,17 +141,38 @@ function FocusOrders({ data }: { data: NonNullable<DashboardSummary['orders']> }
           </div>
         </div>
         {list.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-1">Aucune commande prête</p>
+          <p className="text-sm text-muted-foreground text-center py-1">Aucune commande en cours</p>
         ) : (
-          <div className="divide-y divide-border/40">
+          <div className="space-y-2">
             {list.slice(0, 3).map((order) => (
-              <div key={order.id} className="flex items-center gap-2.5 py-2">
-                {order.reminders_count >= 3
-                  ? <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                  : <Clock className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
-                <span className="flex-1 text-sm font-medium text-foreground truncate">{order.client_name}</span>
-                {order.reference && <span className="text-xs text-muted-foreground">#{order.reference}</span>}
-                <span className="text-xs text-muted-foreground shrink-0">{formatDateTime(order.ready_at)}</span>
+              <div key={order.id} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {order.reminders_count >= 3 && order.status === 'ready' && (
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                    )}
+                    <span className="font-medium text-sm truncate">{order.client_name}</span>
+                    {order.reference && (
+                      <span className="text-xs text-muted-foreground shrink-0">#{order.reference}</span>
+                    )}
+                  </div>
+                  {order.status === 'ready' && order.ready_at && (
+                    <div className="text-xs text-muted-foreground mt-0.5">{formatDateTime(order.ready_at)}</div>
+                  )}
+                </div>
+                {order.status === 'pending' ? (
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs shrink-0 bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white gap-1"
+                    onClick={() => onMarkReady?.(order.id)}
+                  >
+                    <CheckCircle className="h-3 w-3" />Prête
+                  </Button>
+                ) : (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shrink-0">
+                    Prête
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -194,15 +222,22 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-1">Aucun RDV aujourd&apos;hui</p>
         ) : (
-          <div className="divide-y divide-border/40">
+          <div className="space-y-2">
             {list.slice(0, 3).map((appt) => {
               const meta = APPT_META[appt.status] ?? APPT_META.scheduled
               const Icon = meta.Icon
               return (
-                <div key={appt.id} className="flex items-center gap-2.5 py-2">
-                  <Icon className={`h-3.5 w-3.5 ${meta.color} shrink-0`} />
-                  <span className="flex-1 text-sm font-medium text-foreground truncate">{appt.client_name}</span>
-                  <span className="text-xs font-medium text-muted-foreground shrink-0">{formatTime(appt.scheduled_at)}</span>
+                <div key={appt.id} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center shrink-0">
+                    <Icon className={`h-4 w-4 ${meta.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{appt.client_name}</p>
+                    <p className="text-xs text-muted-foreground">{formatTime(appt.scheduled_at)}</p>
+                  </div>
+                  <Link href="/appointments" className="text-xs text-violet-600 dark:text-violet-400 hover:underline shrink-0">
+                    Voir →
+                  </Link>
                 </div>
               )
             })}
@@ -252,14 +287,21 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-1">Aucun coupon actif</p>
         ) : (
-          <div className="divide-y divide-border/40">
+          <div className="space-y-2">
             {list.slice(0, 3).map((coupon) => (
-              <div key={coupon.id} className="flex items-center gap-2.5 py-2">
-                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                <span className="flex-1 text-sm font-medium text-foreground truncate">{coupon.client_name}</span>
-                {coupon.reward_title && (
-                  <span className="text-xs font-medium text-amber-600 dark:text-amber-400 shrink-0">{coupon.reward_title}</span>
-                )}
+              <div key={coupon.id} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{coupon.client_name}</p>
+                  {coupon.reward_title && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 truncate">{coupon.reward_title}</p>
+                  )}
+                </div>
+                <Link href="/coupons" className="text-xs text-amber-600 dark:text-amber-400 hover:underline shrink-0">
+                  Voir →
+                </Link>
               </div>
             ))}
           </div>
@@ -271,7 +313,13 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
 
 // ── Secondary Cards ───────────────────────────────────────────────────────────
 
-function SecondaryOrders({ data }: { data: NonNullable<DashboardSummary['orders']> }) {
+function SecondaryOrders({
+  data,
+  onMarkReady,
+}: {
+  data: NonNullable<DashboardSummary['orders']>
+  onMarkReady?: (id: string) => Promise<void>
+}) {
   const { metrics, list } = data
   const hasUncollected = metrics.uncollected_3reminders > 0
   return (
@@ -301,16 +349,26 @@ function SecondaryOrders({ data }: { data: NonNullable<DashboardSummary['orders'
           <p className={`text-[10px] font-medium mt-0.5 ${hasUncollected ? 'text-red-700/60 dark:text-red-400/60' : 'text-muted-foreground'}`}>Urgents</p>
         </div>
       </div>
-      <div className="divide-y divide-border/30">
+      <div className="space-y-1.5 p-3">
         {list.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-3">Aucune commande prête</p>
+          <p className="text-xs text-muted-foreground text-center py-2">Aucune commande en cours</p>
         ) : list.slice(0, 2).map((order) => (
-          <div key={order.id} className="flex items-center gap-2 px-3 py-2">
-            {order.reminders_count >= 3
+          <div key={order.id} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
+            {order.reminders_count >= 3 && order.status === 'ready'
               ? <AlertTriangle className="h-3 w-3 text-red-400 shrink-0" />
               : <Clock className="h-3 w-3 text-muted-foreground/40 shrink-0" />}
             <span className="flex-1 text-xs font-medium text-foreground truncate">{order.client_name}</span>
-            <span className="text-[10px] text-muted-foreground shrink-0">{formatDateTime(order.ready_at)}</span>
+            {order.status === 'pending' ? (
+              <Button
+                size="sm"
+                className="h-5 text-[10px] shrink-0 bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white px-1.5 gap-0.5"
+                onClick={() => onMarkReady?.(order.id)}
+              >
+                <CheckCircle className="h-2.5 w-2.5" />Prête
+              </Button>
+            ) : (
+              <span className="text-[10px] text-muted-foreground shrink-0">{formatDateTime(order.ready_at)}</span>
+            )}
           </div>
         ))}
       </div>
@@ -348,14 +406,14 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
           <p className={`text-[10px] font-medium mt-0.5 ${metrics.no_show_today > 0 ? 'text-red-700/60 dark:text-red-400/60' : 'text-muted-foreground'}`}>Absences</p>
         </div>
       </div>
-      <div className="divide-y divide-border/30">
+      <div className="space-y-1.5 p-3">
         {list.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-3">Aucun RDV aujourd&apos;hui</p>
+          <p className="text-xs text-muted-foreground text-center py-2">Aucun RDV aujourd&apos;hui</p>
         ) : list.slice(0, 2).map((appt) => {
           const meta = APPT_META[appt.status] ?? APPT_META.scheduled
           const Icon = meta.Icon
           return (
-            <div key={appt.id} className="flex items-center gap-2 px-3 py-2">
+            <div key={appt.id} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
               <Icon className={`h-3 w-3 ${meta.color} shrink-0`} />
               <span className="flex-1 text-xs font-medium text-foreground truncate">{appt.client_name}</span>
               <span className="text-[10px] font-medium text-muted-foreground shrink-0">{formatTime(appt.scheduled_at)}</span>
@@ -396,11 +454,11 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
           <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Clients</p>
         </div>
       </div>
-      <div className="divide-y divide-border/30">
+      <div className="space-y-1.5 p-3">
         {list.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-3">Aucun coupon actif</p>
+          <p className="text-xs text-muted-foreground text-center py-2">Aucun coupon actif</p>
         ) : list.slice(0, 2).map((coupon) => (
-          <div key={coupon.id} className="flex items-center gap-2 px-3 py-2">
+          <div key={coupon.id} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
             <Sparkles className="h-3 w-3 text-amber-400 shrink-0" />
             <span className="flex-1 text-xs font-medium text-foreground truncate">{coupon.client_name}</span>
             {coupon.reward_title && (
@@ -417,20 +475,20 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
 
 type ActivityType = 'order_ready' | 'order_urgent' | 'appt_scheduled' | 'appt_show' | 'appt_noshow' | 'coupon'
 
-const ACTIVITY_META: Record<ActivityType, { dot: string; label: string }> = {
-  order_ready:    { dot: 'bg-orange-400', label: 'Commande prête' },
-  order_urgent:   { dot: 'bg-red-500',    label: 'Commande urgente' },
-  appt_scheduled: { dot: 'bg-violet-400', label: 'RDV prévu' },
-  appt_show:      { dot: 'bg-emerald-400',label: 'RDV honoré' },
-  appt_noshow:    { dot: 'bg-red-400',    label: 'Absence' },
-  coupon:         { dot: 'bg-amber-400',  label: 'Coupon débloqué' },
+const ACTIVITY_META: Record<ActivityType, { dot: string; label: string; href: string }> = {
+  order_ready:    { dot: 'bg-orange-400', label: 'Commande prête',   href: '/orders' },
+  order_urgent:   { dot: 'bg-red-500',    label: 'Commande urgente', href: '/orders' },
+  appt_scheduled: { dot: 'bg-violet-400', label: 'RDV prévu',        href: '/appointments' },
+  appt_show:      { dot: 'bg-emerald-400',label: 'RDV honoré',       href: '/appointments' },
+  appt_noshow:    { dot: 'bg-red-400',    label: 'Absence',          href: '/appointments' },
+  coupon:         { dot: 'bg-amber-400',  label: 'Coupon débloqué',  href: '/coupons' },
 }
 
 function buildActivityFeed(summary: DashboardSummary) {
   const items: { id: string; type: ActivityType; client_name: string; detail?: string; time?: string; ts: number }[] = []
 
   if (summary.orders) {
-    for (const order of summary.orders.list.slice(0, 3)) {
+    for (const order of summary.orders.list.filter(o => o.status === 'ready').slice(0, 3)) {
       const ts = order.ready_at ? new Date(order.ready_at).getTime() : Date.now() - 60_000
       items.push({
         id: `o-${order.id}`,
@@ -483,7 +541,11 @@ function ActivityFeed({ summary }: { summary: DashboardSummary }) {
         {items.map((item) => {
           const meta = ACTIVITY_META[item.type]
           return (
-            <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+            <Link
+              key={item.id}
+              href={meta.href}
+              className="flex items-center gap-3 px-5 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
+            >
               <div className={`w-2 h-2 rounded-full ${meta.dot} shrink-0`} />
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-medium text-foreground">{item.client_name}</span>
@@ -491,7 +553,7 @@ function ActivityFeed({ summary }: { summary: DashboardSummary }) {
                 {item.detail && <span className="text-sm text-muted-foreground"> · {item.detail}</span>}
               </div>
               {item.time && <span className="text-xs text-muted-foreground shrink-0">{item.time}</span>}
-            </div>
+            </Link>
           )
         })}
       </div>
@@ -526,6 +588,17 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const markReadyFromDashboard = async (id: string) => {
+    const res = await fetch(`/api/orders/${id}/ready`, { method: 'PATCH' })
+    const json = await res.json()
+    if (json.error) {
+      toast.error(json.error)
+      return
+    }
+    toast.success('Commande marquée prête !')
+    load(true)
+  }
 
   // Which module is the "focus" (first enabled wins)
   const mods = summary?.business.modules
@@ -581,7 +654,7 @@ export default function DashboardPage() {
         <SkeletonFocus />
       ) : summary ? (
         <>
-          {focusModule === 'orders'       && summary.orders       && <FocusOrders       data={summary.orders} />}
+          {focusModule === 'orders'       && summary.orders       && <FocusOrders       data={summary.orders}       onMarkReady={markReadyFromDashboard} />}
           {focusModule === 'appointments' && summary.appointments && <FocusAppointments data={summary.appointments} />}
           {focusModule === 'loyalty'      && summary.loyalty      && <FocusLoyalty      data={summary.loyalty} />}
         </>
@@ -597,7 +670,7 @@ export default function DashboardPage() {
         <div className={`${secondaryGridClass} gap-4`}>
           {secondaryModules.map((m) => (
             <div key={m}>
-              {m === 'orders'       && summary.orders       && <SecondaryOrders       data={summary.orders} />}
+              {m === 'orders'       && summary.orders       && <SecondaryOrders       data={summary.orders}       onMarkReady={markReadyFromDashboard} />}
               {m === 'appointments' && summary.appointments && <SecondaryAppointments data={summary.appointments} />}
               {m === 'loyalty'      && summary.loyalty      && <SecondaryLoyalty      data={summary.loyalty} />}
             </div>
