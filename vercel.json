@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/jobs/birthday-rewards",
-      "schedule": "0 8 * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/jobs/dispatch-scheduled-messages",
