@@ -149,17 +149,13 @@ export type Appointment = {
   amount: number | null
   points_credited: boolean
   notes: string | null
-  reminder1_sent_at: string | null
-  reminder2_sent_at: string | null
-  reminder3_sent_at: string | null
-  reminders_count: number
   show_at: string | null
   no_show_at: string | null
   deleted_at: string | null
   created_at: string
   // joined
   client?: Client
-  reminders?: ReminderSend[]
+  reminderStatus?: ReminderStatus
 }
 
 export type AppointmentNotificationSettings = {
@@ -217,15 +213,23 @@ export type ReminderSend = {
   sent_at: string
 }
 
+// ── Reminder status derived from scheduled_messages (outbox) ─────────────────
+// Replaces the legacy reminder_sends join in appointment queries.
+export type ReminderStatus = {
+  nextReminderAt:     string | null  // send_at of nearest SCHEDULED row (in the future)
+  lastReminderSentAt: string | null  // sent_at of most recently SENT row
+  remindersScheduled: { r1: boolean; r2: boolean; r3: boolean }  // SCHEDULED|PROCESSING|SENT
+  hasFailed:          boolean        // any row permanently FAILED (exhausted retries)
+}
+
 // ── Appointment list view (lightweight) ──────────────────────────────────────
 export type AppointmentListItem = {
   id: string
-  client_name:         string   // civility + first_name + last_name, fallback to phone
-  client_phone:        string
-  scheduled_at:        string   // ISO timestamp
-  status:              'scheduled' | 'show' | 'no_show'
-  notification_failed: boolean  // true if any reminder_send has status='failed'
-  reminders_sent:      number   // count of reminder_sends rows
+  client_name:    string   // civility + first_name + last_name, fallback to phone
+  client_phone:   string
+  scheduled_at:   string   // ISO timestamp
+  status:         'scheduled' | 'show' | 'no_show'
+  reminderStatus: ReminderStatus
 }
 
 export type PointsLog = {

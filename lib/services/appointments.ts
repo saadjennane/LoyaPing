@@ -4,7 +4,95 @@ import {
   cancelExistingScheduledForEntity,
   createScheduledMessage,
 } from '@/lib/services/outbox'
-import type { Appointment, AppointmentListItem, Client, LoyaltyProgram } from '@/lib/types'
+import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, ReminderStatus } from '@/lib/types'
+
+// ── Reminder status — single batch query from scheduled_messages ──────────────
+
+const APPT_REMINDER_TYPES = [
+  'appointment_reminder_1',
+  'appointment_reminder_2',
+  'appointment_reminder_3',
+] as const
+
+/**
+ * Fetches scheduled_messages rows for a batch of appointment IDs and
+ * computes a ReminderStatus per appointment. One DB round-trip regardless
+ * of how many appointments are in the list.
+ */
+async function fetchReminderStatuses(
+  db: ReturnType<typeof createServerClient>,
+  appointmentIds: string[],
+): Promise<Map<string, ReminderStatus>> {
+  if (appointmentIds.length === 0) return new Map()
+
+  const { data } = await db
+    .from('scheduled_messages')
+    .select('entity_id, message_type, status, send_at, sent_at')
+    .eq('entity_type', 'appointment')
+    .in('entity_id', appointmentIds)
+    .in('message_type', [...APPT_REMINDER_TYPES])
+
+  type Row = {
+    entity_id:    string
+    message_type: string
+    status:       string
+    send_at:      string
+    sent_at:      string | null
+  }
+
+  const rows = (data ?? []) as Row[]
+  const now   = new Date().toISOString()
+
+  // Group rows by appointment ID
+  const byAppt = new Map<string, Row[]>()
+  for (const row of rows) {
+    const list = byAppt.get(row.entity_id) ?? []
+    list.push(row)
+    byAppt.set(row.entity_id, list)
+  }
+
+  const result = new Map<string, ReminderStatus>()
+
+  for (const [apptId, apptRows] of byAppt) {
+    const nextReminderAt =
+      apptRows
+        .filter((r) => r.status === 'SCHEDULED' && r.send_at > now)
+        .sort((a, b) => a.send_at.localeCompare(b.send_at))[0]?.send_at ?? null
+
+    const lastReminderSentAt =
+      apptRows
+        .filter((r) => r.status === 'SENT' && r.sent_at)
+        .sort((a, b) => (b.sent_at ?? '').localeCompare(a.sent_at ?? ''))[0]?.sent_at ?? null
+
+    const isSlotActive = (mt: string) =>
+      apptRows.some(
+        (r) => r.message_type === mt &&
+          (r.status === 'SCHEDULED' || r.status === 'PROCESSING' || r.status === 'SENT'),
+      )
+
+    result.set(apptId, {
+      nextReminderAt,
+      lastReminderSentAt,
+      remindersScheduled: {
+        r1: isSlotActive('appointment_reminder_1'),
+        r2: isSlotActive('appointment_reminder_2'),
+        r3: isSlotActive('appointment_reminder_3'),
+      },
+      hasFailed: apptRows.some((r) => r.status === 'FAILED'),
+    })
+  }
+
+  return result
+}
+
+function emptyReminderStatus(): ReminderStatus {
+  return {
+    nextReminderAt:     null,
+    lastReminderSentAt: null,
+    remindersScheduled: { r1: false, r2: false, r3: false },
+    hasFailed:          false,
+  }
+}
 
 // =========================================
 // MARK APPOINTMENT AS SHOW → credit points
@@ -209,13 +297,16 @@ export async function getAllAppointments(businessId: string): Promise<Appointmen
 
   const { data, error } = await db
     .from('appointments')
-    .select('*, client:clients(id, civility, first_name, last_name, phone_number, magic_token), reminders:reminder_sends(*)')
+    .select('*, client:clients(id, civility, first_name, last_name, phone_number, magic_token)')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('scheduled_at', { ascending: true })
 
   if (error) throw error
-  return (data ?? []) as Appointment[]
+
+  const rows = (data ?? []) as Appointment[]
+  const reminderMap = await fetchReminderStatuses(db, rows.map((r) => r.id))
+  return rows.map((r) => ({ ...r, reminderStatus: reminderMap.get(r.id) ?? emptyReminderStatus() }))
 }
 
 // =========================================
@@ -240,7 +331,7 @@ export async function getAppointmentList(params: {
 
   let query = db
     .from('appointments')
-    .select('id, scheduled_at, status, client:clients(civility, first_name, last_name, phone_number), reminders:reminder_sends(id, status)')
+    .select('id, scheduled_at, status, client:clients(civility, first_name, last_name, phone_number)')
     .eq('business_id', params.businessId)
     .is('deleted_at', null)
     .gte('scheduled_at', fromDt.toISOString())
@@ -262,14 +353,16 @@ export async function getAppointmentList(params: {
     scheduled_at: string
     status: 'scheduled' | 'show' | 'no_show'
     client: { civility: string | null; first_name: string | null; last_name: string | null; phone_number: string } | null
-    reminders: Array<{ id: string; status: string }>
   }
 
   const rows = (data ?? []) as unknown as Row[]
 
-  // Apply notifFilter in JS (avoids complex PostgREST nested filter)
+  // Fetch reminder statuses for the full result set in one query.
+  const reminderMap = await fetchReminderStatuses(db, rows.map((r) => r.id))
+
+  // Apply notifFilter using scheduled_messages FAILED status (replaces legacy reminder_sends filter).
   const filtered = params.notifFilter === 'failed_only'
-    ? rows.filter((r) => (Array.isArray(r.reminders) ? r.reminders : []).some((rem) => rem.status === 'failed'))
+    ? rows.filter((r) => reminderMap.get(r.id)?.hasFailed ?? false)
     : rows
 
   return filtered.map((r) => {
@@ -277,15 +370,13 @@ export async function getAppointmentList(params: {
     const c = Array.isArray(r.client) ? r.client[0] : r.client
     const nameParts = [c?.civility, c?.first_name, c?.last_name].filter(Boolean)
     const client_name = nameParts.length > 0 ? nameParts.join(' ') : (c?.phone_number ?? '—')
-    const rems = Array.isArray(r.reminders) ? r.reminders : []
     return {
-      id:                  r.id,
+      id:             r.id,
       client_name,
-      client_phone:        c?.phone_number ?? '',
-      scheduled_at:        r.scheduled_at,
-      status:              r.status,
-      notification_failed: rems.some((rem) => rem.status === 'failed'),
-      reminders_sent:      rems.length,
+      client_phone:   c?.phone_number ?? '',
+      scheduled_at:   r.scheduled_at,
+      status:         r.status,
+      reminderStatus: reminderMap.get(r.id) ?? emptyReminderStatus(),
     }
   })
 }

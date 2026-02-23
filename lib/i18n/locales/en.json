@@ -171,6 +171,8 @@
       "status": "Statut",
       "showAt": "Honoré à",
       "noShowAt": "Absent à",
+      "lastReminderSent": "Dernier rappel envoyé :",
+      "nextReminder": "Prochain rappel :",
       "deleteBtn": "Supprimer ce RDV"
     },
     "actions": {

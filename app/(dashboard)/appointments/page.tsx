@@ -18,7 +18,7 @@ import {
   Table, TableBody, TableCell, TableHead,
   TableHeader, TableRow,
 } from '@/components/ui/table'
-import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, ReminderSend, CustomerIndexItem } from '@/lib/types'
+import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, CustomerIndexItem } from '@/lib/types'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import PhoneInput from '@/components/PhoneInput'
 import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
@@ -69,10 +69,6 @@ function apptColorClass(status: string) {
   if (status === 'show') return 'bg-green-100 text-green-800 border-green-300'
   if (status === 'no_show') return 'bg-red-100 text-red-800 border-red-300'
   return 'bg-blue-100 text-blue-800 border-blue-300'
-}
-
-function hasReminderError(appt: Appointment): boolean {
-  return appt.reminders?.some((r) => r.status === 'failed') ?? false
 }
 
 // ─── Time Grid (1d / 3d / 7d) ────────────────────────────────────────────────
@@ -173,7 +169,7 @@ function TimeGrid({
                     {format(parseISO(appt.scheduled_at), 'HH:mm')}
                   </span>{' '}
                   {clientFullName(appt.client as Client)}
-                  {hasReminderError(appt) && ' ⚠'}
+                  {appt.reminderStatus?.hasFailed && ' ⚠'}
                 </button>
               ))}
             </div>
@@ -253,7 +249,7 @@ function MonthGrid({
                   >
                     {format(parseISO(appt.scheduled_at), 'HH:mm')}{' '}
                     {clientFullName(appt.client as Client)}
-                    {hasReminderError(appt) && ' ⚠'}
+                    {appt.reminderStatus?.hasFailed && ' ⚠'}
                   </button>
                 ))}
                 {dayAppts.length > 3 && (
@@ -652,7 +648,7 @@ export default function AppointmentsPage() {
     setBulkDeleting(false)
   }
 
-  const reminderErrorCount = appointments.filter(hasReminderError).length
+  const reminderErrorCount = appointments.filter((a) => a.reminderStatus?.hasFailed).length
   const days = viewMode === 'calendar' && calMode !== 'month' ? getDays() : []
 
   const filteredListItems = listSearch.trim()
@@ -973,16 +969,16 @@ export default function AppointmentsPage() {
                               <Badge variant={statusVariant(item.status)} className="text-[10px] px-1.5 py-0">
                                 {statusLabel(item.status, t)}
                               </Badge>
-                              {item.notification_failed && (
+                              {item.reminderStatus.hasFailed && (
                                 <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium">
                                   <AlertTriangle className="h-3 w-3" />{t('appointments.failedWA')}
                                 </span>
                               )}
-                              {item.reminders_sent > 0 && !item.notification_failed && (
-                                <span className="text-[10px] text-green-600 font-medium">
-                                  {item.reminders_sent > 1
-                                    ? t('appointments.remindersPlural', { count: item.reminders_sent })
-                                    : t('appointments.remindersSingular', { count: item.reminders_sent })}
+                              {(item.reminderStatus.remindersScheduled.r1 || item.reminderStatus.remindersScheduled.r2 || item.reminderStatus.remindersScheduled.r3) && (
+                                <span className="flex items-center gap-0.5">
+                                  {item.reminderStatus.remindersScheduled.r1 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R1</span>}
+                                  {item.reminderStatus.remindersScheduled.r2 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R2</span>}
+                                  {item.reminderStatus.remindersScheduled.r3 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R3</span>}
                                 </span>
                               )}
                             </div>
@@ -1043,16 +1039,16 @@ export default function AppointmentsPage() {
                         <Badge variant={statusVariant(item.status)}>
                           {statusLabel(item.status, t)}
                         </Badge>
-                        {item.reminders_sent > 0 && !item.notification_failed && (
-                          <span className="text-xs text-green-600 font-medium shrink-0">
-                            {item.reminders_sent > 1
-                              ? t('appointments.remindersPlural', { count: item.reminders_sent })
-                              : t('appointments.remindersSingular', { count: item.reminders_sent })}
-                          </span>
-                        )}
-                        {item.notification_failed && (
+                        {item.reminderStatus.hasFailed && (
                           <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium shrink-0">
                             <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
+                          </span>
+                        )}
+                        {(item.reminderStatus.remindersScheduled.r1 || item.reminderStatus.remindersScheduled.r2 || item.reminderStatus.remindersScheduled.r3) && (
+                          <span className="flex items-center gap-0.5 shrink-0">
+                            {item.reminderStatus.remindersScheduled.r1 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R1</span>}
+                            {item.reminderStatus.remindersScheduled.r2 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R2</span>}
+                            {item.reminderStatus.remindersScheduled.r3 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R3</span>}
                           </span>
                         )}
                         <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1275,38 +1271,43 @@ export default function AppointmentsPage() {
                 )}
               </div>
 
-              {/* Reminder history */}
-              {selected.reminders && selected.reminders.length > 0 && (
+              {/* Reminder status (from scheduled_messages outbox) */}
+              {selected.reminderStatus && (
+                selected.reminderStatus.hasFailed ||
+                selected.reminderStatus.remindersScheduled.r1 ||
+                selected.reminderStatus.remindersScheduled.r2 ||
+                selected.reminderStatus.remindersScheduled.r3 ||
+                selected.reminderStatus.lastReminderSentAt ||
+                selected.reminderStatus.nextReminderAt
+              ) && (
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     {t('appointments.remindersTitle')}
                   </p>
-                  {(selected.reminders as ReminderSend[]).map((r) => (
-                    <div
-                      key={r.id}
-                      className={`flex items-start gap-2 rounded-md px-3 py-2 text-xs ${
-                        r.status === 'failed'
-                          ? 'bg-amber-50 text-amber-800'
-                          : 'bg-green-50 text-green-800'
-                      }`}
-                    >
-                      {r.status === 'failed' ? (
-                        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                      ) : (
-                        <span className="mt-0.5">✓</span>
-                      )}
-                      <div>
-                        <span className="font-medium">
-                          {r.status === 'failed' ? t('orders.message.failed') : t('orders.message.sent')}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(['r1', 'r2', 'r3'] as const).map((slot) => (
+                      selected.reminderStatus!.remindersScheduled[slot] && (
+                        <span key={slot} className="text-[11px] font-semibold text-green-700 bg-green-50 rounded px-1.5 py-0.5">
+                          {slot.toUpperCase()}
                         </span>
-                        {' · '}
-                        {format(parseISO(r.sent_at), 'dd MMM à HH:mm', { locale: fr })}
-                        {r.error_message && (
-                          <p className="text-amber-700 mt-0.5">{r.error_message}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      )
+                    ))}
+                    {selected.reminderStatus.hasFailed && (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                        <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
+                      </span>
+                    )}
+                  </div>
+                  {selected.reminderStatus.lastReminderSentAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('appointments.detail.lastReminderSent')} {format(parseISO(selected.reminderStatus.lastReminderSentAt), 'dd MMM à HH:mm', { locale: fr })}
+                    </p>
+                  )}
+                  {selected.reminderStatus.nextReminderAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('appointments.detail.nextReminder')} {format(parseISO(selected.reminderStatus.nextReminderAt), 'dd MMM à HH:mm', { locale: fr })}
+                    </p>
+                  )}
                 </div>
               )}
 
