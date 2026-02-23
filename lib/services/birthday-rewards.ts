@@ -126,21 +126,20 @@ export async function processBirthdayRewards(): Promise<{
   // send_at = today at sendHour:00 local time → UTC
   const sendAt   = toUTCDate(localDate, sendHour, tz)
 
-  // ── 4. Clients with birthday today (local date) ────────────────────────────
-  const { data: clients, error: clientsErr } = await db
+  // ── 4. Clients with birthday today — SQL filter, no JS iteration ──────────
+  //
+  // birthday_mmdd is a STORED generated column: to_char(birthday, 'MM-DD').
+  // The composite index idx_clients_birthday_mmdd(business_id, birthday_mmdd)
+  // makes this a single index scan regardless of total client count.
+  const { data: todayBirthdays, error: clientsErr } = await db
     .from('clients')
-    .select('id, phone_number, birthday')
-    .eq('business_id', DEFAULT_BUSINESS_ID)
-    .not('birthday', 'is', null)
+    .select('id, phone_number')
+    .eq('business_id',   DEFAULT_BUSINESS_ID)
+    .eq('birthday_mmdd', localMMDD)          // 'MM-DD', e.g. '02-23'
 
-  if (clientsErr || !clients) {
+  if (clientsErr || !todayBirthdays) {
     return { processed: 0, sent: 0, skipped: 0, errors: 1 }
   }
-
-  // birthday stored as YYYY-MM-DD — compare MM-DD part against local date
-  const todayBirthdays = clients.filter(
-    (c) => c.birthday && (c.birthday as string).substring(5) === localMMDD,
-  )
 
   if (todayBirthdays.length === 0) {
     return { processed: 0, sent: 0, skipped: 0, errors: 0 }
