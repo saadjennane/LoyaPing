@@ -240,6 +240,11 @@ export async function GET() {
       headers: { 'Cache-Control': 'private, no-store' },
     })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    const message = err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as Record<string, unknown>).message)
+        : String(err)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
