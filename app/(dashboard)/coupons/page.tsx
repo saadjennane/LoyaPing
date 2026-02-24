@@ -116,6 +116,20 @@ export default function CouponsPage() {
 
   useEffect(() => { fetchCoupons() }, [fetchCoupons])
 
+  // Auto-open detail from URL param (e.g. from dashboard click)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('id')
+    if (!id || coupons.length === 0) return
+    const found = coupons.find(c => c.id === id)
+    if (found) {
+      setDetailCoupon(found)
+      setDetailMode('detail')
+      setDetailExtendDays('7')
+      window.history.replaceState(null, '', '/coupons')
+    }
+  }, [coupons])
+
   // Fetch clients when dialog opens
   useEffect(() => {
     if (!offerOpen) return

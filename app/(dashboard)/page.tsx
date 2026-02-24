@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   RefreshCw, ShoppingBag, Calendar, Ticket,
   AlertTriangle, Clock, CheckCircle2, XCircle, Sparkles, ArrowRight, CheckCircle,
@@ -104,6 +105,7 @@ function FocusOrders({
   data: NonNullable<DashboardSummary['orders']>
   onMarkReady?: (id: string) => Promise<void>
 }) {
+  const router = useRouter()
   const { metrics, list } = data
   const hasUncollected = metrics.uncollected_3reminders > 0
   return (
@@ -122,7 +124,7 @@ function FocusOrders({
           </div>
           <Link href="/orders">
             <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 shrink-0">
-              Voir les commandes <ArrowRight className="h-3 w-3" />
+              Voir tout <ArrowRight className="h-3 w-3" />
             </Button>
           </Link>
         </div>
@@ -145,7 +147,11 @@ function FocusOrders({
         ) : (
           <div className="space-y-2">
             {list.slice(0, 3).map((order) => (
-              <div key={order.id} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5">
+              <div
+                key={order.id}
+                className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => router.push(`/orders?id=${order.id}`)}
+              >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     {order.reminders_count >= 3 && order.status === 'ready' && (
@@ -164,7 +170,7 @@ function FocusOrders({
                   <Button
                     size="sm"
                     className="h-7 text-xs shrink-0 bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white gap-1"
-                    onClick={() => onMarkReady?.(order.id)}
+                    onClick={(e) => { e.stopPropagation(); onMarkReady?.(order.id) }}
                   >
                     <CheckCircle className="h-3 w-3" />Prête
                   </Button>
@@ -201,7 +207,7 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
           </div>
           <Link href="/appointments">
             <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 shrink-0">
-              Voir l&apos;agenda <ArrowRight className="h-3 w-3" />
+              Voir tout <ArrowRight className="h-3 w-3" />
             </Button>
           </Link>
         </div>
@@ -227,7 +233,7 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
               const meta = APPT_META[appt.status] ?? APPT_META.scheduled
               const Icon = meta.Icon
               return (
-                <div key={appt.id} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5">
+                <Link key={appt.id} href={`/appointments?id=${appt.id}`} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors">
                   <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center shrink-0">
                     <Icon className={`h-4 w-4 ${meta.color}`} />
                   </div>
@@ -235,10 +241,7 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
                     <p className="font-medium text-sm truncate">{appt.client_name}</p>
                     <p className="text-xs text-muted-foreground">{formatTime(appt.scheduled_at)}</p>
                   </div>
-                  <Link href="/appointments" className="text-xs text-violet-600 dark:text-violet-400 hover:underline shrink-0">
-                    Voir →
-                  </Link>
-                </div>
+                </Link>
               )
             })}
           </div>
@@ -266,7 +269,7 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
           </div>
           <Link href="/coupons">
             <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 shrink-0">
-              Voir la fidélité <ArrowRight className="h-3 w-3" />
+              Voir tout <ArrowRight className="h-3 w-3" />
             </Button>
           </Link>
         </div>
@@ -289,7 +292,7 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
         ) : (
           <div className="space-y-2">
             {list.slice(0, 3).map((coupon) => (
-              <div key={coupon.id} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5">
+              <Link key={coupon.id} href={`/coupons?id=${coupon.id}`} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
                   <Sparkles className="h-4 w-4 text-amber-500" />
                 </div>
@@ -299,10 +302,7 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
                     <p className="text-xs text-amber-600 dark:text-amber-400 truncate">{coupon.reward_title}</p>
                   )}
                 </div>
-                <Link href="/coupons" className="text-xs text-amber-600 dark:text-amber-400 hover:underline shrink-0">
-                  Voir →
-                </Link>
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -320,6 +320,7 @@ function SecondaryOrders({
   data: NonNullable<DashboardSummary['orders']>
   onMarkReady?: (id: string) => Promise<void>
 }) {
+  const router = useRouter()
   const { metrics, list } = data
   const hasUncollected = metrics.uncollected_3reminders > 0
   return (
@@ -331,8 +332,8 @@ function SecondaryOrders({
           </div>
           <span className="text-sm font-semibold text-foreground">Commandes</span>
         </div>
-        <Link href="/orders" className="text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowRight className="h-4 w-4" />
+        <Link href="/orders" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          Voir tout <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
       <div className="flex gap-2 px-3 py-3 border-b border-border/50">
@@ -353,7 +354,11 @@ function SecondaryOrders({
         {list.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-2">Aucune commande en cours</p>
         ) : list.slice(0, 2).map((order) => (
-          <div key={order.id} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
+          <div
+            key={order.id}
+            className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => router.push(`/orders?id=${order.id}`)}
+          >
             {order.reminders_count >= 3 && order.status === 'ready'
               ? <AlertTriangle className="h-3 w-3 text-red-400 shrink-0" />
               : <Clock className="h-3 w-3 text-muted-foreground/40 shrink-0" />}
@@ -362,7 +367,7 @@ function SecondaryOrders({
               <Button
                 size="sm"
                 className="h-5 text-[10px] shrink-0 bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white px-1.5 gap-0.5"
-                onClick={() => onMarkReady?.(order.id)}
+                onClick={(e) => { e.stopPropagation(); onMarkReady?.(order.id) }}
               >
                 <CheckCircle className="h-2.5 w-2.5" />Prête
               </Button>
@@ -388,8 +393,8 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
           </div>
           <span className="text-sm font-semibold text-foreground">Rendez-vous</span>
         </div>
-        <Link href="/appointments" className="text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowRight className="h-4 w-4" />
+        <Link href="/appointments" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          Voir tout <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
       <div className="flex gap-2 px-3 py-3 border-b border-border/50">
@@ -413,11 +418,11 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
           const meta = APPT_META[appt.status] ?? APPT_META.scheduled
           const Icon = meta.Icon
           return (
-            <div key={appt.id} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
+            <Link key={appt.id} href={`/appointments?id=${appt.id}`} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors">
               <Icon className={`h-3 w-3 ${meta.color} shrink-0`} />
               <span className="flex-1 text-xs font-medium text-foreground truncate">{appt.client_name}</span>
               <span className="text-[10px] font-medium text-muted-foreground shrink-0">{formatTime(appt.scheduled_at)}</span>
-            </div>
+            </Link>
           )
         })}
       </div>
@@ -436,8 +441,8 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
           </div>
           <span className="text-sm font-semibold text-foreground">Fidélité</span>
         </div>
-        <Link href="/coupons" className="text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowRight className="h-4 w-4" />
+        <Link href="/coupons" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          Voir tout <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
       <div className="flex gap-2 px-3 py-3 border-b border-border/50">
@@ -458,13 +463,13 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
         {list.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-2">Aucun coupon actif</p>
         ) : list.slice(0, 2).map((coupon) => (
-          <div key={coupon.id} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
+          <Link key={coupon.id} href={`/coupons?id=${coupon.id}`} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors">
             <Sparkles className="h-3 w-3 text-amber-400 shrink-0" />
             <span className="flex-1 text-xs font-medium text-foreground truncate">{coupon.client_name}</span>
             {coupon.reward_title && (
               <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium shrink-0 max-w-[90px] truncate">{coupon.reward_title}</span>
             )}
-          </div>
+          </Link>
         ))}
       </div>
     </div>

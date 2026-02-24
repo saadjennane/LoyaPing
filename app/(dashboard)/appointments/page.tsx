@@ -450,6 +450,19 @@ export default function AppointmentsPage() {
     }).catch(() => {})
   }, [fetchAppointments])
 
+  // Auto-open detail from URL param (e.g. from dashboard click)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('id')
+    if (!id || appointments.length === 0) return
+    const found = appointments.find(a => a.id === id)
+    if (found) {
+      setSelected(found)
+      setDetailOpen(true)
+      window.history.replaceState(null, '', '/appointments')
+    }
+  }, [appointments])
+
   // ── List fetch ───────────────────────────────────────────────────────────
   const fetchListItems = useCallback(async () => {
     setListLoading(true)

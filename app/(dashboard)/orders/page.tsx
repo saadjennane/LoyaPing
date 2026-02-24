@@ -152,6 +152,19 @@ export default function OrdersPage() {
 
   useEffect(() => { fetchOrders() }, [])
 
+  // Auto-open detail from URL param (e.g. from dashboard click)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('id')
+    if (!id || orders.length === 0) return
+    const found = orders.find(o => o.id === id)
+    if (found) {
+      setSelectedOrder(found)
+      setDetailOpen(true)
+      window.history.replaceState(null, '', '/orders')
+    }
+  }, [orders])
+
   useEffect(() => {
     if (!open) {
       setStep('search')
