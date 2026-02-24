@@ -310,11 +310,9 @@ function FocusLoyalty({ data, onOpenDetail }: { data: NonNullable<DashboardSumma
                 <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
                   <Gift className="h-4 w-4 text-amber-500" />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                   <p className="font-medium text-sm truncate">{coupon.client_name}</p>
-                  <p className="text-xs text-amber-600 dark:text-amber-400 truncate">
-                    {coupon.reward_title ?? '—'}
-                  </p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 shrink-0">{coupon.reward_title ?? '—'}</p>
                 </div>
               </div>
             ))}
@@ -492,11 +490,9 @@ function SecondaryLoyalty({ data, onOpenDetail }: { data: NonNullable<DashboardS
             onClick={() => onOpenDetail({ type: 'coupon', id: coupon.id, clientName: coupon.client_name, rewardTitle: coupon.reward_title, expiresAt: coupon.expires_at })}
           >
             <Gift className="h-3 w-3 text-amber-400 shrink-0" />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-foreground truncate">{coupon.client_name}</p>
-              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium truncate">
-                {coupon.reward_title ?? '—'}
-              </p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium shrink-0">{coupon.reward_title ?? '—'}</p>
             </div>
           </div>
         ))}
