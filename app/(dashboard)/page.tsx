@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   RefreshCw, ShoppingBag, Calendar, Ticket,
-  AlertTriangle, Clock, CheckCircle2, XCircle, Sparkles, ArrowRight, CheckCircle,
+  AlertTriangle, Clock, CheckCircle2, XCircle, Gift, ArrowRight, CheckCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -297,13 +297,13 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
             {list.slice(0, 3).map((coupon) => (
               <Link key={coupon.id} href={`/coupons?id=${coupon.id}`} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
-                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  <Gift className="h-4 w-4 text-amber-500" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{coupon.client_name}</p>
-                  {coupon.reward_title && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 truncate">{coupon.reward_title}</p>
-                  )}
+                  <p className="text-xs text-amber-600 dark:text-amber-400 truncate">
+                    {coupon.reward_title ?? '—'}
+                  </p>
                 </div>
               </Link>
             ))}
@@ -470,11 +470,13 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
           <p className="text-xs text-muted-foreground text-center py-2">Aucun coupon actif</p>
         ) : list.slice(0, 2).map((coupon) => (
           <Link key={coupon.id} href={`/coupons?id=${coupon.id}`} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors">
-            <Sparkles className="h-3 w-3 text-amber-400 shrink-0" />
-            <span className="flex-1 text-xs font-medium text-foreground truncate">{coupon.client_name}</span>
-            {coupon.reward_title && (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium shrink-0 max-w-[90px] truncate">{coupon.reward_title}</span>
-            )}
+            <Gift className="h-3 w-3 text-amber-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-foreground truncate">{coupon.client_name}</p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium truncate">
+                {coupon.reward_title ?? '—'}
+              </p>
+            </div>
           </Link>
         ))}
       </div>
