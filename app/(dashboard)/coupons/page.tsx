@@ -449,7 +449,11 @@ export default function CouponsPage() {
             const tier = coupon.tier
             const days = daysLeft(coupon)
             return (
-              <TableRow key={coupon.id} className="hover:bg-muted/50 transition-colors">
+              <TableRow
+                key={coupon.id}
+                className="hover:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => { setDetailCoupon(coupon); setDetailMode('detail'); setDetailExtendDays('7') }}
+              >
                 <TableCell className="pl-4 py-4 w-10" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"

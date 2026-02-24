@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
-  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check,
+  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,7 @@ type CalMode = '1day' | '3day' | '7day' | 'month'
 type ListTab      = 'upcoming' | 'history'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show'
 type NotifFilter  = 'all' | 'failed_only'
+type DetailApptMode = 'detail' | 'reschedule'
 
 const HOUR_START = 0
 const HOUR_END = 24
@@ -322,6 +323,13 @@ export default function AppointmentsPage() {
   const [listSearch,            setListSearch]            = useState('')
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [detailApptMode, setDetailApptMode] = useState<DetailApptMode>('detail')
+  const [rescheduleDate, setRescheduleDate]           = useState('')
+  const [rescheduleHour, setRescheduleHour]           = useState('')
+  const [rescheduleMinute, setRescheduleMinute]       = useState('00')
+  const [rescheduleEndHour, setRescheduleEndHour]     = useState('')
+  const [rescheduleEndMinute, setRescheduleEndMinute] = useState('00')
+  const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false)
 
   // Loyalty program (to determine if amount modal is needed on SHOW)
   const [loyaltyProgram, setLoyaltyProgram] = useState<LoyaltyProgram | null>(null)
@@ -573,6 +581,32 @@ export default function AppointmentsPage() {
       const labels: Record<string, string> = { show: t('appointments.toast.forceShow'), no_show: t('appointments.toast.forceNoShow'), scheduled: t('appointments.toast.forceScheduled') }
       toast.success(labels[status] ?? t('appointments.toast.statusUpdated'))
       setDetailOpen(false)
+      fetchAppointments()
+      if (viewMode === 'list') void fetchListItems()
+    }
+  }
+
+  const handleReschedule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selected || !rescheduleDate || !rescheduleHour) return
+    setRescheduleSubmitting(true)
+    const scheduled_at = new Date(`${rescheduleDate}T${rescheduleHour}:${rescheduleMinute}:00`).toISOString()
+    const ended_at = rescheduleEndHour
+      ? new Date(`${rescheduleDate}T${rescheduleEndHour}:${rescheduleEndMinute}:00`).toISOString()
+      : null
+    const res = await fetch(`/api/appointments/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_at, ended_at }),
+    })
+    const json = await res.json()
+    setRescheduleSubmitting(false)
+    if (json.error) {
+      toast.error(json.error)
+    } else {
+      toast.success('RDV replanifié')
+      setDetailOpen(false)
+      setDetailApptMode('detail')
       fetchAppointments()
       if (viewMode === 'list') void fetchListItems()
     }
@@ -1229,134 +1263,214 @@ export default function AppointmentsPage() {
       </Dialog>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+      <Dialog open={detailOpen} onOpenChange={(o) => { setDetailOpen(o); if (!o) setDetailApptMode('detail') }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('appointments.detail.title')}</DialogTitle>
+            <DialogTitle>
+              {detailApptMode === 'reschedule' ? 'Replanifier le RDV' : t('appointments.detail.title')}
+            </DialogTitle>
           </DialogHeader>
           {selected && (
-            <div className="space-y-4 mt-2">
-              <div className="grid grid-cols-2 gap-y-2 text-sm">
-                <div className="text-muted-foreground">{t('appointments.detail.client')}</div>
-                <div className="font-medium">{clientFullName(selected.client as Client)}</div>
-                <div className="text-muted-foreground">{t('appointments.detail.date')}</div>
-                <div className="capitalize">
-                  {format(parseISO(selected.scheduled_at), 'EEEE dd MMMM yyyy', { locale: fr })}
+            detailApptMode === 'reschedule' ? (
+              <form onSubmit={handleReschedule} className="space-y-4 mt-2">
+                <div className="space-y-1">
+                  <Label>{t('appointments.form.dateLabel')}</Label>
+                  <Input type="date" required value={rescheduleDate}
+                    onChange={(e) => setRescheduleDate(e.target.value)} />
                 </div>
-                <div className="text-muted-foreground">{t('appointments.detail.time')}</div>
-                <div>{format(parseISO(selected.scheduled_at), 'HH:mm')}</div>
-                {selected.notes && (
-                  <>
-                    <div className="text-muted-foreground">{t('appointments.detail.notes')}</div>
-                    <div>{selected.notes}</div>
-                  </>
-                )}
-                <div className="text-muted-foreground">{t('appointments.detail.status')}</div>
-                <div>
-                  <Badge variant={statusVariant(selected.status)}>
-                    {statusLabel(selected.status, t)}
-                  </Badge>
+                <div className="flex items-end gap-2">
+                  <div className="space-y-1">
+                    <Label>Début</Label>
+                    <div className="flex items-center gap-1">
+                      <Select value={rescheduleHour} onValueChange={setRescheduleHour}>
+                        <SelectTrigger className="w-20"><SelectValue placeholder="hh" /></SelectTrigger>
+                        <SelectContent>
+                          {HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground font-medium">:</span>
+                      <Select value={rescheduleMinute} onValueChange={setRescheduleMinute}>
+                        <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <span className="text-muted-foreground pb-2 text-sm">→</span>
+                  <div className="space-y-1">
+                    <Label>Fin</Label>
+                    <div className="flex items-center gap-1">
+                      <Select value={rescheduleEndHour} onValueChange={setRescheduleEndHour}>
+                        <SelectTrigger className="w-20"><SelectValue placeholder="hh" /></SelectTrigger>
+                        <SelectContent>
+                          {HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground font-medium">:</span>
+                      <Select value={rescheduleEndMinute} onValueChange={setRescheduleEndMinute}>
+                        <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
-                {selected.show_at && (
-                  <>
-                    <div className="text-muted-foreground">{t('appointments.detail.showAt')}</div>
-                    <div className="text-sm">{format(parseISO(selected.show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
-                  </>
-                )}
-                {selected.no_show_at && (
-                  <>
-                    <div className="text-muted-foreground">{t('appointments.detail.noShowAt')}</div>
-                    <div className="text-sm">{format(parseISO(selected.no_show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
-                  </>
-                )}
-              </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant="outline" onClick={() => setDetailApptMode('detail')}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button type="submit" disabled={rescheduleSubmitting || !rescheduleDate || !rescheduleHour}>
+                    <CalendarClock className="h-4 w-4 mr-2" />
+                    {rescheduleSubmitting ? 'Replanification...' : 'Replanifier'}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4 mt-2">
+                <div className="grid grid-cols-2 gap-y-2 text-sm">
+                  <div className="text-muted-foreground">{t('appointments.detail.client')}</div>
+                  <div className="font-medium">{clientFullName(selected.client as Client)}</div>
+                  <div className="text-muted-foreground">{t('appointments.detail.date')}</div>
+                  <div className="capitalize">
+                    {format(parseISO(selected.scheduled_at), 'EEEE dd MMMM yyyy', { locale: fr })}
+                  </div>
+                  <div className="text-muted-foreground">{t('appointments.detail.time')}</div>
+                  <div>{format(parseISO(selected.scheduled_at), 'HH:mm')}</div>
+                  {selected.notes && (
+                    <>
+                      <div className="text-muted-foreground">{t('appointments.detail.notes')}</div>
+                      <div>{selected.notes}</div>
+                    </>
+                  )}
+                  <div className="text-muted-foreground">{t('appointments.detail.status')}</div>
+                  <div>
+                    <Badge variant={statusVariant(selected.status)}>
+                      {statusLabel(selected.status, t)}
+                    </Badge>
+                  </div>
+                  {selected.show_at && (
+                    <>
+                      <div className="text-muted-foreground">{t('appointments.detail.showAt')}</div>
+                      <div className="text-sm">{format(parseISO(selected.show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
+                    </>
+                  )}
+                  {selected.no_show_at && (
+                    <>
+                      <div className="text-muted-foreground">{t('appointments.detail.noShowAt')}</div>
+                      <div className="text-sm">{format(parseISO(selected.no_show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
+                    </>
+                  )}
+                </div>
 
-              {/* Reminder status (from scheduled_messages outbox) */}
-              {selected.reminderStatus && (
-                selected.reminderStatus.hasFailed ||
-                selected.reminderStatus.remindersScheduled.r1 ||
-                selected.reminderStatus.remindersScheduled.r2 ||
-                selected.reminderStatus.remindersScheduled.r3 ||
-                selected.reminderStatus.lastReminderSentAt ||
-                selected.reminderStatus.nextReminderAt
-              ) && (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    {t('appointments.remindersTitle')}
-                  </p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {(['r1', 'r2', 'r3'] as const).map((slot) => (
-                      selected.reminderStatus!.remindersScheduled[slot] && (
-                        <span key={slot} className="text-[11px] font-semibold text-green-700 bg-green-50 rounded px-1.5 py-0.5">
-                          {slot.toUpperCase()}
+                {/* Reminder status (from scheduled_messages outbox) */}
+                {selected.reminderStatus && (
+                  selected.reminderStatus.hasFailed ||
+                  selected.reminderStatus.remindersScheduled.r1 ||
+                  selected.reminderStatus.remindersScheduled.r2 ||
+                  selected.reminderStatus.remindersScheduled.r3 ||
+                  selected.reminderStatus.lastReminderSentAt ||
+                  selected.reminderStatus.nextReminderAt
+                ) && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {t('appointments.remindersTitle')}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(['r1', 'r2', 'r3'] as const).map((slot) => (
+                        selected.reminderStatus!.remindersScheduled[slot] && (
+                          <span key={slot} className="text-[11px] font-semibold text-green-700 bg-green-50 rounded px-1.5 py-0.5">
+                            {slot.toUpperCase()}
+                          </span>
+                        )
+                      ))}
+                      {selected.reminderStatus.hasFailed && (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                          <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
                         </span>
-                      )
-                    ))}
-                    {selected.reminderStatus.hasFailed && (
-                      <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
-                        <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
-                      </span>
+                      )}
+                    </div>
+                    {selected.reminderStatus.lastReminderSentAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('appointments.detail.lastReminderSent')} {format(parseISO(selected.reminderStatus.lastReminderSentAt), 'dd MMM à HH:mm', { locale: fr })}
+                      </p>
+                    )}
+                    {selected.reminderStatus.nextReminderAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('appointments.detail.nextReminder')} {format(parseISO(selected.reminderStatus.nextReminderAt), 'dd MMM à HH:mm', { locale: fr })}
+                      </p>
                     )}
                   </div>
-                  {selected.reminderStatus.lastReminderSentAt && (
-                    <p className="text-xs text-muted-foreground">
-                      {t('appointments.detail.lastReminderSent')} {format(parseISO(selected.reminderStatus.lastReminderSentAt), 'dd MMM à HH:mm', { locale: fr })}
-                    </p>
-                  )}
-                  {selected.reminderStatus.nextReminderAt && (
-                    <p className="text-xs text-muted-foreground">
-                      {t('appointments.detail.nextReminder')} {format(parseISO(selected.reminderStatus.nextReminderAt), 'dd MMM à HH:mm', { locale: fr })}
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
 
-              {selected.status === 'scheduled' && (
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1" onClick={() => markNoShow(selected.id)}>
-                    <UserX className="h-4 w-4 mr-2" />{t('appointments.actions.absent')}
-                  </Button>
-                  <Button className="flex-1" onClick={() => markShow(selected.id)}>
-                    <UserCheck className="h-4 w-4 mr-2" />{t('appointments.actions.present')}
-                  </Button>
-                </div>
-              )}
-              {selected.status === 'show' && (
-                <div className="space-y-2 pt-2">
-                  <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'no_show')}>
-                      <UserX className="h-4 w-4 mr-1.5" />{t('appointments.actions.markAbsent')}
+                {selected.status === 'scheduled' && (
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={() => markNoShow(selected.id)}>
+                      <UserX className="h-4 w-4 mr-2" />{t('appointments.actions.absent')}
                     </Button>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
-                      {t('appointments.actions.resetScheduled')}
+                    <Button className="flex-1" onClick={() => markShow(selected.id)}>
+                      <UserCheck className="h-4 w-4 mr-2" />{t('appointments.actions.present')}
                     </Button>
                   </div>
-                </div>
-              )}
-              {selected.status === 'no_show' && (
-                <div className="space-y-2 pt-2">
-                  <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'show')}>
-                      <UserCheck className="h-4 w-4 mr-1.5" />{t('appointments.actions.markPresent')}
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
-                      {t('appointments.actions.resetScheduled')}
-                    </Button>
+                )}
+                {selected.status === 'show' && (
+                  <div className="space-y-2 pt-2">
+                    <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'no_show')}>
+                        <UserX className="h-4 w-4 mr-1.5" />{t('appointments.actions.markAbsent')}
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
+                        {t('appointments.actions.resetScheduled')}
+                      </Button>
+                    </div>
                   </div>
+                )}
+                {selected.status === 'no_show' && (
+                  <div className="space-y-2 pt-2">
+                    <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'show')}>
+                        <UserCheck className="h-4 w-4 mr-1.5" />{t('appointments.actions.markPresent')}
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
+                        {t('appointments.actions.resetScheduled')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <div className="pt-1 border-t space-y-1">
+                  <Button
+                    variant="outline" size="sm" className="w-full"
+                    onClick={() => {
+                      const d = parseISO(selected.scheduled_at)
+                      setRescheduleDate(format(d, 'yyyy-MM-dd'))
+                      setRescheduleHour(format(d, 'HH'))
+                      setRescheduleMinute(format(d, 'mm'))
+                      if (selected.ended_at) {
+                        const e = parseISO(selected.ended_at)
+                        setRescheduleEndHour(format(e, 'HH'))
+                        setRescheduleEndMinute(format(e, 'mm'))
+                      } else {
+                        setRescheduleEndHour('')
+                        setRescheduleEndMinute('00')
+                      }
+                      setDetailApptMode('reschedule')
+                    }}
+                  >
+                    <CalendarClock className="h-3.5 w-3.5 mr-2" />Replanifier
+                  </Button>
+                  <Button
+                    variant="ghost" size="sm"
+                    className="text-destructive hover:text-destructive w-full"
+                    onClick={() => setDeleteAppt(selected)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />{t('appointments.detail.deleteBtn')}
+                  </Button>
                 </div>
-              )}
-              <div className="pt-1 border-t">
-                <Button
-                  variant="ghost" size="sm"
-                  className="text-destructive hover:text-destructive w-full"
-                  onClick={() => setDeleteAppt(selected)}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-2" />{t('appointments.detail.deleteBtn')}
-                </Button>
               </div>
-            </div>
+            )
           )}
         </DialogContent>
       </Dialog>
