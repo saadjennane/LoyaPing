@@ -252,7 +252,9 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
 }
 
 function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']> }) {
+  const router = useRouter()
   const { metrics, list } = data
+  const hasExpiring = metrics.expiring_soon > 0
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden flex">
       <div className="w-1 bg-amber-400 shrink-0" />
@@ -274,18 +276,18 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-amber-50 dark:bg-amber-950/40 rounded-xl px-3 py-3 text-center">
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{metrics.unlocked_today}</p>
-            <p className="text-[11px] font-medium text-amber-700/70 dark:text-amber-400/70 mt-0.5">Débloqués</p>
-          </div>
-          <div className="bg-muted/40 rounded-xl px-3 py-3 text-center">
-            <p className="text-2xl font-bold text-foreground">{metrics.active_coupons}</p>
-            <p className="text-[11px] font-medium text-muted-foreground mt-0.5">Coupons actifs</p>
-          </div>
-          <div className="bg-muted/40 rounded-xl px-3 py-3 text-center">
-            <p className="text-2xl font-bold text-foreground">{metrics.clients_with_points}</p>
-            <p className="text-[11px] font-medium text-muted-foreground mt-0.5">Clients actifs</p>
-          </div>
+          <button onClick={() => router.push('/coupons?filter=active')} className="bg-amber-50 dark:bg-amber-950/40 rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer">
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{metrics.active_coupons}</p>
+            <p className="text-[11px] font-medium text-amber-700/70 dark:text-amber-400/70 mt-0.5">Actifs</p>
+          </button>
+          <button onClick={() => router.push('/coupons?filter=birthday')} className="bg-muted/40 rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer">
+            <p className="text-2xl font-bold text-foreground">{metrics.birthday_coupons}</p>
+            <p className="text-[11px] font-medium text-muted-foreground mt-0.5">Anniversaires</p>
+          </button>
+          <button onClick={() => router.push('/coupons?filter=expiring')} className={`rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer ${hasExpiring ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted/40'}`}>
+            <p className={`text-2xl font-bold ${hasExpiring ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.expiring_soon}</p>
+            <p className={`text-[11px] font-medium mt-0.5 ${hasExpiring ? 'text-red-700/70 dark:text-red-400/70' : 'text-muted-foreground'}`}>Expirent bientôt</p>
+          </button>
         </div>
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-1">Aucun coupon actif</p>
@@ -431,7 +433,9 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
 }
 
 function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']> }) {
+  const router = useRouter()
   const { metrics, list } = data
+  const hasExpiring = metrics.expiring_soon > 0
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
@@ -446,18 +450,18 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
         </Link>
       </div>
       <div className="flex gap-2 px-3 py-3 border-b border-border/50">
-        <div className="flex-1 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-2 py-2 text-center">
-          <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{metrics.unlocked_today}</p>
-          <p className="text-[10px] text-amber-700/60 dark:text-amber-400/60 font-medium mt-0.5">Débloqués</p>
-        </div>
-        <div className="flex-1 bg-muted/40 rounded-lg px-2 py-2 text-center">
-          <p className="text-xl font-bold text-foreground">{metrics.active_coupons}</p>
-          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Actifs</p>
-        </div>
-        <div className="flex-1 bg-muted/40 rounded-lg px-2 py-2 text-center">
-          <p className="text-xl font-bold text-foreground">{metrics.clients_with_points}</p>
-          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Clients</p>
-        </div>
+        <button onClick={() => router.push('/coupons?filter=active')} className="flex-1 bg-amber-50 dark:bg-amber-950/30 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer">
+          <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{metrics.active_coupons}</p>
+          <p className="text-[10px] text-amber-700/60 dark:text-amber-400/60 font-medium mt-0.5">Actifs</p>
+        </button>
+        <button onClick={() => router.push('/coupons?filter=birthday')} className="flex-1 bg-muted/40 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer">
+          <p className="text-xl font-bold text-foreground">{metrics.birthday_coupons}</p>
+          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Anniversaires</p>
+        </button>
+        <button onClick={() => router.push('/coupons?filter=expiring')} className={`flex-1 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer ${hasExpiring ? 'bg-red-50 dark:bg-red-950/30' : 'bg-muted/40'}`}>
+          <p className={`text-xl font-bold ${hasExpiring ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.expiring_soon}</p>
+          <p className={`text-[10px] font-medium mt-0.5 ${hasExpiring ? 'text-red-700/60 dark:text-red-400/60' : 'text-muted-foreground'}`}>Expirent bientôt</p>
+        </button>
       </div>
       <div className="space-y-1.5 p-3">
         {list.length === 0 ? (

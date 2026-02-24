@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
-  Plus, Search, UserPlus, Gift, Clock, CheckCircle2, XCircle, Ticket, AlertCircle, QrCode, Trash2, Check,
+  Plus, Search, UserPlus, Gift, Clock, CheckCircle2, XCircle, Ticket, AlertCircle, QrCode, Trash2, Check, Cake,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -116,17 +116,26 @@ export default function CouponsPage() {
 
   useEffect(() => { fetchCoupons() }, [fetchCoupons])
 
-  // Auto-open detail from URL param (e.g. from dashboard click)
+  // Auto-open detail or apply filter from URL params (e.g. from dashboard click)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const id = params.get('id')
-    if (!id || coupons.length === 0) return
-    const found = coupons.find(c => c.id === id)
-    if (found) {
-      setDetailCoupon(found)
-      setDetailMode('detail')
-      setDetailExtendDays('7')
-      window.history.replaceState(null, '', '/coupons')
+    const id     = params.get('id')
+    const filter = params.get('filter')
+
+    if (id && coupons.length > 0) {
+      const found = coupons.find(c => c.id === id)
+      if (found) {
+        setDetailCoupon(found)
+        setDetailMode('detail')
+        setDetailExtendDays('7')
+        window.history.replaceState(null, '', '/coupons')
+      }
+    } else if (filter) {
+      const validTabs = ['active', 'birthday', 'expiring', 'used', 'expired']
+      if (validTabs.includes(filter)) {
+        setActiveTab(filter)
+        window.history.replaceState(null, '', '/coupons')
+      }
     }
   }, [coupons])
 
@@ -159,6 +168,7 @@ export default function CouponsPage() {
     : coupons
 
   const active       = visibleCoupons.filter((c) => c.status === 'active')
+  const birthday     = visibleCoupons.filter((c) => c.status === 'active' && c.source === 'birthday')
   const expiring     = visibleCoupons.filter((c) => c.status === 'active' && isExpiringSoon(c))
   const used         = visibleCoupons.filter((c) => c.status === 'used')
   const expired      = visibleCoupons.filter((c) => c.status === 'expired')
@@ -604,6 +614,7 @@ export default function CouponsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="active">{t('coupons.tabs.active')} ({active.length})</SelectItem>
+              <SelectItem value="birthday">Anniversaires ({birthday.length})</SelectItem>
               <SelectItem value="expiring">{t('coupons.tabs.expiring')} ({expiring.length})</SelectItem>
               <SelectItem value="used">{t('coupons.tabs.used')} ({used.length})</SelectItem>
               <SelectItem value="expired">{t('coupons.tabs.expired')} ({expired.length})</SelectItem>
@@ -625,6 +636,10 @@ export default function CouponsPage() {
             <Gift className="h-3.5 w-3.5" />
             {t('coupons.tabs.active')}<CountBadge n={active.length} />
           </TabsTrigger>
+          <TabsTrigger value="birthday" className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">
+            <Cake className="h-3.5 w-3.5" />
+            Anniversaires<CountBadge n={birthday.length} />
+          </TabsTrigger>
           <TabsTrigger value="expiring" className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none gap-2">
             <Clock className="h-3.5 w-3.5" />
             {t('coupons.tabs.expiring')}<CountBadge n={expiring.length} />
@@ -642,6 +657,11 @@ export default function CouponsPage() {
         <TabsContent value="active" className="mt-0">
           <div className="md:hidden">{renderMobileCards(active, 'active')}</div>
           <div className="hidden md:block">{renderTable(active, 'active')}</div>
+        </TabsContent>
+
+        <TabsContent value="birthday" className="mt-0">
+          <div className="md:hidden">{renderMobileCards(birthday, 'active')}</div>
+          <div className="hidden md:block">{renderTable(birthday, 'active')}</div>
         </TabsContent>
 
         <TabsContent value="expiring" className="mt-0">
@@ -818,7 +838,7 @@ export default function CouponsPage() {
         <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{selectedIds.size} sélectionné(s)</span>
           <div className="w-px h-4 bg-border" />
-          {(activeTab === 'active' || activeTab === 'expiring') && (
+          {(activeTab === 'active' || activeTab === 'birthday' || activeTab === 'expiring') && (
             <Button size="sm" variant="outline" onClick={() => { setBulkDays('7'); setBulkExtendOpen(true) }}>
               Prolonger
             </Button>

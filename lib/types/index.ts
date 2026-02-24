@@ -420,9 +420,9 @@ export type DashboardApptsSection = {
 
 export type DashboardLoyaltySection = {
   metrics: {
-    active_coupons:      number
-    unlocked_today:      number
-    clients_with_points: number
+    active_coupons:   number
+    birthday_coupons: number
+    expiring_soon:    number
   }
   list: DashboardLoyaltyItem[]
 }

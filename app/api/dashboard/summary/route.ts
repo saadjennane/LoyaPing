@@ -88,7 +88,7 @@ export async function GET() {
       ? db
           .from('coupons')
           .select(`
-            id, status, expires_at, created_at,
+            id, status, expires_at, created_at, source,
             tier:tier_id ( business_id, reward_title ),
             client:client_id ( first_name, last_name, phone_number )
           `)
@@ -98,22 +98,12 @@ export async function GET() {
           .limit(200)
       : Promise.resolve(null)
 
-    const clientsWithPointsPromise = modules.loyalty_enabled
-      ? db
-          .from('clients')
-          .select('id', { count: 'exact', head: true })
-          .eq('business_id', DEFAULT_BUSINESS_ID)
-          .is('deleted_at', null)
-          .gt('current_cycle_points', 0)
-      : Promise.resolve(null)
-
-    const [ordersRes, apptsTodayRes, apptsTomorrowRes, couponsRes, clientsPtsRes] =
+    const [ordersRes, apptsTodayRes, apptsTomorrowRes, couponsRes] =
       await Promise.all([
         ordersPromise,
         apptsTodayPromise,
         apptsTomorrowCountPromise,
         couponsPromise,
-        clientsWithPointsPromise,
       ])
 
     // ── Build Orders section ───────────────────────────────────────────────────
@@ -209,11 +199,12 @@ export async function GET() {
         return tier?.business_id === DEFAULT_BUSINESS_ID
       })
 
-      const unlockedToday = rows.filter(
-        (r) => r.created_at >= todayIso && r.created_at < tomorrowIso,
-      )
+      const sevenDaysFromNow = new Date(now)
+      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+      const sevenDaysIso = sevenDaysFromNow.toISOString()
 
-      const clientsWithPoints = (clientsPtsRes as { count: number | null } | null)?.count ?? 0
+      const expiringSoon    = rows.filter((r) => r.expires_at <= sevenDaysIso)
+      const birthdayCoupons = rows.filter((r) => r.source === 'birthday')
 
       const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string } | null) =>
         c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number) : '—'
@@ -230,9 +221,9 @@ export async function GET() {
 
       loyaltySection = {
         metrics: {
-          active_coupons:      rows.length,
-          unlocked_today:      unlockedToday.length,
-          clients_with_points: clientsWithPoints,
+          active_coupons:   rows.length,
+          birthday_coupons: birthdayCoupons.length,
+          expiring_soon:    expiringSoon.length,
         },
         list,
       }
