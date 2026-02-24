@@ -661,8 +661,8 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">{t('dashboard.title')}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 capitalize">{todayLabel()}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-0.5">{t('dashboard.title')}</p>
+          <h1 className="text-xl font-bold text-foreground capitalize">{todayLabel()}</h1>
         </div>
         <Button
           size="sm"
