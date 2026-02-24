@@ -2,7 +2,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { markOrderPickedUp, downgradeReadyToPending, downgradeCompletedToReady } from '@/lib/services/orders'
 import { createServerClient } from '@/lib/supabase/server'
 
+const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
+
 type Params = { params: Promise<{ id: string }> }
+
+// GET /api/orders/:id — fetch single order
+export async function GET(_req: NextRequest, { params }: Params) {
+  try {
+    const { id } = await params
+    const db = createServerClient()
+    const { data, error } = await db
+      .from('orders')
+      .select('*, client:clients(first_name, last_name, phone_number)')
+      .eq('id', id)
+      .eq('business_id', DEFAULT_BUSINESS_ID)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ data })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
 
 // PATCH /api/orders/:id — update status
 // Note: marking an order "ready" uses PATCH /api/orders/:id/ready (outbox pattern)

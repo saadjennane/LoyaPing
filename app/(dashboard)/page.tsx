@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { DashboardSummary } from '@/lib/types'
 import { useI18n } from '@/lib/i18n/provider'
+import DashboardDetailPanel, { type DetailRef } from '@/components/dashboard/DashboardDetailPanel'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -101,9 +102,11 @@ const APPT_META = {
 function FocusOrders({
   data,
   onMarkReady,
+  onOpenDetail,
 }: {
   data: NonNullable<DashboardSummary['orders']>
   onMarkReady?: (id: string) => Promise<void>
+  onOpenDetail: (ref: DetailRef) => void
 }) {
   const router = useRouter()
   const { metrics, list } = data
@@ -150,7 +153,7 @@ function FocusOrders({
               <div
                 key={order.id}
                 className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => router.push(`/orders?id=${order.id}`)}
+                onClick={() => onOpenDetail({ type: 'order', id: order.id, clientName: order.client_name })}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -188,7 +191,7 @@ function FocusOrders({
   )
 }
 
-function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appointments']> }) {
+function FocusAppointments({ data, onOpenDetail }: { data: NonNullable<DashboardSummary['appointments']>; onOpenDetail: (ref: DetailRef) => void }) {
   const router = useRouter()
   const { metrics, list } = data
   const hasNoShow = metrics.no_show_today > 0
@@ -234,7 +237,11 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
               const meta = APPT_META[appt.status] ?? APPT_META.scheduled
               const Icon = meta.Icon
               return (
-                <Link key={appt.id} href={`/appointments?id=${appt.id}`} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors">
+                <div
+                  key={appt.id}
+                  className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => onOpenDetail({ type: 'appointment', id: appt.id, clientName: appt.client_name })}
+                >
                   <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-950/40 flex items-center justify-center shrink-0">
                     <Icon className={`h-4 w-4 ${meta.color}`} />
                   </div>
@@ -242,7 +249,7 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
                     <p className="font-medium text-sm truncate">{appt.client_name}</p>
                     <p className="text-xs text-muted-foreground">{formatTime(appt.scheduled_at)}</p>
                   </div>
-                </Link>
+                </div>
               )
             })}
           </div>
@@ -252,7 +259,7 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
   )
 }
 
-function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']> }) {
+function FocusLoyalty({ data, onOpenDetail }: { data: NonNullable<DashboardSummary['loyalty']>; onOpenDetail: (ref: DetailRef) => void }) {
   const router = useRouter()
   const { metrics, list } = data
   const hasExpiring = metrics.expiring_soon > 0
@@ -295,7 +302,11 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
         ) : (
           <div className="space-y-2">
             {list.slice(0, 3).map((coupon) => (
-              <Link key={coupon.id} href={`/coupons?id=${coupon.id}`} className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors">
+              <div
+                key={coupon.id}
+                className="bg-muted/30 rounded-xl p-3 flex items-center gap-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => onOpenDetail({ type: 'coupon', id: coupon.id, clientName: coupon.client_name, rewardTitle: coupon.reward_title, expiresAt: coupon.expires_at })}
+              >
                 <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
                   <Gift className="h-4 w-4 text-amber-500" />
                 </div>
@@ -305,7 +316,7 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
                     {coupon.reward_title ?? '—'}
                   </p>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
@@ -319,9 +330,11 @@ function FocusLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']>
 function SecondaryOrders({
   data,
   onMarkReady,
+  onOpenDetail,
 }: {
   data: NonNullable<DashboardSummary['orders']>
   onMarkReady?: (id: string) => Promise<void>
+  onOpenDetail: (ref: DetailRef) => void
 }) {
   const router = useRouter()
   const { metrics, list } = data
@@ -360,7 +373,7 @@ function SecondaryOrders({
           <div
             key={order.id}
             className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-muted/50 transition-colors"
-            onClick={() => router.push(`/orders?id=${order.id}`)}
+            onClick={() => onOpenDetail({ type: 'order', id: order.id, clientName: order.client_name })}
           >
             {order.reminders_count >= 3 && order.status === 'ready'
               ? <AlertTriangle className="h-3 w-3 text-red-400 shrink-0" />
@@ -384,7 +397,7 @@ function SecondaryOrders({
   )
 }
 
-function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['appointments']> }) {
+function SecondaryAppointments({ data, onOpenDetail }: { data: NonNullable<DashboardSummary['appointments']>; onOpenDetail: (ref: DetailRef) => void }) {
   const router = useRouter()
   const { metrics, list } = data
   const hasNoShow = metrics.no_show_today > 0
@@ -422,11 +435,15 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
           const meta = APPT_META[appt.status] ?? APPT_META.scheduled
           const Icon = meta.Icon
           return (
-            <Link key={appt.id} href={`/appointments?id=${appt.id}`} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors">
+            <div
+              key={appt.id}
+              className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors cursor-pointer"
+              onClick={() => onOpenDetail({ type: 'appointment', id: appt.id, clientName: appt.client_name })}
+            >
               <Icon className={`h-3 w-3 ${meta.color} shrink-0`} />
               <span className="flex-1 text-xs font-medium text-foreground truncate">{appt.client_name}</span>
               <span className="text-[10px] font-medium text-muted-foreground shrink-0">{formatTime(appt.scheduled_at)}</span>
-            </Link>
+            </div>
           )
         })}
       </div>
@@ -434,7 +451,7 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
   )
 }
 
-function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalty']> }) {
+function SecondaryLoyalty({ data, onOpenDetail }: { data: NonNullable<DashboardSummary['loyalty']>; onOpenDetail: (ref: DetailRef) => void }) {
   const router = useRouter()
   const { metrics, list } = data
   const hasExpiring = metrics.expiring_soon > 0
@@ -469,7 +486,11 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
         {list.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-2">Aucun coupon actif</p>
         ) : list.slice(0, 2).map((coupon) => (
-          <Link key={coupon.id} href={`/coupons?id=${coupon.id}`} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors">
+          <div
+            key={coupon.id}
+            className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors cursor-pointer"
+            onClick={() => onOpenDetail({ type: 'coupon', id: coupon.id, clientName: coupon.client_name, rewardTitle: coupon.reward_title, expiresAt: coupon.expires_at })}
+          >
             <Gift className="h-3 w-3 text-amber-400 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-foreground truncate">{coupon.client_name}</p>
@@ -477,7 +498,7 @@ function SecondaryLoyalty({ data }: { data: NonNullable<DashboardSummary['loyalt
                 {coupon.reward_title ?? '—'}
               </p>
             </div>
-          </Link>
+          </div>
         ))}
       </div>
     </div>
@@ -582,6 +603,7 @@ export default function DashboardPage() {
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [detail, setDetail]       = useState<DetailRef | null>(null)
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -667,9 +689,9 @@ export default function DashboardPage() {
         <SkeletonFocus />
       ) : summary ? (
         <>
-          {focusModule === 'orders'       && summary.orders       && <FocusOrders       data={summary.orders}       onMarkReady={markReadyFromDashboard} />}
-          {focusModule === 'appointments' && summary.appointments && <FocusAppointments data={summary.appointments} />}
-          {focusModule === 'loyalty'      && summary.loyalty      && <FocusLoyalty      data={summary.loyalty} />}
+          {focusModule === 'orders'       && summary.orders       && <FocusOrders       data={summary.orders}       onMarkReady={markReadyFromDashboard} onOpenDetail={setDetail} />}
+          {focusModule === 'appointments' && summary.appointments && <FocusAppointments data={summary.appointments} onOpenDetail={setDetail} />}
+          {focusModule === 'loyalty'      && summary.loyalty      && <FocusLoyalty      data={summary.loyalty}      onOpenDetail={setDetail} />}
         </>
       ) : null}
 
@@ -683,9 +705,9 @@ export default function DashboardPage() {
         <div className={`${secondaryGridClass} gap-4`}>
           {secondaryModules.map((m) => (
             <div key={m}>
-              {m === 'orders'       && summary.orders       && <SecondaryOrders       data={summary.orders}       onMarkReady={markReadyFromDashboard} />}
-              {m === 'appointments' && summary.appointments && <SecondaryAppointments data={summary.appointments} />}
-              {m === 'loyalty'      && summary.loyalty      && <SecondaryLoyalty      data={summary.loyalty} />}
+              {m === 'orders'       && summary.orders       && <SecondaryOrders       data={summary.orders}       onMarkReady={markReadyFromDashboard} onOpenDetail={setDetail} />}
+              {m === 'appointments' && summary.appointments && <SecondaryAppointments data={summary.appointments} onOpenDetail={setDetail} />}
+              {m === 'loyalty'      && summary.loyalty      && <SecondaryLoyalty      data={summary.loyalty}      onOpenDetail={setDetail} />}
             </div>
           ))}
         </div>
@@ -693,6 +715,13 @@ export default function DashboardPage() {
 
       {/* 3 — Activité récente */}
       {!loading && summary && <ActivityFeed summary={summary} />}
+
+      {/* Detail panel */}
+      <DashboardDetailPanel
+        detail={detail}
+        onClose={() => setDetail(null)}
+        onRefresh={() => load(true)}
+      />
 
     </div>
   )

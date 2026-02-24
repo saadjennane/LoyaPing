@@ -7,6 +7,26 @@ const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-00
 
 type Params = { params: Promise<{ id: string }> }
 
+// GET /api/appointments/:id — fetch single appointment
+export async function GET(_req: NextRequest, { params }: Params) {
+  try {
+    const { id } = await params
+    const db = createServerClient()
+    const { data, error } = await db
+      .from('appointments')
+      .select('*, client:clients(first_name, last_name, phone_number)')
+      .eq('id', id)
+      .eq('business_id', DEFAULT_BUSINESS_ID)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ data })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
