@@ -88,7 +88,7 @@ export async function GET() {
       ? db
           .from('coupons')
           .select(`
-            id, status, expires_at, created_at,
+            id, status, expires_at, created_at, source,
             tier:tier_id ( business_id, reward_title ),
             client:client_id ( first_name, last_name, phone_number )
           `)
@@ -204,8 +204,7 @@ export async function GET() {
       const sevenDaysIso = sevenDaysFromNow.toISOString()
 
       const expiringSoon    = rows.filter((r) => r.expires_at <= sevenDaysIso)
-      // birthday_coupons nécessite la colonne source (migration 033) — 0 jusqu'à migration
-      const birthdayCoupons = rows.filter((r) => (r as Record<string, unknown>).source === 'birthday')
+      const birthdayCoupons = rows.filter((r) => r.source === 'birthday')
 
       const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string } | null) =>
         c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number) : '—'
