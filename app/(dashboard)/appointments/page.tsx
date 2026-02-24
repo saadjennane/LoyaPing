@@ -81,6 +81,36 @@ function apptColorClass(status: string) {
   return 'bg-blue-100 text-blue-800 border-blue-300'
 }
 
+// ─── Overlap layout helper ────────────────────────────────────────────────────
+
+function computeOverlapLayout(
+  events: Array<{ id: string; start: string; end: string | null | undefined }>,
+): Map<string, { colIdx: number; totalCols: number }> {
+  const sorted = [...events].sort((a, b) => a.start.localeCompare(b.start))
+  const columns: number[] = [] // columns[i] = endMs of the last event in column i
+  const assigned: Array<{ id: string; startMs: number; endMs: number; colIdx: number }> = []
+
+  for (const ev of sorted) {
+    const startMs = parseISO(ev.start).getTime()
+    const endMs   = ev.end ? parseISO(ev.end).getTime() : startMs + 60 * 60 * 1000
+
+    let colIdx = 0
+    while (columns[colIdx] !== undefined && columns[colIdx] > startMs) colIdx++
+    columns[colIdx] = endMs
+    assigned.push({ id: ev.id, startMs, endMs, colIdx })
+  }
+
+  const result = new Map<string, { colIdx: number; totalCols: number }>()
+  for (const ev of assigned) {
+    const overlapping = assigned.filter(
+      (o) => o.startMs < ev.endMs && o.endMs > ev.startMs,
+    )
+    const totalCols = Math.max(...overlapping.map((o) => o.colIdx)) + 1
+    result.set(ev.id, { colIdx: ev.colIdx, totalCols })
+  }
+  return result
+}
+
 // ─── Time Grid (1d / 3d / 7d) ────────────────────────────────────────────────
 
 function TimeGrid({
@@ -168,6 +198,14 @@ function TimeGrid({
           const dayImports = imports.filter((i) =>
             isSameDay(parseISO(i.start_at), day)
           )
+
+          // Compute overlap layout for all events in the day
+          const allDayEvents = [
+            ...dayAppts.map((a) => ({ id: a.id, start: a.scheduled_at, end: a.ended_at })),
+            ...dayImports.map((i) => ({ id: i.id, start: i.start_at, end: i.end_at })),
+          ]
+          const layout = computeOverlapLayout(allDayEvents)
+
           return (
             <div
               key={day.toISOString()}
@@ -181,32 +219,50 @@ function TimeGrid({
                   style={{ top: h * HOUR_HEIGHT }}
                 />
               ))}
-              {dayAppts.map((appt) => (
-                <button
-                  key={appt.id}
-                  onClick={() => onSelect(appt)}
-                  className={`absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border ${apptColorClass(appt.status)}`}
-                  style={{ top: eventTop(appt.scheduled_at), height: eventHeight(appt.scheduled_at, appt.ended_at) }}
-                >
-                  <span className="font-semibold">
-                    {format(parseISO(appt.scheduled_at), 'HH:mm')}
-                  </span>{' '}
-                  {clientFullName(appt.client as Client)}
-                  {appt.reminderStatus?.hasFailed && ' ⚠'}
-                </button>
-              ))}
-              {dayImports.map((imp) => (
-                <button
-                  key={imp.id}
-                  onClick={() => onSelectImport(imp)}
-                  className="absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed"
-                  style={{ top: eventTop(imp.start_at), height: eventHeight(imp.start_at, imp.end_at) }}
-                >
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle shrink-0" />
-                  <span className="font-semibold">{format(parseISO(imp.start_at), 'HH:mm')}</span>{' '}
-                  {imp.summary || 'RDV sans client'}
-                </button>
-              ))}
+              {dayAppts.map((appt) => {
+                const { colIdx, totalCols } = layout.get(appt.id) ?? { colIdx: 0, totalCols: 1 }
+                const pctW = 100 / totalCols
+                return (
+                  <button
+                    key={appt.id}
+                    onClick={() => onSelect(appt)}
+                    className={`absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border ${apptColorClass(appt.status)}`}
+                    style={{
+                      top:    eventTop(appt.scheduled_at),
+                      height: eventHeight(appt.scheduled_at, appt.ended_at),
+                      left:   `calc(${colIdx * pctW}% + 2px)`,
+                      width:  `calc(${pctW}% - 4px)`,
+                    }}
+                  >
+                    <span className="font-semibold">
+                      {format(parseISO(appt.scheduled_at), 'HH:mm')}
+                    </span>{' '}
+                    {clientFullName(appt.client as Client)}
+                    {appt.reminderStatus?.hasFailed && ' ⚠'}
+                  </button>
+                )
+              })}
+              {dayImports.map((imp) => {
+                const { colIdx, totalCols } = layout.get(imp.id) ?? { colIdx: 0, totalCols: 1 }
+                const pctW = 100 / totalCols
+                return (
+                  <button
+                    key={imp.id}
+                    onClick={() => onSelectImport(imp)}
+                    className="absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed"
+                    style={{
+                      top:    eventTop(imp.start_at),
+                      height: eventHeight(imp.start_at, imp.end_at),
+                      left:   `calc(${colIdx * pctW}% + 2px)`,
+                      width:  `calc(${pctW}% - 4px)`,
+                    }}
+                  >
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle shrink-0" />
+                    <span className="font-semibold">{format(parseISO(imp.start_at), 'HH:mm')}</span>{' '}
+                    {imp.summary || 'RDV sans client'}
+                  </button>
+                )
+              })}
             </div>
           )
         })}
@@ -1148,9 +1204,12 @@ export default function AppointmentsPage() {
                             </div>
                           )}
                           {/* Heure */}
-                          <span className="tabular-nums text-sm font-bold w-12 shrink-0 text-muted-foreground">
-                            {format(parseISO(item.scheduled_at), 'HH:mm')}
-                          </span>
+                          <div className="tabular-nums text-sm font-bold shrink-0 text-muted-foreground text-right w-16">
+                            <div>{format(parseISO(item.scheduled_at), 'HH:mm')}</div>
+                            {item.ended_at && (
+                              <div className="text-[10px] font-normal">{format(parseISO(item.ended_at), 'HH:mm')}</div>
+                            )}
+                          </div>
                           {/* Infos client */}
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm truncate">{item.client_name}</div>
@@ -1221,8 +1280,11 @@ export default function AppointmentsPage() {
                             onChange={() => toggleSelect(item.id)}
                           />
                         </div>
-                        <span className="tabular-nums text-sm font-semibold w-12 shrink-0 text-muted-foreground">
+                        <span className="tabular-nums text-sm font-semibold shrink-0 text-muted-foreground w-24">
                           {format(parseISO(item.scheduled_at), 'HH:mm')}
+                          {item.ended_at && (
+                            <span className="font-normal text-xs"> → {format(parseISO(item.ended_at), 'HH:mm')}</span>
+                          )}
                         </span>
                         <span className="flex-1 text-sm font-medium truncate">{item.client_name}</span>
                         <Badge variant={statusVariant(item.status)}>
@@ -1496,7 +1558,12 @@ export default function AppointmentsPage() {
                     {format(parseISO(selected.scheduled_at), 'EEEE dd MMMM yyyy', { locale: fr })}
                   </div>
                   <div className="text-muted-foreground">{t('appointments.detail.time')}</div>
-                  <div>{format(parseISO(selected.scheduled_at), 'HH:mm')}</div>
+                  <div>
+                    {format(parseISO(selected.scheduled_at), 'HH:mm')}
+                    {selected.ended_at && (
+                      <span className="text-muted-foreground"> → {format(parseISO(selected.ended_at), 'HH:mm')}</span>
+                    )}
+                  </div>
                   {selected.notes && (
                     <>
                       <div className="text-muted-foreground">{t('appointments.detail.notes')}</div>

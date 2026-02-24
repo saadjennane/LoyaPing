@@ -228,6 +228,7 @@ export type AppointmentListItem = {
   client_name:    string   // civility + first_name + last_name, fallback to phone
   client_phone:   string
   scheduled_at:   string   // ISO timestamp
+  ended_at:       string | null
   status:         'scheduled' | 'show' | 'no_show'
   reminderStatus: ReminderStatus
 }
