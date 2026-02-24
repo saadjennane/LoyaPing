@@ -869,7 +869,7 @@ export default function ClientsPage() {
 
       {/* ── Create Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('clients.newClientTitle')}</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-3 mt-2">
             <ClientFormFields
@@ -887,7 +887,7 @@ export default function ClientsPage() {
 
       {/* ── Edit Info Dialog (table row) ───────────────────────────────────── */}
       <Dialog open={!!editInfo} onOpenChange={(o) => !o && setEditInfo(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('clients.actions.editInfoTitle')}</DialogTitle></DialogHeader>
           <form onSubmit={handleInfoSubmit} className="space-y-3 mt-2">
             <ClientFormFields form={infoForm} onChange={setInfoForm} />
@@ -905,7 +905,7 @@ export default function ClientsPage() {
 
       {/* ── Edit Points Dialog (table row) ────────────────────────────────── */}
       <Dialog open={!!editPoints} onOpenChange={(o) => !o && setEditPoints(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('clients.actions.editPointsTitle')}</DialogTitle></DialogHeader>
           {editPoints && (
             <div className="space-y-4 mt-2">
@@ -934,7 +934,7 @@ export default function ClientsPage() {
 
       {/* ── Unlock Reward Dialog (table row) ──────────────────────────────── */}
       <Dialog open={!!unlockClient} onOpenChange={(o) => !o && setUnlockClient(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('clients.actions.unlockRewardTitle')}</DialogTitle></DialogHeader>
           {unlockClient && (
             <div className="space-y-4 mt-2">
@@ -970,7 +970,7 @@ export default function ClientsPage() {
 
       {/* ── Delete Confirm Dialog (table row) ─────────────────────────────── */}
       <Dialog open={!!deleteClient} onOpenChange={(o) => !o && setDeleteClient(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('clients.actions.deleteTitle')}</DialogTitle></DialogHeader>
           {deleteClient && (
             <div className="space-y-4 mt-2">
@@ -1008,7 +1008,7 @@ export default function ClientsPage() {
 
       {/* ── Bulk delete confirm ────────────────────────────────────────────── */}
       <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>Supprimer {selectedIds.size} client(s) ?</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">Cette action est irréversible. Toutes les données associées (commandes, RDV, points) seront également supprimées.</p>
@@ -1024,7 +1024,7 @@ export default function ClientsPage() {
 
       {/* ── Bulk adjust points ─────────────────────────────────────────────── */}
       <Dialog open={bulkAdjustOpen} onOpenChange={(o) => { setBulkAdjustOpen(o); if (!o) setBulkPointsValue('') }}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>Ajuster les points de {selectedIds.size} client(s)</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-1">
@@ -1045,7 +1045,7 @@ export default function ClientsPage() {
 
       {/* ── Detail Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={!!detailClient} onOpenChange={(o) => !o && closeDetail()}>
-        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] flex flex-col p-0 gap-0" showCloseButton={false}>
+        <DialogContent aria-describedby={undefined} className="w-[95vw] max-w-6xl h-[90vh] flex flex-col p-0 gap-0" showCloseButton={false}>
 
           {/* ── Header ─────────────────────────────────────────────────── */}
           <DialogHeader className="flex-row items-center gap-2 space-y-0 px-6 pt-6 pb-4 shrink-0 border-b">

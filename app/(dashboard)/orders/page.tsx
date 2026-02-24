@@ -848,7 +848,7 @@ export default function OrdersPage() {
           <DialogTrigger asChild>
             <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm"><Plus className="h-4 w-4 mr-2" />{t('orders.newBtn')}</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>{step === 'new_client' ? 'Nouveau client' : t('orders.newBtn')}</DialogTitle>
             </DialogHeader>
@@ -1063,7 +1063,7 @@ export default function OrdersPage() {
 
       {/* Order detail dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent aria-describedby={undefined} className="max-w-md">
           {selectedOrder && (() => {
             const client = selectedOrder.client as Client | undefined
             return (
@@ -1179,7 +1179,7 @@ export default function OrdersPage() {
 
       {/* Correction / excuse dialog — shown when downgrading after message was sent */}
       <Dialog open={correctionOpen} onOpenChange={(o) => { if (!o) { setCorrectionOpen(false); setCorrectionOrderId(null) } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{t('orders.correctionDialog.title')}</DialogTitle>
           </DialogHeader>
@@ -1224,7 +1224,7 @@ export default function OrdersPage() {
 
       {/* ── Bulk delete confirm ────────────────────────────────────────────── */}
       <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader><DialogTitle>Supprimer {selectedIds.size} commande(s) ?</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
@@ -1240,7 +1240,7 @@ export default function OrdersPage() {
 
       {/* Delete order confirm dialog */}
       <Dialog open={!!deleteOrder} onOpenChange={(o) => !o && setDeleteOrder(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{t('orders.deleteDialog.title')}</DialogTitle>
           </DialogHeader>

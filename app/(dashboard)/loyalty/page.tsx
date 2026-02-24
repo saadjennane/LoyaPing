@@ -296,7 +296,7 @@ export default function LoyaltyPage() {
 
       {/* Redeem dialog */}
       <Dialog open={redeemOpen} onOpenChange={setRedeemOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Valider un coupon</DialogTitle>
           </DialogHeader>

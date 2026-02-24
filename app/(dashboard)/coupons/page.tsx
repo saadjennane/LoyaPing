@@ -682,7 +682,7 @@ export default function CouponsPage() {
 
       {/* ── Offer coupon dialog ─────────────────────────────────────────────── */}
       <Dialog open={offerOpen} onOpenChange={setOfferOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{dialogTitle}</DialogTitle>
           </DialogHeader>
@@ -858,7 +858,7 @@ export default function CouponsPage() {
 
       {/* ── Bulk delete confirm ────────────────────────────────────────────── */}
       <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader><DialogTitle>Supprimer {selectedIds.size} coupon(s) ?</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
@@ -874,7 +874,7 @@ export default function CouponsPage() {
 
       {/* ── Bulk reactivate dialog ─────────────────────────────────────────── */}
       <Dialog open={bulkReactivateOpen} onOpenChange={(o) => { setBulkReactivateOpen(o); if (!o) setBulkDays('30') }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader><DialogTitle>Réactiver {selectedIds.size} coupon(s) expiré(s)</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">Le statut repassera à « Actif » et la date d&apos;expiration sera repoussée.</p>
@@ -894,7 +894,7 @@ export default function CouponsPage() {
 
       {/* ── Bulk extend dialog ─────────────────────────────────────────────── */}
       <Dialog open={bulkExtendOpen} onOpenChange={(o) => { setBulkExtendOpen(o); if (!o) setBulkDays('7') }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader><DialogTitle>Prolonger {selectedIds.size} coupon(s)</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">La date d&apos;expiration sera repoussée du nombre de jours indiqué.</p>
@@ -914,7 +914,7 @@ export default function CouponsPage() {
 
       {/* ── Single coupon detail dialog (unified) ───────────────────────────── */}
       <Dialog open={!!detailCoupon} onOpenChange={(o) => { if (!o) { setDetailCoupon(null); setDetailMode('detail') } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           {detailCoupon && (() => {
             const dc = detailCoupon
             const dcClient = dc.client as Client | undefined
@@ -1003,7 +1003,7 @@ export default function CouponsPage() {
 
       {/* ── Redeem dialog ───────────────────────────────────────────────────── */}
       <Dialog open={redeemOpen} onOpenChange={(o) => { setRedeemOpen(o); if (!o) setRedeemCode('') }}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Valider un coupon</DialogTitle>
           </DialogHeader>

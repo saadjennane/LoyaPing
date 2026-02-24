@@ -1201,7 +1201,7 @@ export default function AppointmentsPage() {
 
       {/* Create RDV dialog */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) resetCreate(); setCreateOpen(o) }}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {createStep === 'new_client' ? t('appointments.form.newClientTitle') : t('appointments.form.newApptTitle')}
@@ -1330,7 +1330,7 @@ export default function AppointmentsPage() {
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={(o) => { setDetailOpen(o); if (!o) setDetailApptMode('detail') }}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
               {detailApptMode === 'reschedule' ? 'Replanifier le RDV' : t('appointments.detail.title')}
@@ -1543,7 +1543,7 @@ export default function AppointmentsPage() {
 
       {/* Delete appointment confirm dialog */}
       <Dialog open={!!deleteAppt} onOpenChange={(o) => !o && setDeleteAppt(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{t('appointments.deleteDialog.title')}</DialogTitle>
           </DialogHeader>
@@ -1565,7 +1565,7 @@ export default function AppointmentsPage() {
 
       {/* Amount modal — shown only when loyalty type = 'montant' */}
       <Dialog open={amountModalOpen} onOpenChange={(o) => { if (!o && !showSubmitting) { setAmountModalOpen(false); setPendingShowId(null) } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{t('appointments.amountModal.title')}</DialogTitle>
           </DialogHeader>
@@ -1633,7 +1633,7 @@ export default function AppointmentsPage() {
 
       {/* ── Bulk delete confirm ────────────────────────────────────────────── */}
       <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader><DialogTitle>Supprimer {selectedIds.size} RDV ?</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-2">
             <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
