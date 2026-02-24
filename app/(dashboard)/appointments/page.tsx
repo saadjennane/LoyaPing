@@ -114,6 +114,12 @@ function TimeGrid({
     return Math.max(0, (mins / 60) * HOUR_HEIGHT)
   }
 
+  function eventHeight(startIso: string, endIso: string | null | undefined): number {
+    if (!endIso) return HOUR_HEIGHT // default 1h
+    const mins = differenceInMinutes(parseISO(endIso), parseISO(startIso))
+    return Math.max(24, (mins / 60) * HOUR_HEIGHT)
+  }
+
   return (
     <div className="flex flex-col border rounded-lg overflow-hidden">
       {/* ── Header figé ── */}
@@ -179,8 +185,8 @@ function TimeGrid({
                 <button
                   key={appt.id}
                   onClick={() => onSelect(appt)}
-                  className={`absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 truncate leading-tight border ${apptColorClass(appt.status)}`}
-                  style={{ top: eventTop(appt.scheduled_at), minHeight: 24 }}
+                  className={`absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border ${apptColorClass(appt.status)}`}
+                  style={{ top: eventTop(appt.scheduled_at), height: eventHeight(appt.scheduled_at, appt.ended_at) }}
                 >
                   <span className="font-semibold">
                     {format(parseISO(appt.scheduled_at), 'HH:mm')}
@@ -193,8 +199,8 @@ function TimeGrid({
                 <button
                   key={imp.id}
                   onClick={() => onSelectImport(imp)}
-                  className="absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 truncate leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed"
-                  style={{ top: eventTop(imp.start_at), minHeight: 24 }}
+                  className="absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed"
+                  style={{ top: eventTop(imp.start_at), height: eventHeight(imp.start_at, imp.end_at) }}
                 >
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle shrink-0" />
                   <span className="font-semibold">{format(parseISO(imp.start_at), 'HH:mm')}</span>{' '}
