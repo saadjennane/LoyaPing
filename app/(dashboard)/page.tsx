@@ -515,7 +515,7 @@ const ACTIVITY_META: Record<ActivityType, { dot: string; label: string; href: st
 }
 
 function buildActivityFeed(summary: DashboardSummary) {
-  const items: { id: string; type: ActivityType; client_name: string; detail?: string; time?: string; ts: number }[] = []
+  const items: { id: string; type: ActivityType; client_name: string; detail?: string; time?: string; ts: number; ref: DetailRef }[] = []
 
   if (summary.orders) {
     for (const order of summary.orders.list.filter(o => o.status === 'ready').slice(0, 3)) {
@@ -527,6 +527,7 @@ function buildActivityFeed(summary: DashboardSummary) {
         detail: order.reference ? `#${order.reference}` : undefined,
         time: formatDateTime(order.ready_at),
         ts,
+        ref: { type: 'order', id: order.id, clientName: order.client_name },
       })
     }
   }
@@ -540,6 +541,7 @@ function buildActivityFeed(summary: DashboardSummary) {
         client_name: appt.client_name,
         time: formatTime(appt.scheduled_at),
         ts,
+        ref: { type: 'appointment', id: appt.id, clientName: appt.client_name },
       })
     }
   }
@@ -552,6 +554,7 @@ function buildActivityFeed(summary: DashboardSummary) {
         client_name: coupon.client_name,
         detail: coupon.reward_title ?? undefined,
         ts: 0,
+        ref: { type: 'coupon', id: coupon.id, clientName: coupon.client_name, rewardTitle: coupon.reward_title, expiresAt: coupon.expires_at },
       })
     }
   }
@@ -559,7 +562,7 @@ function buildActivityFeed(summary: DashboardSummary) {
   return items.sort((a, b) => b.ts - a.ts).slice(0, 5)
 }
 
-function ActivityFeed({ summary }: { summary: DashboardSummary }) {
+function ActivityFeed({ summary, onOpenDetail }: { summary: DashboardSummary; onOpenDetail: (ref: DetailRef) => void }) {
   const items = buildActivityFeed(summary)
   if (items.length === 0) return null
   return (
@@ -571,9 +574,9 @@ function ActivityFeed({ summary }: { summary: DashboardSummary }) {
         {items.map((item) => {
           const meta = ACTIVITY_META[item.type]
           return (
-            <Link
+            <div
               key={item.id}
-              href={meta.href}
+              onClick={() => onOpenDetail(item.ref)}
               className="flex items-center gap-3 px-5 py-3 hover:bg-muted/50 transition-colors cursor-pointer"
             >
               <div className={`w-2 h-2 rounded-full ${meta.dot} shrink-0`} />
@@ -583,7 +586,7 @@ function ActivityFeed({ summary }: { summary: DashboardSummary }) {
                 {item.detail && <span className="text-sm text-muted-foreground"> · {item.detail}</span>}
               </div>
               {item.time && <span className="text-xs text-muted-foreground shrink-0">{item.time}</span>}
-            </Link>
+            </div>
           )
         })}
       </div>
@@ -710,7 +713,7 @@ export default function DashboardPage() {
       ) : null}
 
       {/* 3 — Activité récente */}
-      {!loading && summary && <ActivityFeed summary={summary} />}
+      {!loading && summary && <ActivityFeed summary={summary} onOpenDetail={setDetail} />}
 
       {/* Detail panel */}
       <DashboardDetailPanel
