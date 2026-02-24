@@ -189,8 +189,9 @@ function FocusOrders({
 }
 
 function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appointments']> }) {
+  const router = useRouter()
   const { metrics, list } = data
-  const nextLabel = metrics.next_at ? formatTime(metrics.next_at) : '—'
+  const hasNoShow = metrics.no_show_today > 0
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden flex">
       <div className="w-1 bg-violet-400 shrink-0" />
@@ -212,18 +213,18 @@ function FocusAppointments({ data }: { data: NonNullable<DashboardSummary['appoi
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-violet-50 dark:bg-violet-950/40 rounded-xl px-3 py-3 text-center">
+          <button onClick={() => router.push('/appointments?filter=today')} className="bg-violet-50 dark:bg-violet-950/40 rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer">
             <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{metrics.today_count}</p>
             <p className="text-[11px] font-medium text-violet-700/70 dark:text-violet-400/70 mt-0.5">Aujourd&apos;hui</p>
-          </div>
-          <div className={`rounded-xl px-3 py-3 text-center ${metrics.next_at ? 'bg-emerald-50 dark:bg-emerald-950/40' : 'bg-muted/40'}`}>
-            <p className={`text-2xl font-bold ${metrics.next_at ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>{nextLabel}</p>
-            <p className={`text-[11px] font-medium mt-0.5 ${metrics.next_at ? 'text-emerald-700/70 dark:text-emerald-400/70' : 'text-muted-foreground'}`}>Prochain</p>
-          </div>
-          <div className={`rounded-xl px-3 py-3 text-center ${metrics.no_show_today > 0 ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted/40'}`}>
-            <p className={`text-2xl font-bold ${metrics.no_show_today > 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.no_show_today}</p>
-            <p className={`text-[11px] font-medium mt-0.5 ${metrics.no_show_today > 0 ? 'text-red-700/70 dark:text-red-400/70' : 'text-muted-foreground'}`}>Absences</p>
-          </div>
+          </button>
+          <button onClick={() => router.push('/appointments?filter=tomorrow')} className="bg-muted/40 rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer">
+            <p className="text-2xl font-bold text-foreground">{metrics.tomorrow_count}</p>
+            <p className="text-[11px] font-medium text-muted-foreground mt-0.5">Demain</p>
+          </button>
+          <button onClick={() => router.push('/appointments?filter=no_show')} className={`rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer ${hasNoShow ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted/40'}`}>
+            <p className={`text-2xl font-bold ${hasNoShow ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.no_show_today}</p>
+            <p className={`text-[11px] font-medium mt-0.5 ${hasNoShow ? 'text-red-700/70 dark:text-red-400/70' : 'text-muted-foreground'}`}>Absences auj.</p>
+          </button>
         </div>
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-1">Aucun RDV aujourd&apos;hui</p>
@@ -384,8 +385,9 @@ function SecondaryOrders({
 }
 
 function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['appointments']> }) {
+  const router = useRouter()
   const { metrics, list } = data
-  const nextLabel = metrics.next_at ? formatTime(metrics.next_at) : '—'
+  const hasNoShow = metrics.no_show_today > 0
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
@@ -400,18 +402,18 @@ function SecondaryAppointments({ data }: { data: NonNullable<DashboardSummary['a
         </Link>
       </div>
       <div className="flex gap-2 px-3 py-3 border-b border-border/50">
-        <div className="flex-1 bg-violet-50 dark:bg-violet-950/30 rounded-lg px-2 py-2 text-center">
+        <button onClick={() => router.push('/appointments?filter=today')} className="flex-1 bg-violet-50 dark:bg-violet-950/30 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer">
           <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{metrics.today_count}</p>
           <p className="text-[10px] text-violet-700/60 dark:text-violet-400/60 font-medium mt-0.5">Auj.</p>
-        </div>
-        <div className={`flex-1 rounded-lg px-2 py-2 text-center ${metrics.next_at ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-muted/40'}`}>
-          <p className={`text-xl font-bold ${metrics.next_at ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>{nextLabel}</p>
-          <p className={`text-[10px] font-medium mt-0.5 ${metrics.next_at ? 'text-emerald-700/60 dark:text-emerald-400/60' : 'text-muted-foreground'}`}>Prochain</p>
-        </div>
-        <div className={`flex-1 rounded-lg px-2 py-2 text-center ${metrics.no_show_today > 0 ? 'bg-red-50 dark:bg-red-950/30' : 'bg-muted/40'}`}>
-          <p className={`text-xl font-bold ${metrics.no_show_today > 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.no_show_today}</p>
-          <p className={`text-[10px] font-medium mt-0.5 ${metrics.no_show_today > 0 ? 'text-red-700/60 dark:text-red-400/60' : 'text-muted-foreground'}`}>Absences</p>
-        </div>
+        </button>
+        <button onClick={() => router.push('/appointments?filter=tomorrow')} className="flex-1 bg-muted/40 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer">
+          <p className="text-xl font-bold text-foreground">{metrics.tomorrow_count}</p>
+          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Demain</p>
+        </button>
+        <button onClick={() => router.push('/appointments?filter=no_show')} className={`flex-1 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer ${hasNoShow ? 'bg-red-50 dark:bg-red-950/30' : 'bg-muted/40'}`}>
+          <p className={`text-xl font-bold ${hasNoShow ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.no_show_today}</p>
+          <p className={`text-[10px] font-medium mt-0.5 ${hasNoShow ? 'text-red-700/60 dark:text-red-400/60' : 'text-muted-foreground'}`}>Absences auj.</p>
+        </button>
       </div>
       <div className="space-y-1.5 p-3">
         {list.length === 0 ? (

@@ -450,15 +450,35 @@ export default function AppointmentsPage() {
     }).catch(() => {})
   }, [fetchAppointments])
 
-  // Auto-open detail from URL param (e.g. from dashboard click)
+  // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const id = params.get('id')
-    if (!id || appointments.length === 0) return
-    const found = appointments.find(a => a.id === id)
-    if (found) {
-      setSelected(found)
-      setDetailOpen(true)
+    const id     = params.get('id')
+    const filter = params.get('filter')
+
+    if (id && appointments.length > 0) {
+      const found = appointments.find(a => a.id === id)
+      if (found) {
+        setSelected(found)
+        setDetailOpen(true)
+        window.history.replaceState(null, '', '/appointments')
+      }
+    } else if (filter) {
+      if (filter === 'today') {
+        setViewMode('list')
+        setListTab('upcoming')
+      } else if (filter === 'tomorrow') {
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+        setViewMode('list')
+        setListTab('upcoming')
+        setUpcomingGotoDate(tomorrowStr)
+      } else if (filter === 'no_show') {
+        setViewMode('list')
+        setListTab('history')
+        setHistoryStatusFilter('no_show')
+      }
       window.history.replaceState(null, '', '/appointments')
     }
   }, [appointments])

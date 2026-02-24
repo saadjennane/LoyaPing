@@ -56,18 +56,18 @@ export default function LoyaltyDashboardCard({ data }: Props) {
         <div className="flex-1 min-w-0">
           <h2 className="text-sm font-semibold text-foreground">Fidélité</h2>
           <p className="text-xs text-muted-foreground">
-            {metrics.unlocked_today > 0
-              ? `${metrics.unlocked_today} coupon${metrics.unlocked_today !== 1 ? 's' : ''} débloqué${metrics.unlocked_today !== 1 ? 's' : ''} aujourd\u2019hui`
-              : "Aucun coupon débloqué aujourd\u2019hui"}
+            {metrics.active_coupons > 0
+              ? `${metrics.active_coupons} coupon${metrics.active_coupons !== 1 ? 's' : ''} actif${metrics.active_coupons !== 1 ? 's' : ''}`
+              : "Aucun coupon actif"}
           </p>
         </div>
       </div>
 
       {/* Metrics */}
       <div className="flex gap-2 px-4 py-3 border-b border-border/50">
-        <MetricPill value={metrics.active_coupons}      label="Coupons actifs"  accent={metrics.active_coupons > 0 ? 'amber' : undefined} />
-        <MetricPill value={metrics.unlocked_today}      label="Aujourd&apos;hui" accent={metrics.unlocked_today > 0 ? 'amber' : undefined} />
-        <MetricPill value={metrics.clients_with_points} label="Clients actifs"  accent={metrics.clients_with_points > 0 ? 'blue' : undefined} />
+        <MetricPill value={metrics.active_coupons}   label="Actifs"        accent={metrics.active_coupons > 0 ? 'amber' : undefined} />
+        <MetricPill value={metrics.birthday_coupons} label="Anniversaires" accent={metrics.birthday_coupons > 0 ? 'amber' : undefined} />
+        <MetricPill value={metrics.expiring_soon}    label="Expirent bientôt" accent={metrics.expiring_soon > 0 ? 'blue' : undefined} />
       </div>
 
       {/* List */}
