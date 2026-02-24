@@ -149,6 +149,7 @@ async function processGoogleEvent(
 /**
  * Fetches new/changed events from Google Calendar and upserts them into LoyaPing.
  * Uses incremental sync (syncToken) when available; falls back to full sync on 410.
+ * Reads calendar_id from calendar_watch_channels (defaults to 'primary').
  */
 export async function syncGoogleCalendar(businessId = DEFAULT_BUSINESS_ID): Promise<void> {
   const db    = createServerClient()
@@ -156,12 +157,13 @@ export async function syncGoogleCalendar(businessId = DEFAULT_BUSINESS_ID): Prom
 
   const { data: channel } = await db
     .from('calendar_watch_channels')
-    .select('sync_token')
+    .select('sync_token, calendar_id')
     .eq('business_id', businessId)
     .eq('provider', 'google')
     .maybeSingle()
 
-  const syncToken = channel?.sync_token ?? null
+  const syncToken  = channel?.sync_token ?? null
+  const calendarId = channel?.calendar_id ?? 'primary'
 
   const fetchEvents = async (useSyncToken: boolean): Promise<{ events: GoogleEvent[]; nextSyncToken: string | null }> => {
     const params = new URLSearchParams()
@@ -175,7 +177,7 @@ export async function syncGoogleCalendar(businessId = DEFAULT_BUSINESS_ID): Prom
     }
 
     const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
       { headers: { Authorization: `Bearer ${token}` } },
     )
 
@@ -214,6 +216,7 @@ export async function syncGoogleCalendar(businessId = DEFAULT_BUSINESS_ID): Prom
  * Creates or updates a Google Calendar event from a LoyaPing appointment.
  * If the appointment already has a google_event_id, updates the existing event.
  * Otherwise creates a new event and stores the event ID on the appointment.
+ * Uses the calendar_id stored in calendar_watch_channels (defaults to 'primary').
  */
 export async function pushAppointmentToGoogle(
   appointmentId: string,
@@ -241,6 +244,15 @@ export async function pushAppointmentToGoogle(
     clientEmail = client?.email ?? null
   }
 
+  // Read selected calendar
+  const { data: ch } = await db
+    .from('calendar_watch_channels')
+    .select('calendar_id')
+    .eq('business_id', businessId)
+    .eq('provider', 'google')
+    .maybeSingle()
+  const calId = encodeURIComponent(ch?.calendar_id ?? 'primary')
+
   // Compute end time: use ended_at or scheduled_at + 1 hour
   const startMs = new Date(appt.scheduled_at).getTime()
   const endIso  = appt.ended_at ?? new Date(startMs + 60 * 60 * 1000).toISOString()
@@ -255,7 +267,7 @@ export async function pushAppointmentToGoogle(
   if (appt.google_event_id) {
     // Update existing event
     const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${appt.google_event_id}`,
+      `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${appt.google_event_id}`,
       {
         method:  'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -268,7 +280,7 @@ export async function pushAppointmentToGoogle(
   } else {
     // Create new event
     const res = await fetch(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+      `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
       {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -289,6 +301,7 @@ export async function pushAppointmentToGoogle(
 
 /**
  * Deletes a Google Calendar event. Silently ignores 404/410 (already deleted).
+ * Uses the calendar_id stored in calendar_watch_channels (defaults to 'primary').
  */
 export async function deleteGoogleEvent(
   googleEventId: string,
@@ -297,8 +310,16 @@ export async function deleteGoogleEvent(
   const db    = createServerClient()
   const token = await getValidGoogleToken(businessId, db)
 
+  const { data: ch } = await db
+    .from('calendar_watch_channels')
+    .select('calendar_id')
+    .eq('business_id', businessId)
+    .eq('provider', 'google')
+    .maybeSingle()
+  const calId = encodeURIComponent(ch?.calendar_id ?? 'primary')
+
   const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${googleEventId}`,
     { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
   )
 
@@ -313,17 +334,19 @@ export async function deleteGoogleEvent(
 /**
  * Registers a Google Calendar push notification channel.
  * Upserts into calendar_watch_channels and runs an initial sync.
+ * @param calendarId — Google calendar ID to watch (default: 'primary')
  */
 export async function startGoogleWatch(
   businessId: string,
   db: SupabaseClient,
   accessToken: string,
+  calendarId = 'primary',
 ): Promise<void> {
   const channelId  = crypto.randomUUID()
   const webhookUrl = `${process.env.APP_URL}/api/calendar/google/webhook`
 
   const res = await fetch(
-    'https://www.googleapis.com/calendar/v3/calendars/primary/events/watch',
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/watch`,
     {
       method:  'POST',
       headers: {
@@ -352,6 +375,7 @@ export async function startGoogleWatch(
       channel_id:  id,
       resource_id: resourceId ?? null,
       expiry_at:   expiryAt,
+      calendar_id: calendarId,
     },
     { onConflict: 'business_id,provider' },
   )

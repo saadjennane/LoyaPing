@@ -153,6 +153,8 @@ async function processMicrosoftEvent(
 /**
  * Pulls new/changed events from Microsoft Calendar via delta query.
  * Uses stored deltaLink for incremental sync; falls back to full sync on 410.
+ * Reads calendar_id from calendar_watch_channels (defaults to 'primary').
+ * 'primary' → uses me/calendarView/delta; otherwise uses me/calendars/{id}/events/delta.
  */
 export async function syncMicrosoftCalendar(businessId = DEFAULT_BUSINESS_ID): Promise<void> {
   const db    = createServerClient()
@@ -160,18 +162,26 @@ export async function syncMicrosoftCalendar(businessId = DEFAULT_BUSINESS_ID): P
 
   const { data: channel } = await db
     .from('calendar_watch_channels')
-    .select('sync_token')
+    .select('sync_token, calendar_id')
     .eq('business_id', businessId)
     .eq('provider', 'microsoft')
     .maybeSingle()
 
-  const deltaLink = channel?.sync_token ?? null
+  const deltaLink  = channel?.sync_token ?? null
+  const calendarId = channel?.calendar_id ?? 'primary'
 
   const fetchDelta = async (url?: string): Promise<{ events: MicrosoftEvent[]; nextDeltaLink: string | null }> => {
     const now    = new Date().toISOString()
     const future = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString()
-    const fetchUrl = url
-      ?? `${GRAPH_API}/me/calendarView/delta?startDateTime=${now}&endDateTime=${future}&$top=250`
+
+    let baseUrl: string
+    if (calendarId === 'primary') {
+      baseUrl = `${GRAPH_API}/me/calendarView/delta?startDateTime=${now}&endDateTime=${future}&$top=250`
+    } else {
+      baseUrl = `${GRAPH_API}/me/calendars/${calendarId}/events/delta?$top=250`
+    }
+
+    const fetchUrl = url ?? baseUrl
 
     const res = await fetch(fetchUrl, {
       headers: { Authorization: `Bearer ${token}` },
@@ -218,15 +228,22 @@ export async function syncMicrosoftCalendar(businessId = DEFAULT_BUSINESS_ID): P
 /**
  * Registers a Microsoft Graph change notification subscription for calendar events.
  * Subscriptions expire after 3 days — renewed daily by the cron job.
+ * @param calendarId — Microsoft calendar ID ('primary' uses the default calendar resource)
  */
 export async function startMicrosoftSubscription(
   businessId: string,
   db: SupabaseClient,
   accessToken: string,
+  calendarId = 'primary',
 ): Promise<void> {
   const webhookUrl = `${process.env.APP_URL}/api/calendar/microsoft/webhook`
   // Max expiry for calendar subscriptions is 4320 minutes (3 days)
   const expiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+
+  // 'primary' uses the default calendar resource; otherwise use specific calendar
+  const resource = calendarId === 'primary'
+    ? 'me/calendar/events'
+    : `me/calendars/${calendarId}/events`
 
   const res = await fetch(`${GRAPH_API}/subscriptions`, {
     method: 'POST',
@@ -237,7 +254,7 @@ export async function startMicrosoftSubscription(
     body: JSON.stringify({
       changeType:         'created,updated,deleted',
       notificationUrl:    webhookUrl,
-      resource:           'me/calendar/events',
+      resource,
       expirationDateTime: expiry,
     }),
   })
@@ -255,6 +272,7 @@ export async function startMicrosoftSubscription(
       channel_id:  sub.id,
       resource_id: null,
       expiry_at:   sub.expirationDateTime ?? expiry,
+      calendar_id: calendarId,
     },
     { onConflict: 'business_id,provider' },
   )
@@ -298,6 +316,7 @@ export async function renewMicrosoftSubscription(
 
 /**
  * Creates or updates a Microsoft Calendar event from a LoyaPing appointment.
+ * Reads calendar_id from calendar_watch_channels (defaults to 'primary').
  */
 export async function pushAppointmentToMicrosoft(
   appointmentId: string,
@@ -324,6 +343,15 @@ export async function pushAppointmentToMicrosoft(
     clientEmail = client?.email ?? null
   }
 
+  // Read selected calendar
+  const { data: ch } = await db
+    .from('calendar_watch_channels')
+    .select('calendar_id')
+    .eq('business_id', businessId)
+    .eq('provider', 'microsoft')
+    .maybeSingle()
+  const calId = ch?.calendar_id ?? 'primary'
+
   const startMs = new Date(appt.scheduled_at).getTime()
   const endIso  = appt.ended_at ?? new Date(startMs + 60 * 60 * 1000).toISOString()
 
@@ -337,9 +365,9 @@ export async function pushAppointmentToMicrosoft(
   }
 
   if (appt.microsoft_event_id) {
-    // Update existing event
+    // Update existing event (event ID is sufficient, no calendarId needed)
     const res = await fetch(
-      `${GRAPH_API}/me/calendar/events/${appt.microsoft_event_id}`,
+      `${GRAPH_API}/me/events/${appt.microsoft_event_id}`,
       {
         method:  'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -350,15 +378,16 @@ export async function pushAppointmentToMicrosoft(
       throw new Error(`[ms-calendar] Event update failed: ${await res.text()}`)
     }
   } else {
-    // Create new event
-    const res = await fetch(
-      `${GRAPH_API}/me/calendar/events`,
-      {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify(eventBody),
-      },
-    )
+    // Create new event in the selected calendar
+    const createUrl = calId === 'primary'
+      ? `${GRAPH_API}/me/calendar/events`
+      : `${GRAPH_API}/me/calendars/${calId}/events`
+
+    const res = await fetch(createUrl, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(eventBody),
+    })
     if (!res.ok) {
       throw new Error(`[ms-calendar] Event creation failed: ${await res.text()}`)
     }
@@ -381,7 +410,7 @@ export async function deleteMicrosoftEvent(
   const token = await getValidMicrosoftToken(businessId, db)
 
   const res = await fetch(
-    `${GRAPH_API}/me/calendar/events/${eventId}`,
+    `${GRAPH_API}/me/events/${eventId}`,
     { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
   )
 

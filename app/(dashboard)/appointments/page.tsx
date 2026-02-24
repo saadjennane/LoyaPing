@@ -38,6 +38,15 @@ type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
 
+type CalendarImport = {
+  id: string
+  event_id: string
+  summary: string | null
+  start_at: string
+  end_at: string | null
+  attendees: string[] | null
+}
+
 const HOUR_START = 0
 const HOUR_END = 24
 const HOUR_HEIGHT = 64 // px per hour
@@ -77,11 +86,15 @@ function apptColorClass(status: string) {
 function TimeGrid({
   days,
   appointments,
+  imports,
   onSelect,
+  onSelectImport,
 }: {
   days: Date[]
   appointments: Appointment[]
+  imports: CalendarImport[]
   onSelect: (a: Appointment) => void
+  onSelectImport: (imp: CalendarImport) => void
 }) {
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => i) // 0..23
   const totalHeight = hours.length * HOUR_HEIGHT
@@ -94,8 +107,8 @@ function TimeGrid({
     }
   }, [])
 
-  function apptTop(appt: Appointment): number {
-    const d = parseISO(appt.scheduled_at)
+  function eventTop(isoDate: string): number {
+    const d = parseISO(isoDate)
     const dayStart = setMinutes(setHours(startOfDay(d), 0), 0)
     const mins = differenceInMinutes(d, dayStart)
     return Math.max(0, (mins / 60) * HOUR_HEIGHT)
@@ -146,6 +159,9 @@ function TimeGrid({
           const dayAppts = appointments.filter((a) =>
             isSameDay(parseISO(a.scheduled_at), day)
           )
+          const dayImports = imports.filter((i) =>
+            isSameDay(parseISO(i.start_at), day)
+          )
           return (
             <div
               key={day.toISOString()}
@@ -164,13 +180,25 @@ function TimeGrid({
                   key={appt.id}
                   onClick={() => onSelect(appt)}
                   className={`absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 truncate leading-tight border ${apptColorClass(appt.status)}`}
-                  style={{ top: apptTop(appt), minHeight: 24 }}
+                  style={{ top: eventTop(appt.scheduled_at), minHeight: 24 }}
                 >
                   <span className="font-semibold">
                     {format(parseISO(appt.scheduled_at), 'HH:mm')}
                   </span>{' '}
                   {clientFullName(appt.client as Client)}
                   {appt.reminderStatus?.hasFailed && ' ⚠'}
+                </button>
+              ))}
+              {dayImports.map((imp) => (
+                <button
+                  key={imp.id}
+                  onClick={() => onSelectImport(imp)}
+                  className="absolute left-0.5 right-0.5 rounded text-[11px] text-left px-1.5 py-0.5 truncate leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed"
+                  style={{ top: eventTop(imp.start_at), minHeight: 24 }}
+                >
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle shrink-0" />
+                  <span className="font-semibold">{format(parseISO(imp.start_at), 'HH:mm')}</span>{' '}
+                  {imp.summary || 'RDV sans client'}
                 </button>
               ))}
             </div>
@@ -186,11 +214,15 @@ function TimeGrid({
 function MonthGrid({
   anchor,
   appointments,
+  imports,
   onSelect,
+  onSelectImport,
 }: {
   anchor: Date
   appointments: Appointment[]
+  imports: CalendarImport[]
   onSelect: (a: Appointment) => void
+  onSelectImport: (imp: CalendarImport) => void
 }) {
   const monthStart = startOfMonth(anchor)
   const monthEnd = endOfMonth(anchor)
@@ -219,6 +251,9 @@ function MonthGrid({
         {days.map((day) => {
           const dayAppts = appointments.filter((a) =>
             isSameDay(parseISO(a.scheduled_at), day)
+          )
+          const dayImports = imports.filter((i) =>
+            isSameDay(parseISO(i.start_at), day)
           )
           const inMonth = isSameMonth(day, anchor)
           const isToday = isSameDay(day, new Date())
@@ -258,6 +293,17 @@ function MonthGrid({
                     +{dayAppts.length - 3} autres
                   </div>
                 )}
+                {dayImports.map((imp) => (
+                  <button
+                    key={imp.id}
+                    onClick={() => onSelectImport(imp)}
+                    className="w-full text-left text-[10px] rounded px-1 truncate bg-red-50 text-red-700 border border-red-200 border-dashed"
+                  >
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-0.5 align-middle" />
+                    {format(parseISO(imp.start_at), 'HH:mm')}{' '}
+                    {imp.summary || 'Sans client'}
+                  </button>
+                ))}
               </div>
             </div>
           )
@@ -357,6 +403,12 @@ export default function AppointmentsPage() {
   const [calendarConnected, setCalendarConnected] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false })
   const [syncing, setSyncing] = useState(false)
 
+  // ── Calendar imports (unmatched events with no client) ────────────────────
+  const [calendarImports, setCalendarImports] = useState<CalendarImport[]>([])
+  const [assignImport, setAssignImport]       = useState<CalendarImport | null>(null)
+  const [assignClientItem, setAssignClientItem] = useState<CustomerIndexItem | null>(null)
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
+
   const { addOrUpdate } = useCustomerIndex()
 
   const resetCreate = () => {
@@ -445,6 +497,12 @@ export default function AppointmentsPage() {
     setLoading(false)
   }, [])
 
+  const fetchCalendarImports = useCallback(async () => {
+    const res = await fetch('/api/calendar/imports')
+    const json = await res.json()
+    setCalendarImports(json.data ?? [])
+  }, [])
+
   const syncCalendar = async () => {
     setSyncing(true)
     try {
@@ -454,8 +512,31 @@ export default function AppointmentsPage() {
       await Promise.all(syncs)
       toast.success('Calendrier synchronisé')
       fetchAppointments()
+      fetchCalendarImports()
     } catch { toast.error('Erreur lors de la synchronisation') }
     finally { setSyncing(false) }
+  }
+
+  const handleAssignImport = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!assignImport || !assignClientItem) return
+    setAssignSubmitting(true)
+    const res = await fetch('/api/calendar/imports', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: assignImport.id, client_id: assignClientItem.id }),
+    })
+    const json = await res.json()
+    if (json.error) {
+      toast.error(json.error)
+    } else {
+      toast.success('Client assigné — RDV créé')
+      setAssignImport(null)
+      setAssignClientItem(null)
+      fetchAppointments()
+      fetchCalendarImports()
+    }
+    setAssignSubmitting(false)
   }
 
   useEffect(() => {
@@ -464,16 +545,18 @@ export default function AppointmentsPage() {
     fetch('/api/loyalty/programs').then((r) => r.json()).then((j) => {
       if (j.data) setLoyaltyProgram(j.data as LoyaltyProgram)
     }).catch(() => {})
-    // Fetch calendar connection status
+    // Fetch calendar connection status + imports if connected
     fetch('/api/calendar').then((r) => r.json()).then((j) => {
       if (j.data) {
-        setCalendarConnected({
+        const connected = {
           google:    !!j.data.google,
           microsoft: !!j.data.microsoft,
-        })
+        }
+        setCalendarConnected(connected)
+        if (connected.google || connected.microsoft) fetchCalendarImports()
       }
     }).catch(() => {})
-  }, [fetchAppointments])
+  }, [fetchAppointments, fetchCalendarImports])
 
   // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
@@ -1186,7 +1269,9 @@ export default function AppointmentsPage() {
         <MonthGrid
           anchor={anchor}
           appointments={appointments}
+          imports={calendarImports}
           onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
+          onSelectImport={(imp) => { setAssignImport(imp); setAssignClientItem(null) }}
         />
       ) : (
         // ── Time Grid ──────────────────────────────────────────────────────
@@ -1194,7 +1279,9 @@ export default function AppointmentsPage() {
           <TimeGrid
             days={days}
             appointments={appointments}
+            imports={calendarImports}
             onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
+            onSelectImport={(imp) => { setAssignImport(imp); setAssignClientItem(null) }}
           />
         </div>
       )}
@@ -1609,6 +1696,43 @@ export default function AppointmentsPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign calendar import to a client */}
+      <Dialog open={!!assignImport} onOpenChange={(o) => { if (!o) { setAssignImport(null); setAssignClientItem(null) } }}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assigner un client</DialogTitle>
+          </DialogHeader>
+          {assignImport && (
+            <div className="space-y-4 mt-2">
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm space-y-0.5">
+                <div className="font-medium text-red-900">{assignImport.summary || 'RDV sans titre'}</div>
+                <div className="text-red-700 text-xs">
+                  {format(parseISO(assignImport.start_at), 'EEEE dd MMM à HH:mm', { locale: fr })}
+                </div>
+                {assignImport.attendees && assignImport.attendees.length > 0 && (
+                  <div className="text-red-600 text-xs truncate">{assignImport.attendees.join(', ')}</div>
+                )}
+              </div>
+              <form onSubmit={handleAssignImport} className="space-y-3">
+                <CustomerAutocomplete
+                  autoFocus
+                  onSelect={(_, item) => setAssignClientItem(item)}
+                  placeholder="Rechercher un client..."
+                />
+                {assignClientItem && (
+                  <div className="text-xs text-muted-foreground px-1">
+                    Client sélectionné : <span className="font-medium text-foreground">{assignClientItem.display_name}</span>
+                  </div>
+                )}
+                <Button type="submit" className="w-full" disabled={assignSubmitting || !assignClientItem}>
+                  {assignSubmitting ? 'Assignation...' : 'Assigner et créer le RDV'}
+                </Button>
+              </form>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -68,6 +68,16 @@ export default function AppointmentsSettingsPage() {
   const [calendarLoading, setCalendarLoading]       = useState(false)
   const [calendarDisconnecting, setCalendarDisconnecting] = useState<string | null>(null)
 
+  // Google calendar picker
+  const [googleCalendars, setGoogleCalendars]     = useState<{ id: string; summary: string; primary: boolean }[]>([])
+  const [selectedGoogleCalId, setSelectedGoogleCalId] = useState('primary')
+  const [googleCalSaving, setGoogleCalSaving]     = useState(false)
+
+  // Microsoft calendar picker
+  const [msCalendars, setMsCalendars]             = useState<{ id: string; name: string; isDefaultCalendar: boolean }[]>([])
+  const [selectedMsCalId, setSelectedMsCalId]     = useState('primary')
+  const [msCalSaving, setMsCalSaving]             = useState(false)
+
   const fetchApptNotif = useCallback(async () => {
     setApptLoading(true)
     const res  = await fetch('/api/settings/appointment-notifications')
@@ -90,7 +100,35 @@ export default function AppointmentsSettingsPage() {
     setCalendarLoading(true)
     const res  = await fetch('/api/calendar')
     const json = await res.json()
-    if (json.data) setCalendarStatus(json.data)
+    if (json.data) {
+      setCalendarStatus(json.data)
+
+      // Fetch Google calendar list if connected
+      if (json.data.google) {
+        fetch('/api/calendar/google/calendars')
+          .then(r => r.json())
+          .then(cJson => {
+            if (cJson.data) {
+              setGoogleCalendars(cJson.data.calendars ?? [])
+              setSelectedGoogleCalId(cJson.data.selectedId ?? 'primary')
+            }
+          })
+          .catch(() => {})
+      }
+
+      // Fetch Microsoft calendar list if connected
+      if (json.data.microsoft) {
+        fetch('/api/calendar/microsoft/calendars')
+          .then(r => r.json())
+          .then(cJson => {
+            if (cJson.data) {
+              setMsCalendars(cJson.data.calendars ?? [])
+              setSelectedMsCalId(cJson.data.selectedId ?? 'primary')
+            }
+          })
+          .catch(() => {})
+      }
+    }
     setCalendarLoading(false)
   }, [])
 
@@ -124,8 +162,38 @@ export default function AppointmentsSettingsPage() {
     else {
       toast.success(t('settings.toast.calendarDisconnected', { name: provider === 'google' ? 'Google Calendar' : 'Outlook Calendar' }))
       setCalendarStatus((s) => ({ ...s, [provider]: null }))
+      if (provider === 'google') setGoogleCalendars([])
+      if (provider === 'microsoft') setMsCalendars([])
     }
     setCalendarDisconnecting(null)
+  }
+
+  const handleChangeGoogleCalendar = async (calId: string) => {
+    setGoogleCalSaving(true)
+    setSelectedGoogleCalId(calId)
+    const res = await fetch('/api/calendar/google/watch', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendar_id: calId }),
+    })
+    const json = await res.json()
+    if (json.error) toast.error(json.error)
+    else toast.success('Calendrier Google mis à jour')
+    setGoogleCalSaving(false)
+  }
+
+  const handleChangeMsCalendar = async (calId: string) => {
+    setMsCalSaving(true)
+    setSelectedMsCalId(calId)
+    const res = await fetch('/api/calendar/microsoft/watch', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendar_id: calId }),
+    })
+    const json = await res.json()
+    if (json.error) toast.error(json.error)
+    else toast.success('Calendrier Outlook mis à jour')
+    setMsCalSaving(false)
   }
 
   const apptReminders = [
@@ -161,36 +229,82 @@ export default function AppointmentsSettingsPage() {
 
       {/* Calendar sync — compact */}
       {!calendarLoading && (
-        <div className="flex flex-wrap gap-2">
-          {!calendarStatus.google && !calendarStatus.microsoft && (
-            <>
-              <a href="/api/calendar/google/connect">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <GoogleLogo />Sync Google Calendar
-                </Button>
-              </a>
-              <a href="/api/calendar/microsoft/connect">
-                <Button variant="outline" size="sm" className="gap-2">
-                  <MicrosoftLogo />Sync Outlook Calendar
-                </Button>
-              </a>
-            </>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {!calendarStatus.google && !calendarStatus.microsoft && (
+              <>
+                <a href="/api/calendar/google/connect">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <GoogleLogo />Sync Google Calendar
+                  </Button>
+                </a>
+                <a href="/api/calendar/microsoft/connect">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <MicrosoftLogo />Sync Outlook Calendar
+                  </Button>
+                </a>
+              </>
+            )}
+            {calendarStatus.google && (
+              <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive border-destructive/40"
+                disabled={calendarDisconnecting === 'google'}
+                onClick={() => handleDisconnectCalendar('google')}>
+                <GoogleLogo />
+                {calendarDisconnecting === 'google' ? t('settings.disconnecting') : 'Unsync Google Calendar'}
+              </Button>
+            )}
+            {calendarStatus.microsoft && (
+              <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive border-destructive/40"
+                disabled={calendarDisconnecting === 'microsoft'}
+                onClick={() => handleDisconnectCalendar('microsoft')}>
+                <MicrosoftLogo />
+                {calendarDisconnecting === 'microsoft' ? t('settings.disconnecting') : 'Unsync Outlook Calendar'}
+              </Button>
+            )}
+          </div>
+
+          {/* Google calendar picker */}
+          {calendarStatus.google && googleCalendars.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <GoogleLogo />
+                <span className="text-xs text-muted-foreground">Calendrier synchronisé :</span>
+              </div>
+              <Select value={selectedGoogleCalId} onValueChange={handleChangeGoogleCalendar} disabled={googleCalSaving}>
+                <SelectTrigger className="h-7 text-xs w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {googleCalendars.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.summary}{c.primary ? ' (principal)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
-          {calendarStatus.google && (
-            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive border-destructive/40"
-              disabled={calendarDisconnecting === 'google'}
-              onClick={() => handleDisconnectCalendar('google')}>
-              <GoogleLogo />
-              {calendarDisconnecting === 'google' ? t('settings.disconnecting') : 'Unsync Google Calendar'}
-            </Button>
-          )}
-          {calendarStatus.microsoft && (
-            <Button variant="outline" size="sm" className="gap-2 text-destructive hover:text-destructive border-destructive/40"
-              disabled={calendarDisconnecting === 'microsoft'}
-              onClick={() => handleDisconnectCalendar('microsoft')}>
-              <MicrosoftLogo />
-              {calendarDisconnecting === 'microsoft' ? t('settings.disconnecting') : 'Unsync Outlook Calendar'}
-            </Button>
+
+          {/* Outlook calendar picker */}
+          {calendarStatus.microsoft && msCalendars.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <MicrosoftLogo />
+                <span className="text-xs text-muted-foreground">Calendrier synchronisé :</span>
+              </div>
+              <Select value={selectedMsCalId} onValueChange={handleChangeMsCalendar} disabled={msCalSaving}>
+                <SelectTrigger className="h-7 text-xs w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {msCalendars.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}{c.isDefaultCalendar ? ' (principal)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
         </div>
       )}
