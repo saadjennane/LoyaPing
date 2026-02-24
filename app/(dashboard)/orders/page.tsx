@@ -1125,24 +1125,24 @@ export default function OrdersPage() {
                     </div>
                   )}
                   {(selectedOrder.status === 'pending' || selectedOrder.status === 'ready' || selectedOrder.status === 'completed') && (
-                    <div className="flex gap-2 pt-3 border-t">
+                    <div className="flex flex-col gap-2 pt-3 border-t">
                       {selectedOrder.status === 'pending' && (
-                        <Button className="flex-1" variant="outline" onClick={() => markReady(selectedOrder.id)}>
+                        <Button className="w-full" variant="outline" onClick={() => markReady(selectedOrder.id)}>
                           <CheckCircle className="h-4 w-4 mr-1" />{t('orders.markReady')}
                         </Button>
                       )}
                       {selectedOrder.status === 'ready' && (
                         <>
-                          <Button className="flex-1" variant="outline" onClick={() => markPending(selectedOrder.id)}>
-                            <Undo2 className="h-4 w-4 mr-1" />{t('orders.markPending')}
-                          </Button>
-                          <Button className="flex-1" onClick={() => markPickedUp(selectedOrder.id, selectedOrder.reference ?? '')}>
+                          <Button className="w-full" onClick={() => markPickedUp(selectedOrder.id, selectedOrder.reference ?? '')}>
                             <Package className="h-4 w-4 mr-1" />{t('orders.markPickedUp')}
+                          </Button>
+                          <Button className="w-full" variant="outline" onClick={() => markPending(selectedOrder.id)}>
+                            <Undo2 className="h-4 w-4 mr-1" />{t('orders.markPending')}
                           </Button>
                         </>
                       )}
                       {selectedOrder.status === 'completed' && (
-                        <Button className="flex-1" variant="outline" onClick={() => revertCompleted(selectedOrder.id)}>
+                        <Button className="w-full" variant="outline" onClick={() => revertCompleted(selectedOrder.id)}>
                           <Undo2 className="h-4 w-4 mr-1" />Remettre à prête
                         </Button>
                       )}
