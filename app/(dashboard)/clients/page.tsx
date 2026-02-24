@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -1045,10 +1045,10 @@ export default function ClientsPage() {
 
       {/* ── Detail Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={!!detailClient} onOpenChange={(o) => !o && closeDetail()}>
-        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] flex flex-col p-0 gap-0">
+        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] flex flex-col p-0 gap-0" showCloseButton={false}>
 
           {/* ── Header ─────────────────────────────────────────────────── */}
-          <DialogHeader className="flex-row items-center gap-2 pr-14 space-y-0 px-6 pt-6 pb-4 shrink-0 border-b">
+          <DialogHeader className="flex-row items-center gap-2 space-y-0 px-6 pt-6 pb-4 shrink-0 border-b">
             {detailView !== 'main' && (
               <Button
                 variant="ghost" size="icon"
@@ -1063,37 +1063,44 @@ export default function ClientsPage() {
                 ? (detailClient ? clientFullName(detailClient) : t('clients.clientSheet'))
                 : t(VIEW_TITLE_KEYS[detailView as ViewTitleKey])}
             </DialogTitle>
-            {detailView === 'main' && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="shrink-0 h-8 w-8">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => goToDetailView('edit_info')}>
-                    <Edit2 className="h-4 w-4 mr-2" />{t('clients.actions.editInfo')}
-                  </DropdownMenuItem>
-                  {loyaltyOn && (
-                    <DropdownMenuItem onClick={() => goToDetailView('edit_points')}>
-                      <Coins className="h-4 w-4 mr-2" />{t('clients.actions.editPoints')}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {detailView === 'main' && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => goToDetailView('edit_info')}>
+                      <Edit2 className="h-4 w-4 mr-2" />{t('clients.actions.editInfo')}
                     </DropdownMenuItem>
-                  )}
-                  {loyaltyOn && (
-                    <DropdownMenuItem onClick={() => goToDetailView('unlock_reward')}>
-                      <Gift className="h-4 w-4 mr-2" />{t('clients.actions.unlockReward')}
+                    {loyaltyOn && (
+                      <DropdownMenuItem onClick={() => goToDetailView('edit_points')}>
+                        <Coins className="h-4 w-4 mr-2" />{t('clients.actions.editPoints')}
+                      </DropdownMenuItem>
+                    )}
+                    {loyaltyOn && (
+                      <DropdownMenuItem onClick={() => goToDetailView('unlock_reward')}>
+                        <Gift className="h-4 w-4 mr-2" />{t('clients.actions.unlockReward')}
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => goToDetailView('delete_confirm')}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />{t('clients.actions.delete')}
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => goToDetailView('delete_confirm')}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />{t('clients.actions.delete')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-70 hover:opacity-100">
+                  <X className="h-4 w-4" />
+                </Button>
+              </DialogClose>
+            </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
