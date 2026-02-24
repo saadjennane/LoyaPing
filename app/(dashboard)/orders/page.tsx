@@ -152,16 +152,25 @@ export default function OrdersPage() {
 
   useEffect(() => { fetchOrders() }, [])
 
-  // Auto-open detail from URL param (e.g. from dashboard click)
+  // Auto-open detail or apply filter from URL params (e.g. from dashboard click)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const id = params.get('id')
-    if (!id || orders.length === 0) return
-    const found = orders.find(o => o.id === id)
-    if (found) {
-      setSelectedOrder(found)
-      setDetailOpen(true)
-      window.history.replaceState(null, '', '/orders')
+    const id     = params.get('id')
+    const filter = params.get('filter')
+
+    if (id && orders.length > 0) {
+      const found = orders.find(o => o.id === id)
+      if (found) {
+        setSelectedOrder(found)
+        setDetailOpen(true)
+        window.history.replaceState(null, '', '/orders')
+      }
+    } else if (filter) {
+      const validTabs = ['pending', 'ready', 'non_retrieved', 'completed']
+      if (validTabs.includes(filter)) {
+        setActiveTab(filter)
+        window.history.replaceState(null, '', '/orders')
+      }
     }
   }, [orders])
 

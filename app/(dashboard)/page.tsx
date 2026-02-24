@@ -129,18 +129,18 @@ function FocusOrders({
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-orange-50 dark:bg-orange-950/40 rounded-xl px-3 py-3 text-center">
+          <button onClick={() => router.push('/orders?filter=ready')} className="bg-orange-50 dark:bg-orange-950/40 rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer">
             <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{metrics.ready_count}</p>
             <p className="text-[11px] font-medium text-orange-700/70 dark:text-orange-400/70 mt-0.5">Prêtes</p>
-          </div>
-          <div className="bg-muted/40 rounded-xl px-3 py-3 text-center">
+          </button>
+          <button onClick={() => router.push('/orders?filter=pending')} className="bg-muted/40 rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer">
             <p className="text-2xl font-bold text-foreground">{metrics.pending_count}</p>
             <p className="text-[11px] font-medium text-muted-foreground mt-0.5">En attente</p>
-          </div>
-          <div className={`rounded-xl px-3 py-3 text-center ${hasUncollected ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted/40'}`}>
+          </button>
+          <button onClick={() => router.push('/orders?filter=non_retrieved')} className={`rounded-xl px-3 py-3 text-center hover:opacity-80 transition-opacity cursor-pointer ${hasUncollected ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted/40'}`}>
             <p className={`text-2xl font-bold ${hasUncollected ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.uncollected_3reminders}</p>
             <p className={`text-[11px] font-medium mt-0.5 ${hasUncollected ? 'text-red-700/70 dark:text-red-400/70' : 'text-muted-foreground'}`}>3+ rappels</p>
-          </div>
+          </button>
         </div>
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-1">Aucune commande en cours</p>
@@ -339,18 +339,18 @@ function SecondaryOrders({
         </Link>
       </div>
       <div className="flex gap-2 px-3 py-3 border-b border-border/50">
-        <div className="flex-1 bg-orange-50 dark:bg-orange-950/30 rounded-lg px-2 py-2 text-center">
+        <button onClick={() => router.push('/orders?filter=ready')} className="flex-1 bg-orange-50 dark:bg-orange-950/30 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer">
           <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{metrics.ready_count}</p>
           <p className="text-[10px] text-orange-700/60 dark:text-orange-400/60 font-medium mt-0.5">Prêtes</p>
-        </div>
-        <div className="flex-1 bg-muted/40 rounded-lg px-2 py-2 text-center">
+        </button>
+        <button onClick={() => router.push('/orders?filter=pending')} className="flex-1 bg-muted/40 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer">
           <p className="text-xl font-bold text-foreground">{metrics.pending_count}</p>
           <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Attente</p>
-        </div>
-        <div className={`flex-1 rounded-lg px-2 py-2 text-center ${hasUncollected ? 'bg-red-50 dark:bg-red-950/30' : 'bg-muted/40'}`}>
+        </button>
+        <button onClick={() => router.push('/orders?filter=non_retrieved')} className={`flex-1 rounded-lg px-2 py-2 text-center hover:opacity-80 transition-opacity cursor-pointer ${hasUncollected ? 'bg-red-50 dark:bg-red-950/30' : 'bg-muted/40'}`}>
           <p className={`text-xl font-bold ${hasUncollected ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{metrics.uncollected_3reminders}</p>
           <p className={`text-[10px] font-medium mt-0.5 ${hasUncollected ? 'text-red-700/60 dark:text-red-400/60' : 'text-muted-foreground'}`}>Urgents</p>
-        </div>
+        </button>
       </div>
       <div className="space-y-1.5 p-3">
         {list.length === 0 ? (
