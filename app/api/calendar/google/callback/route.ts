@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { startGoogleWatch } from '@/lib/services/google-calendar-sync'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -73,6 +74,11 @@ export async function GET(req: NextRequest) {
       console.error('[calendar/google] DB upsert error:', dbError)
       return NextResponse.redirect(`${settingsUrl}&error=google_db_failed`)
     }
+
+    // Start Google Calendar push notification watch (best-effort)
+    startGoogleWatch(DEFAULT_BUSINESS_ID, db, tokens.access_token).catch((e) => {
+      console.error('[calendar/google] Failed to start watch:', e)
+    })
 
     return NextResponse.redirect(`${settingsUrl}&success=google`)
   } catch (err) {

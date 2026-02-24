@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import type { DashboardSummary } from '@/lib/types'
 import { useI18n } from '@/lib/i18n/provider'
 import DashboardDetailPanel, { type DetailRef } from '@/components/dashboard/DashboardDetailPanel'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -598,11 +599,29 @@ function ActivityFeed({ summary, onOpenDetail }: { summary: DashboardSummary; on
 
 export default function DashboardPage() {
   const { t } = useI18n()
+  const router = useRouter()
   const [summary, setSummary]     = useState<DashboardSummary | null>(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [detail, setDetail]       = useState<DetailRef | null>(null)
+  const [onboardingPrompt, setOnboardingPrompt] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings/onboarding-status')
+      .then((r) => r.json())
+      .then(({ data }) => { if (data?.status === 'in_progress') setOnboardingPrompt(true) })
+      .catch(() => {})
+  }, [])
+
+  const dismissOnboarding = async () => {
+    await fetch('/api/settings/onboarding-status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' }),
+    }).catch(() => {})
+    setOnboardingPrompt(false)
+  }
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -721,6 +740,26 @@ export default function DashboardPage() {
         onClose={() => setDetail(null)}
         onRefresh={() => load(true)}
       />
+
+      {/* Onboarding resume dialog */}
+      <Dialog open={onboardingPrompt} onOpenChange={(open) => { if (!open) dismissOnboarding() }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Configuration en cours</DialogTitle>
+            <DialogDescription>
+              Votre configuration n&apos;est pas encore terminée. Souhaitez-vous la compléter ?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={dismissOnboarding}>
+              Non, ignorer
+            </Button>
+            <Button onClick={() => router.push('/onboarding')}>
+              Continuer la configuration
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

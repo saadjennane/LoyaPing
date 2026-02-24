@@ -72,7 +72,14 @@ export default function OnboardingStep7() {
     }
   }
 
-  const goToDashboard = () => router.push('/')
+  const goToDashboard = async () => {
+    await fetch('/api/settings/onboarding-status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' }),
+    }).catch(() => {})
+    router.push('/')
+  }
 
   const checklist = [
     { label: 'Informations générales',     done: true },

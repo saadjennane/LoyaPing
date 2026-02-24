@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { markAppointmentShow, markNoShow } from '@/lib/services/appointments'
 import { createServerClient } from '@/lib/supabase/server'
 import { cancelPendingReminders, scheduleRemindersForAppointment } from '@/lib/services/appointment-reminders'
+import { pushAppointmentToGoogle, deleteGoogleEvent } from '@/lib/services/google-calendar-sync'
+import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services/microsoft-calendar-sync'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -61,12 +63,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ data: { id, status: 'no_show' } })
     }
 
-    // Reschedule: update scheduled_at, cancel old reminders, schedule new ones
+    // Reschedule: update scheduled_at (+ ended_at if provided), cancel old reminders, schedule new ones
     if (scheduled_at) {
       const db = createServerClient()
+      const updateFields: Record<string, string | null> = { scheduled_at }
+      if ('ended_at' in body) updateFields.ended_at = body.ended_at ?? null
+
       const { error } = await db
         .from('appointments')
-        .update({ scheduled_at })
+        .update(updateFields)
         .eq('id', id)
         .eq('status', 'scheduled')
 
@@ -80,6 +85,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         console.error('[appointments] Failed to reschedule reminders:', e)
       }
 
+      // Push updated time to connected calendars (best-effort)
+      pushAppointmentToGoogle(id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Google push failed on reschedule:', e)
+      })
+      pushAppointmentToMicrosoft(id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Microsoft push failed on reschedule:', e)
+      })
+
       return NextResponse.json({ data: { id, scheduled_at } })
     }
 
@@ -89,11 +102,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-// DELETE /api/appointments/:id — soft delete + cancel future reminders
+// DELETE /api/appointments/:id — soft delete + cancel future reminders + remove Google event
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
     const db = createServerClient()
+
+    // Fetch calendar event IDs before deleting
+    const { data: appt } = await db
+      .from('appointments')
+      .select('google_event_id, microsoft_event_id')
+      .eq('id', id)
+      .maybeSingle()
+
     const { error } = await db
       .from('appointments')
       .update({ deleted_at: new Date().toISOString() })
@@ -101,13 +122,23 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if (error) throw error
 
     // Cancel any SCHEDULED outbox reminders for this appointment (best-effort).
-    // If this fails the appointment is already soft-deleted; reminders will be
-    // a no-op anyway since the dispatch worker re-validates appointment state.
     try {
       const { cancelAppointmentReminders } = await import('@/lib/services/appointment-reminders')
       await cancelAppointmentReminders(id)
     } catch (e) {
       console.error('[appointments] Failed to cancel reminders on delete:', e)
+    }
+
+    // Delete the corresponding calendar events (best-effort)
+    if (appt?.google_event_id) {
+      deleteGoogleEvent(appt.google_event_id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Google event delete failed:', e)
+      })
+    }
+    if (appt?.microsoft_event_id) {
+      deleteMicrosoftEvent(appt.microsoft_event_id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Microsoft event delete failed:', e)
+      })
     }
 
     return NextResponse.json({ data: { success: true } })

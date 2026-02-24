@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { Toaster } from '@/components/ui/sonner'
 import { createServerClient } from '@/lib/supabase/server'
 import ClientProviders from './ClientProviders'
@@ -12,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let fieldConfig: ClientFieldConfig = DEFAULT_CLIENT_FIELD_CONFIG
   try {
     const db = createServerClient()
-    const [modulesRes, fieldRes] = await Promise.all([
+    const [modulesRes, fieldRes, onboardingRes] = await Promise.all([
       db.from('business_modules')
         .select('orders_enabled, appointments_enabled, loyalty_enabled')
         .eq('business_id', DEFAULT_BUSINESS_ID)
@@ -21,10 +22,25 @@ export default async function DashboardLayout({ children }: { children: React.Re
         .select('*')
         .eq('business_id', DEFAULT_BUSINESS_ID)
         .maybeSingle(),
+      db.from('business_profile')
+        .select('onboarding_status')
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+        .maybeSingle(),
     ])
     if (modulesRes.data) modules     = modulesRes.data
     if (fieldRes.data)   fieldConfig = fieldRes.data
-  } catch {}
+
+    if (!onboardingRes.data || onboardingRes.data.onboarding_status === 'not_started') {
+      redirect('/onboarding')
+    }
+  } catch (err) {
+    // If the column doesn't exist yet (migration not applied), allow access
+    if (String(err).includes('onboarding_status')) {
+      // column not yet migrated — skip redirect
+    } else if (String(err).includes('NEXT_REDIRECT')) {
+      throw err
+    }
+  }
 
   return (
     <ClientProviders initialModules={modules} initialFieldConfig={fieldConfig}>

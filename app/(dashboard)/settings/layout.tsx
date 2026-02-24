@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut } from 'lucide-react'
+import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut, Wand2 } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
 import { createBrowserClient } from '@supabase/ssr'
@@ -117,6 +117,17 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               )}
             </>
           )}
+        </div>
+
+        {/* Configuration initiale */}
+        <div className="px-3 pb-1 border-t border-border pt-3 shrink-0">
+          <Link
+            href="/onboarding"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full text-muted-foreground hover:bg-muted transition-colors"
+          >
+            <Wand2 className="h-4 w-4 shrink-0" />
+            <span>Configuration initiale</span>
+          </Link>
         </div>
 
         {/* Logout */}

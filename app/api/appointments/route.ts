@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getUpcomingAppointments, getAllAppointments } from '@/lib/services/appointments'
 import { scheduleRemindersForAppointment } from '@/lib/services/appointment-reminders'
+import { pushAppointmentToGoogle } from '@/lib/services/google-calendar-sync'
+import { pushAppointmentToMicrosoft } from '@/lib/services/microsoft-calendar-sync'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -48,6 +50,14 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error('[appointments] Failed to schedule reminders:', e)
     }
+
+    // Push to connected calendars (best-effort)
+    pushAppointmentToGoogle(data.id, DEFAULT_BUSINESS_ID).catch((e) => {
+      console.error('[appointments] Google push failed:', e)
+    })
+    pushAppointmentToMicrosoft(data.id, DEFAULT_BUSINESS_ID).catch((e) => {
+      console.error('[appointments] Microsoft push failed:', e)
+    })
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (err) {

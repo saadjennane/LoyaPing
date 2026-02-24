@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
-  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock,
+  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -127,7 +127,7 @@ function TimeGrid({
       </div>
 
       {/* ── Scrollable body ── */}
-      <div ref={scrollRef} className="flex overflow-y-auto max-h-[65vh]">
+      <div ref={scrollRef} className="flex overflow-y-auto max-h-[calc(100vh-240px)]">
         {/* Axe horaire */}
         <div className="w-14 shrink-0 border-r bg-muted/20 relative" style={{ height: totalHeight }}>
           {hours.map((h) => (
@@ -354,6 +354,9 @@ export default function AppointmentsPage() {
   const [apptNotes, setApptNotes]         = useState('')
   const [createSubmitting, setCreateSubmitting] = useState(false)
 
+  const [calendarConnected, setCalendarConnected] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false })
+  const [syncing, setSyncing] = useState(false)
+
   const { addOrUpdate } = useCustomerIndex()
 
   const resetCreate = () => {
@@ -442,11 +445,33 @@ export default function AppointmentsPage() {
     setLoading(false)
   }, [])
 
+  const syncCalendar = async () => {
+    setSyncing(true)
+    try {
+      const syncs: Promise<Response>[] = []
+      if (calendarConnected.google)    syncs.push(fetch('/api/calendar/google/sync',    { method: 'POST' }))
+      if (calendarConnected.microsoft) syncs.push(fetch('/api/calendar/microsoft/sync', { method: 'POST' }))
+      await Promise.all(syncs)
+      toast.success('Calendrier synchronisé')
+      fetchAppointments()
+    } catch { toast.error('Erreur lors de la synchronisation') }
+    finally { setSyncing(false) }
+  }
+
   useEffect(() => {
     fetchAppointments()
     // Fetch loyalty program to decide whether to show amount modal on SHOW
     fetch('/api/loyalty/programs').then((r) => r.json()).then((j) => {
       if (j.data) setLoyaltyProgram(j.data as LoyaltyProgram)
+    }).catch(() => {})
+    // Fetch calendar connection status
+    fetch('/api/calendar').then((r) => r.json()).then((j) => {
+      if (j.data) {
+        setCalendarConnected({
+          google:    !!j.data.google,
+          microsoft: !!j.data.microsoft,
+        })
+      }
     }).catch(() => {})
   }, [fetchAppointments])
 
@@ -742,9 +767,17 @@ export default function AppointmentsPage() {
           <h2 className="text-2xl font-bold">{t('appointments.title')}</h2>
           <p className="text-sm text-muted-foreground">{t('appointments.total', { count: appointments.length })}</p>
         </div>
-        <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => { resetCreate(); setCreateOpen(true) }}>
-          <Plus className="h-4 w-4 mr-2" />{t('appointments.newBtn')}
-        </Button>
+        <div className="flex items-center gap-2">
+          {(calendarConnected.google || calendarConnected.microsoft) && (
+            <Button variant="outline" onClick={syncCalendar} disabled={syncing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              Synchroniser
+            </Button>
+          )}
+          <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => { resetCreate(); setCreateOpen(true) }}>
+            <Plus className="h-4 w-4 mr-2" />{t('appointments.newBtn')}
+          </Button>
+        </div>
       </div>
 
       {/* Search — list view only */}

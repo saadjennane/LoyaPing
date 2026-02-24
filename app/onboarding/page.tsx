@@ -262,6 +262,23 @@ export default function OnboardingStep1() {
 
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Mark onboarding as in_progress if it was not_started (first visit).
+  // If the user arrives from Settings (status 'completed'), the status is untouched.
+  useEffect(() => {
+    fetch('/api/settings/onboarding-status')
+      .then((r) => r.json())
+      .then(({ data }) => {
+        if (data?.status === 'not_started') {
+          fetch('/api/settings/onboarding-status', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'in_progress' }),
+          })
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Detect browser timezone once on mount (client-side only).
   // We never overwrite after the user has manually changed the value,
   // so we use a ref to track whether the user has interacted.
