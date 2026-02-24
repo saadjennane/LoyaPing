@@ -89,7 +89,7 @@ export async function GET() {
           .from('coupons')
           .select(`
             id, status, expires_at, created_at, source,
-            tier:tier_id ( business_id, reward_title ),
+            tier:tier_id ( business_id, reward_title, reward_description ),
             client:client_id ( first_name, last_name, phone_number )
           `)
           .eq('tier.business_id', DEFAULT_BUSINESS_ID)
@@ -214,7 +214,7 @@ export async function GET() {
         return {
           id:           r.id,
           client_name:  clientName(Array.isArray(r.client) ? r.client[0] : r.client),
-          reward_title: tier?.reward_title ?? null,
+          reward_title: tier?.reward_title ?? tier?.reward_description ?? null,
           expires_at:   r.expires_at,
         }
       })
