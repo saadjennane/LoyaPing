@@ -104,18 +104,26 @@ function computeOverlapLayout(
 
 // ─── Time Grid (1d / 3d / 7d) ────────────────────────────────────────────────
 
+type DragSlot = { date: Date; startMins: number; endMins: number }
+
 function TimeGrid({
   days,
   appointments,
   onSelect,
+  defaultDuration,
+  onCreateSlot,
 }: {
   days: Date[]
   appointments: Appointment[]
   onSelect: (a: Appointment) => void
+  defaultDuration: number
+  onCreateSlot: (date: Date, startMins: number, endMins: number) => void
 }) {
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => i) // 0..23
   const totalHeight = hours.length * HOUR_HEIGHT
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [dragSlot, setDragSlot] = useState<DragSlot | null>(null)
+  const dragRef   = useRef<DragSlot | null>(null)
 
   // Scroll to 8am on mount
   useEffect(() => {
@@ -123,6 +131,45 @@ function TimeGrid({
       scrollRef.current.scrollTop = 8 * HOUR_HEIGHT
     }
   }, [])
+
+  function minsFromClientY(clientY: number): number {
+    const container = scrollRef.current!
+    const rect = container.getBoundingClientRect()
+    const relY = clientY - rect.top + container.scrollTop
+    return Math.round((relY / HOUR_HEIGHT) * 60 / 15) * 15
+  }
+
+  function handleMouseDown(e: React.MouseEvent, day: Date) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const startMins = Math.max(0, Math.min(24 * 60 - 15, minsFromClientY(e.clientY)))
+    const endMins   = Math.min(24 * 60, startMins + defaultDuration)
+    const slot: DragSlot = { date: day, startMins, endMins }
+    dragRef.current = slot
+    setDragSlot(slot)
+
+    function onMouseMove(ev: MouseEvent) {
+      const cur = dragRef.current
+      if (!cur) return
+      const rawMins = minsFromClientY(ev.clientY)
+      const newEnd  = Math.max(cur.startMins + 15, Math.min(24 * 60, rawMins))
+      const updated = { ...cur, endMins: newEnd }
+      dragRef.current = updated
+      setDragSlot({ ...updated })
+    }
+
+    function onMouseUp() {
+      const s = dragRef.current
+      dragRef.current = null
+      setDragSlot(null)
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      if (s) onCreateSlot(s.date, s.startMins, s.endMins)
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }
 
   function eventTop(isoDate: string): number {
     const d = parseISO(isoDate)
@@ -137,8 +184,10 @@ function TimeGrid({
     return Math.max(24, (mins / 60) * HOUR_HEIGHT)
   }
 
+  function fmt2(n: number) { return String(n).padStart(2, '0') }
+
   return (
-    <div className="flex flex-col border rounded-lg overflow-hidden">
+    <div className="flex flex-col border rounded-lg overflow-hidden select-none">
       {/* ── Header figé ── */}
       <div className="flex shrink-0 border-b">
         <div className="w-14 shrink-0 border-r bg-muted/20" />
@@ -185,12 +234,14 @@ function TimeGrid({
           const layout = computeOverlapLayout(
             dayAppts.map((a) => ({ id: a.id, start: a.scheduled_at, end: a.ended_at }))
           )
+          const ghost = dragSlot && isSameDay(dragSlot.date, day) ? dragSlot : null
 
           return (
             <div
               key={day.toISOString()}
-              className="flex-1 border-r last:border-r-0 relative"
+              className="flex-1 border-r last:border-r-0 relative cursor-crosshair"
               style={{ height: totalHeight }}
+              onMouseDown={(e) => handleMouseDown(e, day)}
             >
               {hours.map((h) => (
                 <div
@@ -199,6 +250,24 @@ function TimeGrid({
                   style={{ top: h * HOUR_HEIGHT }}
                 />
               ))}
+
+              {/* Ghost block during drag */}
+              {ghost && (
+                <div
+                  className="absolute inset-x-0.5 rounded bg-[#3B5BDB]/15 border border-[#3B5BDB]/50 border-dashed pointer-events-none z-10"
+                  style={{
+                    top:    (ghost.startMins / 60) * HOUR_HEIGHT,
+                    height: Math.max(HOUR_HEIGHT / 4, ((ghost.endMins - ghost.startMins) / 60) * HOUR_HEIGHT),
+                  }}
+                >
+                  <span className="text-[10px] font-semibold text-[#3B5BDB] px-1 pt-0.5 block leading-tight">
+                    {fmt2(Math.floor(ghost.startMins / 60))}:{fmt2(ghost.startMins % 60)}
+                    {' – '}
+                    {fmt2(Math.floor(ghost.endMins / 60))}:{fmt2(ghost.endMins % 60)}
+                  </span>
+                </div>
+              )}
+
               {dayAppts.map((appt) => {
                 const isUnassigned = appt.client_id === null
                 const { colIdx, totalCols } = layout.get(appt.id) ?? { colIdx: 0, totalCols: 1 }
@@ -206,6 +275,7 @@ function TimeGrid({
                 return (
                   <button
                     key={appt.id}
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => onSelect(appt)}
                     className={isUnassigned
                       ? 'absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed'
@@ -1006,7 +1076,18 @@ export default function AppointmentsPage() {
   }
 
   const reminderErrorCount = appointments.filter((a) => a.reminderStatus?.hasFailed).length
+  const upcomingCount = appointments.filter((a) => new Date(a.scheduled_at) >= new Date()).length
   const days = appView === 'semaine' ? getDays() : []
+
+  const handleCreateSlot = (date: Date, startMins: number, endMins: number) => {
+    resetCreate()
+    setApptDate(format(date, 'yyyy-MM-dd'))
+    setApptHour(String(Math.floor(startMins / 60)).padStart(2, '0'))
+    setApptMinute(String(startMins % 60).padStart(2, '0'))
+    setApptEndHour(String(Math.floor(endMins / 60)).padStart(2, '0'))
+    setApptEndMinute(String(endMins % 60).padStart(2, '0'))
+    setCreateOpen(true)
+  }
 
   const filteredListItems = listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
@@ -1032,7 +1113,7 @@ export default function AppointmentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">{t('appointments.title')}</h2>
-          <p className="text-sm text-muted-foreground">{t('appointments.total', { count: appointments.length })}</p>
+          <p className="text-sm text-muted-foreground">{upcomingCount} à venir</p>
         </div>
         <div className="flex items-center gap-2">
           {(calendarConnected.google || calendarConnected.microsoft) && (
@@ -1554,6 +1635,8 @@ export default function AppointmentsPage() {
                 days={days}
                 appointments={appointments}
                 onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
+                defaultDuration={defaultDuration ?? 60}
+                onCreateSlot={handleCreateSlot}
               />
             )}
           </div>
