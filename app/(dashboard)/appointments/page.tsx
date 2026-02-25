@@ -1797,7 +1797,7 @@ export default function AppointmentsPage() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-1 min-h-0">
             {/* ── Colonne gauche : Créneaux disponibles (desktop only) ─── */}
             <div className="hidden md:flex flex-col w-60 shrink-0 border-r overflow-y-auto bg-muted/20">
               <div className="px-3 pt-3 pb-2 border-b border-border/60 shrink-0">
@@ -1880,7 +1880,7 @@ export default function AppointmentsPage() {
             </div>
 
             {/* ── Colonne droite : formulaire ─────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex-1 px-6 py-5 overflow-visible">
 
               {/* Step 1 — select client */}
               {createStep === 'search' && (
