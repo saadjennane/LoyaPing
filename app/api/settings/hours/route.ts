@@ -15,7 +15,7 @@ export async function GET() {
 
     if (error) throw error
 
-    // If no rows, return defaults (Mon-Sat open 09-18, Sun closed)
+    // If no rows, return defaults (Mon-Sat open 09-18, Sun closed) with configured: false
     if (!data || data.length === 0) {
       const defaults = Array.from({ length: 7 }, (_, i) => ({
         business_id: DEFAULT_BUSINESS_ID,
@@ -26,10 +26,10 @@ export async function GET() {
         slot2_start: null,
         slot2_end:   null,
       }))
-      return NextResponse.json({ data: defaults })
+      return NextResponse.json({ data: defaults, configured: false })
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data, configured: true })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

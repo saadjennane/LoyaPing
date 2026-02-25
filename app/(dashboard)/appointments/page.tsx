@@ -590,8 +590,13 @@ export default function AppointmentsPage() {
 
   // ── Slot browser (intégré dans le modal Nouveau RDV) ─────────────────────
   const [businessHours,    setBusinessHours]    = useState<BusinessHourRow[] | null>(null)
+  const [hoursConfigured,  setHoursConfigured]  = useState<boolean>(true)
   const [slotHoursLoading, setSlotHoursLoading] = useState(false)
   const [selectedSlotKey,  setSelectedSlotKey]  = useState<string | null>(null)
+  // ── Inline hours editor ────────────────────────────────────────────────────
+  const [hoursDialogOpen, setHoursDialogOpen] = useState(false)
+  const [hoursForm,       setHoursForm]       = useState<BusinessHourRow[]>([])
+  const [hoursSaving,     setHoursSaving]     = useState(false)
 
   // ── Availability exceptions ───────────────────────────────────────────────
   const [exceptionsOpen,    setExceptionsOpen]    = useState(false)
@@ -900,7 +905,10 @@ export default function AppointmentsPage() {
       !businessHours   ? fetch('/api/settings/hours').then(r => r.json())                      : Promise.resolve(null),
       !defaultDuration ? fetch('/api/settings/appointment-notifications').then(r => r.json()) : Promise.resolve(null),
     ]).then(([hoursJson, notifJson]) => {
-      if (hoursJson?.data) setBusinessHours(hoursJson.data)
+      if (hoursJson?.data) {
+        setBusinessHours(hoursJson.data)
+        setHoursConfigured(hoursJson.configured !== false)
+      }
       if (notifJson?.data?.default_duration_minutes) setDefaultDuration(notifJson.data.default_duration_minutes)
       setSlotHoursLoading(false)
     }).catch(() => setSlotHoursLoading(false))
@@ -2027,6 +2035,19 @@ export default function AppointmentsPage() {
                 )}
               </div>
 
+              {/* Hours not configured banner */}
+              {!slotHoursLoading && businessHours && !hoursConfigured && (
+                <div className="px-3 py-2 border-b border-amber-200/60 bg-amber-50/20 shrink-0">
+                  <button
+                    onClick={() => { setHoursForm([...businessHours]); setHoursDialogOpen(true) }}
+                    className="text-[11px] text-amber-700 hover:text-amber-900 flex items-center gap-1.5 w-full"
+                  >
+                    <Clock className="h-3 w-3 shrink-0" />
+                    Horaires non configurés — Définir mes horaires
+                  </button>
+                </div>
+              )}
+
               {/* Loading */}
               {slotHoursLoading && (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">Chargement...</div>
@@ -2247,6 +2268,88 @@ export default function AppointmentsPage() {
               )}
 
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Inline hours configuration dialog ──────────────────────────────── */}
+      <Dialog open={hoursDialogOpen} onOpenChange={setHoursDialogOpen}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              Horaires d&apos;ouverture
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 mt-1">
+            {[...hoursForm].sort((a, b) => a.day_of_week - b.day_of_week).map((row) => (
+              <div key={row.day_of_week} className="flex items-center gap-2">
+                <span className="w-20 text-sm shrink-0">
+                  {['','Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.','Dim.'][row.day_of_week]}
+                </span>
+                {/* Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setHoursForm(f => f.map(r => r.day_of_week === row.day_of_week ? { ...r, is_closed: !r.is_closed } : r))}
+                  className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${!row.is_closed ? 'bg-[#3B5BDB]' : 'bg-muted'}`}
+                >
+                  <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${!row.is_closed ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+                {!row.is_closed ? (
+                  <div className="flex items-center gap-1 flex-1">
+                    <input
+                      type="time"
+                      value={row.slot1_start ?? '09:00'}
+                      onChange={(e) => setHoursForm(f => f.map(r => r.day_of_week === row.day_of_week ? { ...r, slot1_start: e.target.value } : r))}
+                      className="text-sm border border-border rounded px-1.5 py-0.5 bg-background flex-1 min-w-0"
+                    />
+                    <span className="text-muted-foreground text-xs">→</span>
+                    <input
+                      type="time"
+                      value={row.slot1_end ?? '18:00'}
+                      onChange={(e) => setHoursForm(f => f.map(r => r.day_of_week === row.day_of_week ? { ...r, slot1_end: e.target.value } : r))}
+                      className="text-sm border border-border rounded px-1.5 py-0.5 bg-background flex-1 min-w-0"
+                    />
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Fermé</span>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Pour ajouter une coupure déjeuner, allez dans Paramètres → Rendez-vous.
+          </p>
+          <div className="flex justify-end gap-2 mt-3">
+            <Button variant="outline" size="sm" onClick={() => setHoursDialogOpen(false)}>Annuler</Button>
+            <Button
+              size="sm"
+              disabled={hoursSaving}
+              onClick={async () => {
+                setHoursSaving(true)
+                const hours = hoursForm.map(r => ({
+                  day_of_week: r.day_of_week,
+                  is_closed: r.is_closed,
+                  slot1_start: r.is_closed ? null : (r.slot1_start ?? '09:00'),
+                  slot1_end:   r.is_closed ? null : (r.slot1_end   ?? '18:00'),
+                  slot2_start: null,
+                  slot2_end:   null,
+                }))
+                const res = await fetch('/api/settings/hours', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ hours }),
+                })
+                if (res.ok) {
+                  setBusinessHours(hoursForm)
+                  setHoursConfigured(true)
+                  setHoursDialogOpen(false)
+                }
+                setHoursSaving(false)
+              }}
+            >
+              {hoursSaving ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
