@@ -40,7 +40,8 @@ ALTER TABLE public.calendar_watch_channels         ENABLE ROW LEVEL SECURITY;
 -- Recreate the view with security_invoker so it runs with the calling user's
 -- permissions rather than the view creator's, satisfying the linter.
 
-CREATE OR REPLACE VIEW public.v_clients WITH (security_invoker = true) AS
+DROP VIEW IF EXISTS public.v_clients;
+CREATE VIEW public.v_clients WITH (security_invoker = true) AS
 SELECT
   c.*,
   GREATEST(
