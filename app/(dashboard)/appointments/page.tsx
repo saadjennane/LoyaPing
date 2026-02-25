@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
-  MoreHorizontal, Pencil,
+  MoreHorizontal, Pencil, Sparkles,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -36,6 +36,66 @@ type AppView      = 'agenda' | 'semaine' | 'mois'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
+
+// ─── Slot browser types ────────────────────────────────────────────────────────
+
+type BusinessHourRow = {
+  day_of_week: number       // 1=Lun … 7=Dim
+  is_closed: boolean
+  slot1_start: string | null  // 'HH:MM'
+  slot1_end: string | null
+  slot2_start: string | null
+  slot2_end: string | null
+}
+
+type SlotDayResult =
+  | { kind: 'fermé' }
+  | { kind: 'complet' }
+  | { kind: 'libre' | 'partiel'; slots: number[] }  // startMins libres
+
+function timeToMins(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+function computeDaySlots(
+  _date: Date,
+  bh: BusinessHourRow,
+  duration: number,
+  dayAppts: Appointment[],
+): SlotDayResult {
+  if (bh.is_closed) return { kind: 'fermé' }
+
+  const windows: [number, number][] = []
+  if (bh.slot1_start && bh.slot1_end)
+    windows.push([timeToMins(bh.slot1_start), timeToMins(bh.slot1_end)])
+  if (bh.slot2_start && bh.slot2_end)
+    windows.push([timeToMins(bh.slot2_start), timeToMins(bh.slot2_end)])
+  if (windows.length === 0) return { kind: 'fermé' }
+
+  const allSlots: number[] = []
+  for (const [wS, wE] of windows)
+    for (let t = wS; t + duration <= wE; t += duration) allSlots.push(t)
+  if (allSlots.length === 0) return { kind: 'fermé' }
+
+  const free = allSlots.filter((slotStart) => {
+    const slotEnd = slotStart + duration
+    return !dayAppts.some((a) => {
+      const aS = differenceInMinutes(parseISO(a.scheduled_at), startOfDay(parseISO(a.scheduled_at)))
+      const aE = a.ended_at
+        ? differenceInMinutes(parseISO(a.ended_at), startOfDay(parseISO(a.ended_at)))
+        : aS + duration
+      return slotStart < aE && slotEnd > aS
+    })
+  })
+
+  if (free.length === 0) return { kind: 'complet' }
+  return { kind: free.length === allSlots.length ? 'libre' : 'partiel', slots: free }
+}
+
+function minsToLabel(m: number) {
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}h${String(m % 60).padStart(2, '0')}`
+}
 
 
 const HOUR_START = 0
@@ -499,6 +559,11 @@ export default function AppointmentsPage() {
   const [calendarConnected, setCalendarConnected] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false })
   const [syncing, setSyncing] = useState(false)
   const [defaultDuration, setDefaultDuration] = useState<number | null>(null)
+
+  // ── Slot browser ──────────────────────────────────────────────────────────
+  const [slotOpen,         setSlotOpen]         = useState(false)
+  const [businessHours,    setBusinessHours]    = useState<BusinessHourRow[] | null>(null)
+  const [slotHoursLoading, setSlotHoursLoading] = useState(false)
 
   // ── Assign client to unassigned appointment ───────────────────────────────
   const [assignClientItem, setAssignClientItem] = useState<CustomerIndexItem | null>(null)
@@ -1089,6 +1154,42 @@ export default function AppointmentsPage() {
     setCreateOpen(true)
   }
 
+  const openSlotBrowser = async () => {
+    setSlotOpen(true)
+    if (businessHours) return
+    setSlotHoursLoading(true)
+    const res  = await fetch('/api/settings/hours')
+    const json = await res.json()
+    if (json.data) setBusinessHours(json.data)
+    setSlotHoursLoading(false)
+  }
+
+  const selectSlot = (date: Date, slotMins: number) => {
+    const endMins = slotMins + (defaultDuration ?? 60)
+    resetCreate()
+    setApptDate(format(date, 'yyyy-MM-dd'))
+    setApptHour(String(Math.floor(slotMins / 60)).padStart(2, '0'))
+    setApptMinute(String(slotMins % 60).padStart(2, '0'))
+    setApptEndHour(String(Math.floor(endMins / 60)).padStart(2, '0'))
+    setApptEndMinute(String(endMins % 60).padStart(2, '0'))
+    setSlotOpen(false)
+    setCreateOpen(true)
+  }
+
+  // ── Slot days (useMemo) ──────────────────────────────────────────────────
+  const slotDays = useMemo(() => {
+    if (!businessHours || !defaultDuration) return []
+    return Array.from({ length: 60 }, (_, i) => addDays(startOfToday(), i)).map((date) => {
+      const dow      = date.getDay() === 0 ? 7 : date.getDay()
+      const bh       = businessHours.find((h) => h.day_of_week === dow)
+      if (!bh) return { date, result: { kind: 'fermé' as const } }
+      const dayAppts = appointments.filter((a) =>
+        a.status === 'scheduled' && !a.deleted_at && isSameDay(parseISO(a.scheduled_at), date)
+      )
+      return { date, result: computeDaySlots(date, bh, defaultDuration, dayAppts) }
+    }).filter(({ result }) => result.kind !== 'fermé')
+  }, [businessHours, defaultDuration, appointments])
+
   const filteredListItems = listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
     : listItems
@@ -1116,12 +1217,10 @@ export default function AppointmentsPage() {
           <p className="text-sm text-muted-foreground">{upcomingCount} à venir</p>
         </div>
         <div className="flex items-center gap-2">
-          {(calendarConnected.google || calendarConnected.microsoft) && (
-            <Button variant="outline" onClick={syncCalendar} disabled={syncing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-              Synchroniser
-            </Button>
-          )}
+          <Button variant="outline" onClick={openSlotBrowser}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Créneaux
+          </Button>
           <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => { resetCreate(); setCreateOpen(true) }}>
             <Plus className="h-4 w-4 mr-2" />{t('appointments.newBtn')}
           </Button>
@@ -1189,6 +1288,15 @@ export default function AppointmentsPage() {
               {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
             </button>
           )}
+          {(calendarConnected.google || calendarConnected.microsoft) && (
+            <button
+              onClick={syncCalendar}
+              disabled={syncing}
+              className="h-9 w-9 flex items-center justify-center rounded-md border border-input bg-background shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 text-muted-foreground ${syncing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
 
         {/* Desktop : onglets */}
@@ -1211,6 +1319,20 @@ export default function AppointmentsPage() {
           >
             Mois
           </TabsTrigger>
+          {(calendarConnected.google || calendarConnected.microsoft) && (
+            <div className="ml-auto flex items-center pr-3 py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={syncCalendar}
+                disabled={syncing}
+                className="h-8 text-muted-foreground hover:text-foreground text-sm"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+                Synchroniser
+              </Button>
+            </div>
+          )}
         </TabsList>
 
         {/* Filtres + navigation (communs à toutes les vues) */}
@@ -1659,6 +1781,98 @@ export default function AppointmentsPage() {
 
       </Tabs>
       </div>
+
+      {/* Slot browser dialog */}
+      <Dialog open={slotOpen} onOpenChange={setSlotOpen}>
+        <DialogContent className="sm:max-w-sm max-h-[85vh] flex flex-col p-0" aria-describedby={undefined}>
+          <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-4 w-4 text-[#3B5BDB]" />
+              Créneaux disponibles
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Paramètres manquants */}
+          {!slotHoursLoading && !defaultDuration && (
+            <div className="px-4 py-8 text-center space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Configurez la <strong>durée par défaut</strong> et les{' '}
+                <strong>horaires d&apos;ouverture</strong> pour utiliser cet assistant.
+              </p>
+              <Button size="sm" asChild onClick={() => setSlotOpen(false)}>
+                <a href="/settings/appointments">Configurer maintenant</a>
+              </Button>
+            </div>
+          )}
+
+          {/* Chargement */}
+          {slotHoursLoading && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">Chargement...</div>
+          )}
+
+          {/* Liste des 60 jours */}
+          {!slotHoursLoading && businessHours && defaultDuration && (
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {slotDays.map(({ date, result }) => {
+                const dayLabel = isSameDay(date, new Date())
+                  ? `Aujourd'hui · ${format(date, 'd MMMM', { locale: fr })}`
+                  : isSameDay(date, addDays(new Date(), 1))
+                    ? `Demain · ${format(date, 'd MMMM', { locale: fr })}`
+                    : format(date, 'EEEE d MMMM', { locale: fr })
+
+                const colorCls =
+                  result.kind === 'complet' ? 'border-red-200 bg-red-50'
+                  : result.kind === 'libre'   ? 'border-green-200 bg-green-50'
+                  : 'border-border bg-card'
+
+                const labelCls =
+                  result.kind === 'complet' ? 'text-red-700'
+                  : result.kind === 'libre'   ? 'text-green-700'
+                  : 'text-foreground'
+
+                return (
+                  <div key={date.toISOString()} className={`rounded-lg border p-3 ${colorCls}`}>
+                    <p className={`text-xs font-semibold capitalize mb-2 ${labelCls}`}>{dayLabel}</p>
+
+                    {result.kind === 'complet' && (
+                      <p className="text-xs text-red-600 font-medium">Complet</p>
+                    )}
+
+                    {(result.kind === 'libre' || result.kind === 'partiel') && (
+                      <>
+                        {result.kind === 'libre' && (
+                          <p className="text-[10px] text-green-700 mb-1.5 font-medium uppercase tracking-wide">
+                            Entièrement libre
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {result.slots.map((m) => (
+                            <button
+                              key={m}
+                              onClick={() => selectSlot(date, m)}
+                              className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors
+                                hover:bg-[#3B5BDB] hover:text-white hover:border-[#3B5BDB]
+                                ${result.kind === 'libre'
+                                  ? 'border-green-300 bg-green-50 text-green-700'
+                                  : 'border-border bg-background text-foreground'
+                                }`}
+                            >
+                              {minsToLabel(m)}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+              {slotDays.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">Aucun jour ouvert trouvé.</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Create RDV dialog */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) resetCreate(); setCreateOpen(o) }}>
