@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
@@ -27,7 +27,7 @@ import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  addDays, addMonths, isSameDay, isSameMonth, parseISO,
+  addDays, subDays, addMonths, isSameDay, isSameMonth, parseISO,
   setHours, setMinutes, differenceInMinutes, startOfDay, startOfToday,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -386,6 +386,9 @@ export default function AppointmentsPage() {
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
+  const [pastFrom,              setPastFrom]              = useState<string>(() => format(subDays(new Date(), 3), 'yyyy-MM-dd'))
+  const [loadingMorePast,       setLoadingMorePast]       = useState(false)
+  const [hasMorePast,           setHasMorePast]           = useState(false)
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailApptMode, setDetailApptMode] = useState<DetailApptMode>('detail')
@@ -428,6 +431,13 @@ export default function AppointmentsPage() {
   const [assignSubmitting, setAssignSubmitting] = useState(false)
 
   const { addOrUpdate } = useCustomerIndex()
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const todayRef          = useRef<HTMLDivElement>(null)
+  const sentinelRef       = useRef<HTMLDivElement>(null)
+  const agendaRef         = useRef<HTMLDivElement>(null)
+  const initialScrollDone = useRef(false)
+  const needsScrollAdjust = useRef<{ prevHeight: number; prevTop: number } | null>(null)
 
   const resetCreate = () => {
     setCreateStep('search')
@@ -621,6 +631,14 @@ export default function AppointmentsPage() {
     if (gotoDate) {
       sp.set('from', gotoDate)
       sp.set('to', format(addDays(parseISO(gotoDate), 30), 'yyyy-MM-dd'))
+      setHasMorePast(false)
+    } else {
+      const start = format(subDays(new Date(), 3), 'yyyy-MM-dd')
+      sp.set('from', start)
+      sp.set('to', format(addDays(new Date(), 60), 'yyyy-MM-dd'))
+      setPastFrom(start)
+      setHasMorePast(true)
+      initialScrollDone.current = false
     }
     if (statusFilter !== 'all') sp.set('statusFilter', statusFilter)
     if (notifFilter !== 'all') sp.set('notifFilter', notifFilter)
@@ -633,6 +651,65 @@ export default function AppointmentsPage() {
   useEffect(() => {
     if (appView === 'agenda') void fetchListItems()
   }, [appView, fetchListItems])
+
+  // ── Lazy load more past appointments ──────────────────────────────────────
+  const loadMorePast = useCallback(async () => {
+    if (loadingMorePast || !hasMorePast || gotoDate) return
+    setLoadingMorePast(true)
+    const newEnd   = format(subDays(parseISO(pastFrom), 1), 'yyyy-MM-dd')
+    const newStart = format(subDays(parseISO(pastFrom), 14), 'yyyy-MM-dd')
+    const sp = new URLSearchParams({ mode: 'upcoming', from: newStart, to: newEnd })
+    if (statusFilter !== 'all') sp.set('statusFilter', statusFilter)
+    if (notifFilter !== 'all') sp.set('notifFilter', notifFilter)
+    const res  = await fetch(`/api/appointments/list?${sp}`)
+    const json = await res.json()
+    const newItems: AppointmentListItem[] = json.data ?? []
+    if (newItems.length > 0) {
+      needsScrollAdjust.current = {
+        prevHeight: agendaRef.current?.scrollHeight ?? 0,
+        prevTop:    agendaRef.current?.scrollTop    ?? 0,
+      }
+      setListItems(prev => [...newItems, ...prev])
+      setPastFrom(newStart)
+    } else {
+      setHasMorePast(false)
+    }
+    setLoadingMorePast(false)
+  }, [pastFrom, loadingMorePast, hasMorePast, gotoDate, statusFilter, notifFilter])
+
+  // Preserve scroll position when prepending past items (runs sync after render)
+  useLayoutEffect(() => {
+    const adj = needsScrollAdjust.current
+    if (adj && agendaRef.current) {
+      agendaRef.current.scrollTop = adj.prevTop + (agendaRef.current.scrollHeight - adj.prevHeight)
+      needsScrollAdjust.current = null
+    }
+  })
+
+  // Auto-scroll so "Aujourd'hui" is visible at top on initial load
+  useEffect(() => {
+    if (!listLoading && listItems.length > 0 && !initialScrollDone.current && !gotoDate) {
+      const t = setTimeout(() => {
+        if (todayRef.current) {
+          todayRef.current.scrollIntoView({ behavior: 'instant', block: 'start' })
+          initialScrollDone.current = true
+        }
+      }, 30)
+      return () => clearTimeout(t)
+    }
+  }, [listLoading, listItems.length, gotoDate])
+
+  // IntersectionObserver — sentinel visible → load more past
+  useEffect(() => {
+    if (!sentinelRef.current || gotoDate || !hasMorePast) return
+    const el = sentinelRef.current
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting && !loadingMorePast) loadMorePast() },
+      { threshold: 0 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loadMorePast, gotoDate, hasMorePast, loadingMorePast])
 
   // ── Navigation ───────────────────────────────────────────────────────────
   function navigate(dir: 1 | -1) {
@@ -1105,7 +1182,12 @@ export default function AppointmentsPage() {
         </div>
 
         {/* ── Agenda ─────────────────────────────────────────────────────── */}
-        <TabsContent value="agenda" className="mt-0 flex-1 min-h-0 overflow-y-auto">
+        <TabsContent value="agenda" className="mt-0 flex-1 min-h-0">
+          <div ref={agendaRef} className="h-full overflow-y-auto">
+          {!gotoDate && <div ref={sentinelRef} className="h-px" />}
+          {loadingMorePast && (
+            <div className="text-center py-2 text-xs text-muted-foreground">Chargement...</div>
+          )}
           <div className="space-y-4 p-4 md:p-6">
             {loading ? (
               <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
@@ -1118,7 +1200,7 @@ export default function AppointmentsPage() {
             ) : (
             <div className="space-y-6">
               {groupByDay(filteredListItems).map(({ dateKey, label, items: dayItems }) => (
-                <div key={dateKey}>
+                <div key={dateKey} ref={label === 'groupToday' ? todayRef : undefined}>
                   {/* En-tête de jour */}
                   <div className="flex items-center gap-3 mb-3">
                     <h3 className="text-base font-bold capitalize">
@@ -1367,6 +1449,7 @@ export default function AppointmentsPage() {
               ))}
             </div>
           )}
+          </div>
           </div>
         </TabsContent>
 
