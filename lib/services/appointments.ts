@@ -111,9 +111,17 @@ export async function markAppointmentShow(
     .single()
 
   if (error || !appt) throw new Error('Appointment not found or already marked as show')
-  if (appt.points_credited) throw new Error('Points already credited')
 
   const now = new Date().toISOString()
+
+  // Points already credited on a previous show → just flip the status, skip re-crediting
+  if (appt.points_credited) {
+    await db
+      .from('appointments')
+      .update({ status: 'show', show_at: now, ...(amount !== undefined ? { amount } : {}) })
+      .eq('id', appointmentId)
+    return { ...(appt as Appointment), pointsCredited: 0 }
+  }
 
   await db
     .from('appointments')
