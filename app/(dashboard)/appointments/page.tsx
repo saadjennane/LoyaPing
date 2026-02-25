@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
-  Plus, ChevronLeft, ChevronRight, Calendar, List,
+  Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,10 +14,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Table, TableBody, TableCell, TableHead,
-  TableHeader, TableRow,
-} from '@/components/ui/table'
 import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, CustomerIndexItem } from '@/lib/types'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import PhoneInput from '@/components/PhoneInput'
@@ -26,14 +22,12 @@ import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  addDays, addMonths, subDays, isSameDay, isSameMonth, parseISO,
+  addDays, addMonths, isSameDay, isSameMonth, parseISO,
   setHours, setMinutes, differenceInMinutes, startOfDay, startOfToday,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
-type ViewMode = 'calendar' | 'list'
-type CalMode = '1day' | '3day' | '7day' | 'month'
-type ListTab      = 'upcoming' | 'history'
+type AppView      = 'agenda' | 'semaine' | 'mois'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
@@ -376,19 +370,14 @@ export default function AppointmentsPage() {
   const { status } = useConfigStatus()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [calMode, setCalMode] = useState<CalMode>('7day')
+  const [appView, setAppView] = useState<AppView>('agenda')
   const [anchor, setAnchor] = useState<Date>(new Date())
 
-  // ── List view state ───────────────────────────────────────────────────────
-  const [listTab,               setListTab]               = useState<ListTab>('upcoming')
-  const [upcomingStatusFilter,  setUpcomingStatusFilter]  = useState<StatusFilter>('all')
-  const [upcomingNotifFilter,   setUpcomingNotifFilter]   = useState<NotifFilter>('all')
-  const [historyStatusFilter,   setHistoryStatusFilter]   = useState<StatusFilter>('all')
-  const [historyNotifFilter,    setHistoryNotifFilter]    = useState<NotifFilter>('all')
-  const [upcomingGotoDate,      setUpcomingGotoDate]      = useState('')
-  const [historyGotoDate,       setHistoryGotoDate]       = useState('')
-  const [gotoOpen, setGotoOpen] = useState(false)
+  // ── Shared filter state (all views) ──────────────────────────────────────
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [notifFilter,  setNotifFilter]  = useState<NotifFilter>('all')
+  const [gotoDate,     setGotoDate]     = useState('')
+  const [gotoOpen,     setGotoOpen]     = useState(false)
   const [listItems,             setListItems]             = useState<AppointmentListItem[]>([])
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
@@ -522,7 +511,7 @@ export default function AppointmentsPage() {
       toast.success(t('appointments.toast.created'))
       setCreateOpen(false)
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
     setCreateSubmitting(false)
   }
@@ -564,7 +553,7 @@ export default function AppointmentsPage() {
       setAssignClientItem(null)
       setDetailOpen(false)
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
     setAssignSubmitting(false)
   }
@@ -605,19 +594,16 @@ export default function AppointmentsPage() {
       }
     } else if (filter) {
       if (filter === 'today') {
-        setViewMode('list')
-        setListTab('upcoming')
+        setAppView('agenda')
       } else if (filter === 'tomorrow') {
         const tomorrow = new Date()
         tomorrow.setDate(tomorrow.getDate() + 1)
         const tomorrowStr = tomorrow.toISOString().slice(0, 10)
-        setViewMode('list')
-        setListTab('upcoming')
-        setUpcomingGotoDate(tomorrowStr)
+        setAppView('agenda')
+        setGotoDate(tomorrowStr)
       } else if (filter === 'no_show') {
-        setViewMode('list')
-        setListTab('history')
-        setHistoryStatusFilter('no_show')
+        setAppView('agenda')
+        setStatusFilter('no_show')
       }
       window.history.replaceState(null, '', '/appointments')
     }
@@ -626,56 +612,36 @@ export default function AppointmentsPage() {
   // ── List fetch ───────────────────────────────────────────────────────────
   const fetchListItems = useCallback(async () => {
     setListLoading(true)
-    const sp = new URLSearchParams({ mode: listTab })
-    const gotoDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
+    const sp = new URLSearchParams({ mode: 'upcoming' })
     if (gotoDate) {
-      if (listTab === 'upcoming') {
-        sp.set('from', gotoDate)
-        sp.set('to', format(addDays(parseISO(gotoDate), 30), 'yyyy-MM-dd'))
-      } else {
-        sp.set('from', format(subDays(parseISO(gotoDate), 30), 'yyyy-MM-dd'))
-        sp.set('to', gotoDate)
-      }
+      sp.set('from', gotoDate)
+      sp.set('to', format(addDays(parseISO(gotoDate), 30), 'yyyy-MM-dd'))
     }
-    const sf = listTab === 'upcoming' ? upcomingStatusFilter : historyStatusFilter
-    const nf = listTab === 'upcoming' ? upcomingNotifFilter  : historyNotifFilter
-    if (sf !== 'all') sp.set('statusFilter', sf)
-    if (nf !== 'all') sp.set('notifFilter',  nf)
+    if (statusFilter !== 'all') sp.set('statusFilter', statusFilter)
+    if (notifFilter !== 'all') sp.set('notifFilter', notifFilter)
     const res  = await fetch(`/api/appointments/list?${sp}`)
     const json = await res.json()
     setListItems(json.data ?? [])
     setListLoading(false)
-  }, [listTab, upcomingGotoDate, historyGotoDate, upcomingStatusFilter, historyStatusFilter, upcomingNotifFilter, historyNotifFilter])
+  }, [gotoDate, statusFilter, notifFilter])
 
   useEffect(() => {
-    if (viewMode === 'list') void fetchListItems()
-  }, [viewMode, fetchListItems])
+    if (appView === 'agenda') void fetchListItems()
+  }, [appView, fetchListItems])
 
   // ── Navigation ───────────────────────────────────────────────────────────
   function navigate(dir: 1 | -1) {
-    if (calMode === '1day') setAnchor((d) => addDays(d, dir))
-    else if (calMode === '3day') setAnchor((d) => addDays(d, dir * 3))
-    else if (calMode === '7day') setAnchor((d) => addDays(d, dir * 7))
+    if (appView === 'semaine') setAnchor((d) => addDays(d, dir * 7))
     else setAnchor((d) => addMonths(d, dir))
   }
 
   function getDays(): Date[] {
-    if (calMode === '1day') return [anchor]
-    if (calMode === '3day') return [anchor, addDays(anchor, 1), addDays(anchor, 2)]
-    if (calMode === '7day') {
-      const start = startOfWeek(anchor, { weekStartsOn: 1 })
-      return Array.from({ length: 7 }, (_, i) => addDays(start, i))
-    }
-    return []
+    const start = startOfWeek(anchor, { weekStartsOn: 1 })
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i))
   }
 
   function navLabel(): string {
-    if (calMode === '1day') return format(anchor, 'EEEE dd MMMM yyyy', { locale: fr })
-    if (calMode === '3day') {
-      const end = addDays(anchor, 2)
-      return `${format(anchor, 'd MMM', { locale: fr })} – ${format(end, 'd MMM yyyy', { locale: fr })}`
-    }
-    if (calMode === '7day') {
+    if (appView === 'semaine') {
       const start = startOfWeek(anchor, { weekStartsOn: 1 })
       const end = endOfWeek(anchor, { weekStartsOn: 1 })
       return `${format(start, 'd MMM', { locale: fr })} – ${format(end, 'd MMM yyyy', { locale: fr })}`
@@ -713,7 +679,7 @@ export default function AppointmentsPage() {
       setAmountModalOpen(false)
       setDetailOpen(false)
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
   }
 
@@ -737,7 +703,7 @@ export default function AppointmentsPage() {
       toast.info(t('appointments.toast.noShow'))
       setDetailOpen(false)
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
   }
 
@@ -755,7 +721,7 @@ export default function AppointmentsPage() {
       toast.success(labels[status] ?? t('appointments.toast.statusUpdated'))
       setDetailOpen(false)
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
   }
 
@@ -781,7 +747,7 @@ export default function AppointmentsPage() {
       setDetailOpen(false)
       setDetailApptMode('detail')
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
   }
 
@@ -806,7 +772,7 @@ export default function AppointmentsPage() {
       setDeleteAppt(null)
       setDetailOpen(false)
       fetchAppointments()
-      if (viewMode === 'list') void fetchListItems()
+      if (appView === 'agenda') void fetchListItems()
     }
     setDeleteSubmitting(false)
   }
@@ -856,7 +822,7 @@ export default function AppointmentsPage() {
   }
 
   const reminderErrorCount = appointments.filter((a) => a.reminderStatus?.hasFailed).length
-  const days = viewMode === 'calendar' && calMode !== 'month' ? getDays() : []
+  const days = appView === 'semaine' ? getDays() : []
 
   const filteredListItems = listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
@@ -895,8 +861,8 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
-      {/* Search — list view only */}
-      {viewMode === 'list' && (
+      {/* Search — agenda view only */}
+      {appView === 'agenda' && (
         <div className="max-w-sm">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -921,226 +887,152 @@ export default function AppointmentsPage() {
           </span>
           <button
             className="ml-auto font-semibold underline underline-offset-2 hover:text-amber-900"
-            onClick={() => { setViewMode('list'); setListTab('upcoming'); setUpcomingNotifFilter('failed_only') }}
+            onClick={() => { setAppView('agenda'); setNotifFilter('failed_only') }}
           >
             Voir
           </button>
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* View toggle + list sub-tabs on the same row */}
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-md border overflow-hidden">
+      {/* ── Tab header (Agenda / Semaine / Mois) ─────────────────────────────── */}
+      <div className="border-b -mx-3 md:-mx-6 px-3 md:px-6">
+        <div className="flex">
+          {([
+            { view: 'agenda',  label: 'Agenda' },
+            { view: 'semaine', label: 'Semaine' },
+            { view: 'mois',    label: 'Mois' },
+          ] as { view: AppView; label: string }[]).map(({ view, label }) => (
             <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${
-                viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+              key={view}
+              onClick={() => setAppView(view)}
+              className={`px-4 py-3 text-sm font-medium transition-colors ${
+                appView === view
+                  ? 'text-[#3B5BDB] font-bold shadow-[inset_0_-3px_0_#3B5BDB]'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <List className="h-3.5 w-3.5" />{t('appointments.listView')}
+              {label}
             </button>
-            <button
-              onClick={() => setViewMode('calendar')}
-              className={`px-3 py-1.5 text-sm flex items-center gap-1.5 border-l ${
-                viewMode === 'calendar' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-              }`}
-            >
-              <Calendar className="h-3.5 w-3.5" />{t('appointments.calendarView')}
-            </button>
-          </div>
+          ))}
+        </div>
+      </div>
 
-          {viewMode === 'list' && (
-            <div className="flex rounded-md border overflow-hidden">
-              <button
-                onClick={() => setListTab('upcoming')}
-                className={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
-                  listTab === 'upcoming' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                }`}
-              >
-                {t('appointments.upcoming')}
-              </button>
-              <button
-                onClick={() => setListTab('history')}
-                className={`px-4 py-1.5 text-sm font-medium border-l ${
-                  listTab === 'history' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                }`}
-              >
-                {t('appointments.history')}
-              </button>
-            </div>
+      {/* ── Filters + navigation (all views) ─────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Mobile: dropdown */}
+        <div className="md:hidden flex items-center gap-2 w-full">
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+            <SelectTrigger className="h-9 flex-1 font-medium text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
+                <SelectItem key={key} value={key}>
+                  {key === 'unassigned' ? 'Non assigné' : key === 'upcoming' ? 'Planifié' : t(`appointments.filters.${key}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {appView === 'agenda' && (
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0"
+              onClick={() => {
+                if (mobileSelectMode) { setMobileSelectMode(false); setSelectedIds(new Set()) }
+                else setMobileSelectMode(true)
+              }}
+            >
+              {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
+            </button>
           )}
         </div>
 
-        {viewMode === 'calendar' && (
-          <>
-            <div className="flex rounded-md border overflow-hidden">
-              {(['1day', '3day', '7day', 'month'] as CalMode[]).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setCalMode(m)}
-                  className={`px-3 py-1.5 text-sm border-l first:border-l-0 ${
-                    calMode === m ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                  }`}
-                >
-                  {t(`appointments.calModes.${m}`)}
+        {/* Desktop: pills */}
+        {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(key)}
+            className={`hidden md:inline-flex rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
+              statusFilter === key
+                ? key === 'unassigned'
+                  ? 'bg-red-600 text-white border-red-600'
+                  : 'bg-primary text-primary-foreground border-primary'
+                : key === 'unassigned'
+                  ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
+                  : 'border-border bg-background hover:bg-muted'
+            }`}
+          >
+            {key === 'unassigned' ? 'Non assigné' : key === 'upcoming' ? 'Planifié' : t(`appointments.filters.${key}`)}
+          </button>
+        ))}
+
+        {/* WhatsApp error toggle */}
+        <button
+          onClick={() => setNotifFilter(notifFilter === 'failed_only' ? 'all' : 'failed_only')}
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
+            notifFilter === 'failed_only'
+              ? 'bg-amber-500 text-white border-amber-500'
+              : 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100'
+          }`}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          {t('appointments.filters.errorWA')}
+        </button>
+
+        {/* Go-to date — agenda only */}
+        {appView === 'agenda' && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <Popover open={gotoOpen} onOpenChange={setGotoOpen}>
+              <PopoverTrigger asChild>
+                <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap">
+                  {gotoDate
+                    ? format(parseISO(gotoDate), 'd MMM yyyy', { locale: fr })
+                    : 'Aller à une date'}
                 </button>
-              ))}
-            </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <CalendarPicker
+                  mode="single"
+                  selected={gotoDate ? parseISO(gotoDate) : undefined}
+                  locale={fr}
+                  onSelect={(day) => {
+                    if (day) setGotoDate(format(day, 'yyyy-MM-dd'))
+                    setGotoOpen(false)
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            {gotoDate && (
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setGotoDate('')}>✕</Button>
+            )}
+          </div>
+        )}
+
+        {/* Navigation — semaine/mois only */}
+        {(appView === 'semaine' || appView === 'mois') && (
+          <div className="ml-auto flex items-center gap-1">
             <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
               {t('appointments.todayBtn')}
             </Button>
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-medium min-w-[220px] text-center capitalize">
-                {navLabel()}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => navigate(1)}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </>
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium min-w-[180px] text-center capitalize">
+              {navLabel()}
+            </span>
+            <Button variant="ghost" size="sm" onClick={() => navigate(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
 
       {/* Content */}
       {loading ? (
         <div className="text-muted-foreground text-sm">{t('common.loading')}</div>
-      ) : viewMode === 'list' ? (
-        // ── List View — sub-tabs: À venir / Historique ─────────────────────
+      ) : appView === 'agenda' ? (
+        // ── Agenda (list) view ─────────────────────────────────────────────
         <div className="space-y-4">
-
-          {/* Filter bar */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Status filter — dropdown on mobile, pills on desktop */}
-            {(() => {
-              const current = listTab === 'upcoming' ? upcomingStatusFilter : historyStatusFilter
-              const setFilter = (key: StatusFilter) =>
-                listTab === 'upcoming' ? setUpcomingStatusFilter(key) : setHistoryStatusFilter(key)
-              return (
-                <>
-                  {/* Mobile dropdown */}
-                  <div className="md:hidden flex items-center gap-2 w-full">
-                    <Select value={current} onValueChange={(v) => setFilter(v as StatusFilter)}>
-                      <SelectTrigger className="h-9 flex-1 font-medium text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
-                          <SelectItem key={key} value={key}>
-                            {key === 'unassigned' ? 'Non assigné' : t(`appointments.filters.${key}`)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap shrink-0"
-                      onClick={() => {
-                        if (mobileSelectMode) { setMobileSelectMode(false); setSelectedIds(new Set()) }
-                        else setMobileSelectMode(true)
-                      }}
-                    >
-                      {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
-                    </button>
-                  </div>
-                  {/* Desktop pills */}
-                  {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
-                    <button
-                      key={key}
-                      onClick={() => setFilter(key)}
-                      className={`hidden md:inline-flex rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
-                        current === key
-                          ? key === 'unassigned'
-                            ? 'bg-red-600 text-white border-red-600'
-                            : 'bg-primary text-primary-foreground border-primary'
-                          : key === 'unassigned'
-                            ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
-                            : 'border-border bg-background hover:bg-muted'
-                      }`}
-                    >
-                      {key === 'unassigned' ? 'Non assigné' : t(`appointments.filters.${key}`)}
-                    </button>
-                  ))}
-                </>
-              )
-            })()}
-
-            {/* WhatsApp error toggle */}
-            {(() => {
-              const nf     = listTab === 'upcoming' ? upcomingNotifFilter : historyNotifFilter
-              const active = nf === 'failed_only'
-              return (
-                <button
-                  onClick={() => {
-                    const next: NotifFilter = active ? 'all' : 'failed_only'
-                    listTab === 'upcoming' ? setUpcomingNotifFilter(next) : setHistoryNotifFilter(next)
-                  }}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
-                    active ? 'bg-amber-500 text-white border-amber-500' : 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100'
-                  }`}
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                  {t('appointments.filters.errorWA')}
-                </button>
-              )
-            })()}
-
-            {/* Go-to date — custom calendar popover, click-outside ferme sans appliquer */}
-            {(() => {
-              const appliedDate = listTab === 'upcoming' ? upcomingGotoDate : historyGotoDate
-              const selectedDay = appliedDate ? parseISO(appliedDate) : undefined
-
-              const clear = () => {
-                if (listTab === 'upcoming') setUpcomingGotoDate('')
-                else setHistoryGotoDate('')
-              }
-
-              return (
-                <div className="ml-auto flex items-center gap-1.5">
-                  <Popover open={gotoOpen} onOpenChange={(open) => {
-                    setGotoOpen(open)
-                    if (!open && !appliedDate) {
-                      // Fermé sans sélection → repos (déjà vide)
-                    }
-                    if (!open && appliedDate) {
-                      // Fermé après sélection → on garde la date
-                    }
-                  }}>
-                    <PopoverTrigger asChild>
-                      <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap">
-                        {appliedDate
-                          ? format(parseISO(appliedDate), 'd MMM yyyy', { locale: fr })
-                          : 'Aller à une date'}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="end">
-                      <CalendarPicker
-                        mode="single"
-                        selected={selectedDay}
-                        locale={fr}
-                        onSelect={(day) => {
-                          if (day) {
-                            const iso = format(day, 'yyyy-MM-dd')
-                            if (listTab === 'upcoming') setUpcomingGotoDate(iso)
-                            else setHistoryGotoDate(iso)
-                          }
-                          setGotoOpen(false)
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {appliedDate && (
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={clear}>✕</Button>
-                  )}
-                </div>
-              )
-            })()}
-          </div>
-
           {/* Day-grouped content */}
           {listLoading ? (
             <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
@@ -1335,15 +1227,15 @@ export default function AppointmentsPage() {
             </div>
           )}
         </div>
-      ) : calMode === 'month' ? (
-        // ── Month Grid ─────────────────────────────────────────────────────
+      ) : appView === 'mois' ? (
+        // ── Mois ───────────────────────────────────────────────────────────
         <MonthGrid
           anchor={anchor}
           appointments={appointments}
           onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
         />
       ) : (
-        // ── Time Grid ──────────────────────────────────────────────────────
+        // ── Semaine ────────────────────────────────────────────────────────
         <div className="overflow-x-auto">
           <TimeGrid
             days={days}
@@ -1821,8 +1713,8 @@ export default function AppointmentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Bulk floating action bar (list view only) ──────────────────────── */}
-      {viewMode === 'list' && selectedIds.size > 0 && (
+      {/* ── Bulk floating action bar (agenda view only) ─────────────────────── */}
+      {appView === 'agenda' && selectedIds.size > 0 && (
         <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-border rounded-xl shadow-lg px-4 py-2.5">
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{selectedIds.size} sélectionné(s)</span>
           <div className="w-px h-4 bg-border" />
