@@ -233,16 +233,34 @@ export async function pushAppointmentToGoogle(
 
   if (!appt) return
 
-  // Fetch client email for attendee (optional)
+  // Fetch client info for title, description and attendee
+  let clientName: string | null = null
+  let clientPhone: string | null = null
   let clientEmail: string | null = null
   if (appt.client_id) {
     const { data: client } = await db
       .from('clients')
-      .select('email')
+      .select('civility, first_name, last_name, phone_number, email')
       .eq('id', appt.client_id)
       .maybeSingle()
-    clientEmail = client?.email ?? null
+    if (client) {
+      const nameParts = [client.civility, client.first_name, client.last_name].filter(Boolean)
+      clientName  = nameParts.length > 0 ? nameParts.join(' ') : client.phone_number
+      clientPhone = client.phone_number ?? null
+      clientEmail = client.email ?? null
+    }
   }
+
+  // Build title: "[notes] – Nom" or "RDV – Nom" or fallback
+  const summary = clientName
+    ? (appt.notes ? `${appt.notes} – ${clientName}` : `RDV – ${clientName}`)
+    : (appt.notes ?? 'Rendez-vous')
+
+  // Build description: phone + notes
+  const descLines: string[] = []
+  if (clientPhone) descLines.push(`Tél : ${clientPhone}`)
+  if (appt.notes)  descLines.push(`Notes : ${appt.notes}`)
+  const description = descLines.length > 0 ? descLines.join('\n') : undefined
 
   // Read selected calendar
   const { data: ch } = await db
@@ -258,7 +276,8 @@ export async function pushAppointmentToGoogle(
   const endIso  = appt.ended_at ?? new Date(startMs + 60 * 60 * 1000).toISOString()
 
   const eventBody = {
-    summary:   appt.notes ?? 'Rendez-vous',
+    summary,
+    description,
     start:     { dateTime: appt.scheduled_at, timeZone: 'UTC' },
     end:       { dateTime: endIso,            timeZone: 'UTC' },
     attendees: clientEmail ? [{ email: clientEmail }] : [],
