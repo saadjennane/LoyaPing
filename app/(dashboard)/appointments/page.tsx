@@ -1458,18 +1458,18 @@ export default function AppointmentsPage() {
           )}
           <button
             onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}
-            className="h-9 w-9 flex items-center justify-center rounded-md border border-input bg-background shrink-0"
+            className="h-10 w-10 flex items-center justify-center rounded-md border border-input bg-background shrink-0"
             title="Indisponibilités"
           >
-            <CalendarX className="h-4 w-4 text-muted-foreground" />
+            <CalendarX className="h-5 w-5 text-muted-foreground" />
           </button>
           {(calendarConnected.google || calendarConnected.microsoft) && (
             <button
               onClick={syncCalendar}
               disabled={syncing}
-              className="h-9 w-9 flex items-center justify-center rounded-md border border-input bg-background shrink-0"
+              className="h-10 w-10 flex items-center justify-center rounded-md border border-input bg-background shrink-0"
             >
-              <RefreshCw className={`h-4 w-4 text-muted-foreground ${syncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-5 w-5 text-muted-foreground ${syncing ? 'animate-spin' : ''}`} />
             </button>
           )}
         </div>
@@ -1497,19 +1497,19 @@ export default function AppointmentsPage() {
           <div className="ml-auto flex items-center gap-1 pr-3 py-2">
             <button
               onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}
-              className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className="h-9 w-9 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               title="Indisponibilités"
             >
-              <CalendarX className="h-4 w-4" />
+              <CalendarX className="h-5 w-5" />
             </button>
             {(calendarConnected.google || calendarConnected.microsoft) && (
               <button
                 onClick={syncCalendar}
                 disabled={syncing}
-                className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+                className="h-9 w-9 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
                 title="Synchroniser le calendrier"
               >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
               </button>
             )}
           </div>
