@@ -389,6 +389,7 @@ export default function AppointmentsPage() {
   const [pastFrom,              setPastFrom]              = useState<string>(() => format(subDays(new Date(), 3), 'yyyy-MM-dd'))
   const [loadingMorePast,       setLoadingMorePast]       = useState(false)
   const [hasMorePast,           setHasMorePast]           = useState(false)
+  const [isTodayVisible,        setIsTodayVisible]        = useState(true)
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailApptMode, setDetailApptMode] = useState<DetailApptMode>('detail')
@@ -434,7 +435,6 @@ export default function AppointmentsPage() {
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const todayRef          = useRef<HTMLDivElement>(null)
-  const sentinelRef       = useRef<HTMLDivElement>(null)
   const agendaRef         = useRef<HTMLDivElement>(null)
   const initialScrollDone = useRef(false)
   const needsScrollAdjust = useRef<{ prevHeight: number; prevTop: number } | null>(null)
@@ -686,30 +686,37 @@ export default function AppointmentsPage() {
     }
   })
 
-  // Auto-scroll so "Aujourd'hui" is visible at top on initial load
+  // Auto-scroll so "Aujourd'hui" is at the top on initial load
   useEffect(() => {
     if (!listLoading && listItems.length > 0 && !initialScrollDone.current && !gotoDate) {
       const t = setTimeout(() => {
-        if (todayRef.current) {
-          todayRef.current.scrollIntoView({ behavior: 'instant', block: 'start' })
+        const container = agendaRef.current
+        const today     = todayRef.current
+        if (container && today) {
+          const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
+          container.scrollTop += offset
           initialScrollDone.current = true
         }
-      }, 30)
+      }, 50)
       return () => clearTimeout(t)
     }
   }, [listLoading, listItems.length, gotoDate])
 
-  // IntersectionObserver — sentinel visible → load more past
+  // Track whether today's section is visible — shows "Aujourd'hui" button when not
   useEffect(() => {
-    if (!sentinelRef.current || gotoDate || !hasMorePast) return
-    const el = sentinelRef.current
-    const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting && !loadingMorePast) loadMorePast() },
-      { threshold: 0 },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [loadMorePast, gotoDate, hasMorePast, loadingMorePast])
+    const container = agendaRef.current
+    if (!container || gotoDate) { setIsTodayVisible(true); return }
+    const check = () => {
+      const today = todayRef.current
+      if (!today) { setIsTodayVisible(true); return }
+      const cRect = container.getBoundingClientRect()
+      const tRect = today.getBoundingClientRect()
+      setIsTodayVisible(tRect.bottom > cRect.top && tRect.top < cRect.bottom)
+    }
+    check()
+    container.addEventListener('scroll', check, { passive: true })
+    return () => container.removeEventListener('scroll', check)
+  }, [gotoDate, listItems.length])
 
   // ── Navigation ───────────────────────────────────────────────────────────
   function navigate(dir: 1 | -1) {
@@ -1135,6 +1142,21 @@ export default function AppointmentsPage() {
           {/* Aller à une date — agenda uniquement */}
           {appView === 'agenda' && (
             <div className="ml-auto flex items-center gap-1.5">
+              {!gotoDate && !isTodayVisible && (
+                <button
+                  className="h-8 rounded-md px-3 text-xs font-medium bg-[#3B5BDB] text-white hover:bg-[#2F4BC7] transition-colors whitespace-nowrap"
+                  onClick={() => {
+                    const container = agendaRef.current
+                    const today     = todayRef.current
+                    if (container && today) {
+                      const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
+                      container.scrollBy({ top: offset, behavior: 'smooth' })
+                    }
+                  }}
+                >
+                  Aujourd&apos;hui
+                </button>
+              )}
               <Popover open={gotoOpen} onOpenChange={setGotoOpen}>
                 <PopoverTrigger asChild>
                   <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap">
@@ -1184,9 +1206,16 @@ export default function AppointmentsPage() {
         {/* ── Agenda ─────────────────────────────────────────────────────── */}
         <TabsContent value="agenda" className="mt-0 flex-1 min-h-0">
           <div ref={agendaRef} className="h-full overflow-y-auto">
-          {!gotoDate && <div ref={sentinelRef} className="h-px" />}
-          {loadingMorePast && (
-            <div className="text-center py-2 text-xs text-muted-foreground">Chargement...</div>
+          {!gotoDate && hasMorePast && (
+            <div className="flex justify-center pt-3 pb-1 px-4">
+              <button
+                disabled={loadingMorePast}
+                onClick={() => loadMorePast()}
+                className="w-full rounded-lg border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:bg-muted/40 disabled:opacity-50 transition-colors"
+              >
+                {loadingMorePast ? 'Chargement...' : 'Voir plus'}
+              </button>
+            </div>
           )}
           <div className="space-y-4 p-4 md:p-6">
             {loading ? (
