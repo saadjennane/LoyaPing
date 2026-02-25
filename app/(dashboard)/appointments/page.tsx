@@ -387,8 +387,11 @@ export default function AppointmentsPage() {
   const [listLoading,           setListLoading]           = useState(false)
   const [listSearch,            setListSearch]            = useState('')
   const [pastFrom,              setPastFrom]              = useState<string>(() => format(subDays(new Date(), 3), 'yyyy-MM-dd'))
+  const [futureTo,              setFutureTo]              = useState<string>(() => format(addDays(new Date(), 60), 'yyyy-MM-dd'))
   const [loadingMorePast,       setLoadingMorePast]       = useState(false)
+  const [loadingMoreFuture,     setLoadingMoreFuture]     = useState(false)
   const [hasMorePast,           setHasMorePast]           = useState(false)
+  const [hasMoreFuture,         setHasMoreFuture]         = useState(false)
   const [isTodayVisible,        setIsTodayVisible]        = useState(true)
   const [selected, setSelected] = useState<Appointment | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -629,17 +632,25 @@ export default function AppointmentsPage() {
     setListLoading(true)
     const sp = new URLSearchParams({ mode: 'upcoming' })
     if (gotoDate) {
-      sp.set('from', gotoDate)
-      sp.set('to', format(addDays(parseISO(gotoDate), 30), 'yyyy-MM-dd'))
-      setHasMorePast(false)
+      const start = format(subDays(parseISO(gotoDate), 3), 'yyyy-MM-dd')
+      const end   = format(addDays(parseISO(gotoDate), 7),  'yyyy-MM-dd')
+      sp.set('from', start)
+      sp.set('to', end)
+      setPastFrom(start)
+      setFutureTo(end)
+      setHasMorePast(true)
+      setHasMoreFuture(true)
     } else {
       const start = format(subDays(new Date(), 3), 'yyyy-MM-dd')
+      const end   = format(addDays(new Date(), 60), 'yyyy-MM-dd')
       sp.set('from', start)
-      sp.set('to', format(addDays(new Date(), 60), 'yyyy-MM-dd'))
+      sp.set('to', end)
       setPastFrom(start)
+      setFutureTo(end)
       setHasMorePast(true)
-      initialScrollDone.current = false
+      setHasMoreFuture(false)
     }
+    initialScrollDone.current = false
     if (statusFilter !== 'all') sp.set('statusFilter', statusFilter)
     if (notifFilter !== 'all') sp.set('notifFilter', notifFilter)
     const res  = await fetch(`/api/appointments/list?${sp}`)
@@ -654,10 +665,10 @@ export default function AppointmentsPage() {
 
   // ── Lazy load more past appointments ──────────────────────────────────────
   const loadMorePast = useCallback(async () => {
-    if (loadingMorePast || !hasMorePast || gotoDate) return
+    if (loadingMorePast || !hasMorePast) return
     setLoadingMorePast(true)
     const newEnd   = format(subDays(parseISO(pastFrom), 1), 'yyyy-MM-dd')
-    const newStart = format(subDays(parseISO(pastFrom), 14), 'yyyy-MM-dd')
+    const newStart = format(subDays(parseISO(pastFrom), 7), 'yyyy-MM-dd')
     const sp = new URLSearchParams({ mode: 'upcoming', from: newStart, to: newEnd })
     if (statusFilter !== 'all') sp.set('statusFilter', statusFilter)
     if (notifFilter !== 'all') sp.set('notifFilter', notifFilter)
@@ -675,7 +686,28 @@ export default function AppointmentsPage() {
       setHasMorePast(false)
     }
     setLoadingMorePast(false)
-  }, [pastFrom, loadingMorePast, hasMorePast, gotoDate, statusFilter, notifFilter])
+  }, [pastFrom, loadingMorePast, hasMorePast, statusFilter, notifFilter])
+
+  // ── Lazy load more future appointments ────────────────────────────────────
+  const loadMoreFuture = useCallback(async () => {
+    if (loadingMoreFuture || !hasMoreFuture) return
+    setLoadingMoreFuture(true)
+    const newStart = format(addDays(parseISO(futureTo), 1), 'yyyy-MM-dd')
+    const newEnd   = format(addDays(parseISO(futureTo), 7), 'yyyy-MM-dd')
+    const sp = new URLSearchParams({ mode: 'upcoming', from: newStart, to: newEnd })
+    if (statusFilter !== 'all') sp.set('statusFilter', statusFilter)
+    if (notifFilter !== 'all') sp.set('notifFilter', notifFilter)
+    const res  = await fetch(`/api/appointments/list?${sp}`)
+    const json = await res.json()
+    const newItems: AppointmentListItem[] = json.data ?? []
+    if (newItems.length > 0) {
+      setListItems(prev => [...prev, ...newItems])
+      setFutureTo(newEnd)
+    } else {
+      setHasMoreFuture(false)
+    }
+    setLoadingMoreFuture(false)
+  }, [futureTo, loadingMoreFuture, hasMoreFuture, statusFilter, notifFilter])
 
   // Preserve scroll position when prepending past items (runs sync after render)
   useLayoutEffect(() => {
@@ -686,17 +718,28 @@ export default function AppointmentsPage() {
     }
   })
 
-  // Auto-scroll so "Aujourd'hui" is at the top on initial load
+  // Auto-scroll to target date on initial load or gotoDate change
   useEffect(() => {
-    if (!listLoading && listItems.length > 0 && !initialScrollDone.current && !gotoDate) {
+    if (!listLoading && listItems.length > 0 && !initialScrollDone.current) {
       const t = setTimeout(() => {
         const container = agendaRef.current
-        const today     = todayRef.current
-        if (container && today) {
-          const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
-          container.scrollTop += offset
-          initialScrollDone.current = true
+        if (!container) return
+        if (gotoDate) {
+          // Scroll to first day group at or after gotoDate
+          const groups = Array.from(container.querySelectorAll<HTMLElement>('[data-datekey]'))
+          const target = groups.find((el) => (el.dataset.datekey ?? '') >= gotoDate)
+          if (target) {
+            const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top
+            container.scrollTop += offset
+          }
+        } else {
+          const today = todayRef.current
+          if (today) {
+            const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
+            container.scrollTop += offset
+          }
         }
+        initialScrollDone.current = true
       }, 50)
       return () => clearTimeout(t)
     }
@@ -705,10 +748,10 @@ export default function AppointmentsPage() {
   // Track whether today's section is visible — shows "Aujourd'hui" button when not
   useEffect(() => {
     const container = agendaRef.current
-    if (!container || gotoDate) { setIsTodayVisible(true); return }
+    if (!container) return
     const check = () => {
       const today = todayRef.current
-      if (!today) { setIsTodayVisible(true); return }
+      if (!today) { setIsTodayVisible(false); return }
       const cRect = container.getBoundingClientRect()
       const tRect = today.getBoundingClientRect()
       setIsTodayVisible(tRect.bottom > cRect.top && tRect.top < cRect.bottom)
@@ -716,7 +759,7 @@ export default function AppointmentsPage() {
     check()
     container.addEventListener('scroll', check, { passive: true })
     return () => container.removeEventListener('scroll', check)
-  }, [gotoDate, listItems.length])
+  }, [listItems.length])
 
   // ── Navigation ───────────────────────────────────────────────────────────
   function navigate(dir: 1 | -1) {
@@ -1142,7 +1185,7 @@ export default function AppointmentsPage() {
           {/* Aller à une date — agenda uniquement */}
           {appView === 'agenda' && (
             <div className="ml-auto flex items-center gap-1.5">
-              {!gotoDate && !isTodayVisible && (
+              {!listLoading && !loading && !isTodayVisible && (
                 <button
                   className="h-8 rounded-md px-3 text-xs font-medium bg-[#3B5BDB] text-white hover:bg-[#2F4BC7] transition-colors whitespace-nowrap"
                   onClick={() => {
@@ -1151,6 +1194,9 @@ export default function AppointmentsPage() {
                     if (container && today) {
                       const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
                       container.scrollBy({ top: offset, behavior: 'smooth' })
+                    } else {
+                      // Today not in current list — reset to normal view
+                      setGotoDate('')
                     }
                   }}
                 >
@@ -1206,7 +1252,7 @@ export default function AppointmentsPage() {
         {/* ── Agenda ─────────────────────────────────────────────────────── */}
         <TabsContent value="agenda" className="mt-0 flex-1 min-h-0">
           <div ref={agendaRef} className="h-full overflow-y-auto">
-          {!gotoDate && hasMorePast && (
+          {hasMorePast && (
             <div className="flex justify-center pt-3 pb-1 px-4">
               <button
                 disabled={loadingMorePast}
@@ -1229,7 +1275,7 @@ export default function AppointmentsPage() {
             ) : (
             <div className="space-y-6">
               {groupByDay(filteredListItems).map(({ dateKey, label, items: dayItems }) => (
-                <div key={dateKey} ref={label === 'groupToday' ? todayRef : undefined}>
+                <div key={dateKey} data-datekey={dateKey} ref={label === 'groupToday' ? todayRef : undefined}>
                   {/* En-tête de jour */}
                   <div className="flex items-center gap-3 mb-3">
                     <h3 className="text-base font-bold capitalize">
@@ -1476,6 +1522,17 @@ export default function AppointmentsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {hasMoreFuture && !listLoading && !loading && (
+            <div className="flex justify-center pt-1 pb-3 px-4">
+              <button
+                disabled={loadingMoreFuture}
+                onClick={() => loadMoreFuture()}
+                className="w-full rounded-lg border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:bg-muted/40 disabled:opacity-50 transition-colors"
+              >
+                {loadingMoreFuture ? 'Chargement...' : 'Voir plus'}
+              </button>
             </div>
           )}
           </div>
