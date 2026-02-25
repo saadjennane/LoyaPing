@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, List,
-  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw,
+  UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -1603,15 +1603,24 @@ export default function AppointmentsPage() {
                   <div className="space-y-3 pt-1 border-t">
                     <p className="text-xs text-muted-foreground">Ce RDV a été importé depuis votre calendrier mais aucun client n&apos;a été identifié. Assignez un client ou supprimez-le.</p>
                     <form onSubmit={handleAssignClient} className="space-y-2">
-                      <CustomerAutocomplete
-                        autoFocus
-                        onSelect={(_, item) => setAssignClientItem(item)}
-                        placeholder="Rechercher un client..."
-                      />
-                      {assignClientItem && (
-                        <div className="text-xs text-muted-foreground px-1">
-                          Client sélectionné : <span className="font-medium text-foreground">{assignClientItem.display_name}</span>
+                      {assignClientItem ? (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50">
+                          <UserCheck className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="flex-1 text-sm font-medium truncate">{assignClientItem.display_name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setAssignClientItem(null)}
+                            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
                         </div>
+                      ) : (
+                        <CustomerAutocomplete
+                          autoFocus
+                          onSelect={(_, item) => setAssignClientItem(item)}
+                          placeholder="Rechercher un client..."
+                        />
                       )}
                       <Button type="submit" className="w-full" disabled={assignSubmitting || !assignClientItem}>
                         <UserCheck className="h-4 w-4 mr-2" />
