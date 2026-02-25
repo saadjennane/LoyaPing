@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
-  MoreHorizontal, CheckCircle2, XCircle, User, Pencil,
+  MoreHorizontal, Pencil,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -712,6 +712,58 @@ export default function AppointmentsPage() {
     }
   }
 
+  // Inline show/no-show from agenda row — optimistic, no full refetch
+  const markShowInline = (id: string) => {
+    if (loyaltyProgram?.type === 'montant') {
+      setPendingShowId(id)
+      setShowAmount('')
+      setAmountModalOpen(true)
+      return
+    }
+    const prev = listItems.find((i) => i.id === id)?.status
+    setListItems((items) => items.map((i) => i.id === id ? { ...i, status: 'show' as const } : i))
+    fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'show' }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.error) {
+          if (prev) setListItems((items) => items.map((i) => i.id === id ? { ...i, status: prev } : i))
+          toast.error(json.error)
+        } else {
+          const pts = json.data?.pointsCredited
+          toast.success(pts ? t('appointments.toast.showPts', { pts }) : t('appointments.toast.show'))
+        }
+      })
+      .catch(() => {
+        if (prev) setListItems((items) => items.map((i) => i.id === id ? { ...i, status: prev } : i))
+      })
+  }
+
+  const markNoShowInline = (id: string) => {
+    const prev = listItems.find((i) => i.id === id)?.status
+    setListItems((items) => items.map((i) => i.id === id ? { ...i, status: 'no_show' as const } : i))
+    fetch(`/api/appointments/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'no_show' }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.error) {
+          if (prev) setListItems((items) => items.map((i) => i.id === id ? { ...i, status: prev } : i))
+          toast.error(json.error)
+        } else {
+          toast.info(t('appointments.toast.noShow'))
+        }
+      })
+      .catch(() => {
+        if (prev) setListItems((items) => items.map((i) => i.id === id ? { ...i, status: prev } : i))
+      })
+  }
+
   const forceStatus = async (id: string, status: 'show' | 'no_show' | 'scheduled') => {
     const res = await fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
@@ -1084,6 +1136,7 @@ export default function AppointmentsPage() {
                         : null
                       const isUnassigned = item.client_id === null
                       const isSelected = selectedIds.has(item.id)
+                      const isApptToday = isSameDay(parseISO(item.scheduled_at), new Date())
                       return (
                         <div
                           key={item.id}
@@ -1119,27 +1172,14 @@ export default function AppointmentsPage() {
                               if (full) { setSelected(full); setDetailOpen(true) }
                             }}
                           >
-                            <div className="text-sm font-semibold tabular-nums">
+                            <div className="text-sm font-semibold tabular-nums leading-tight">
                               {format(parseISO(item.scheduled_at), 'HH:mm')}
-                              {item.ended_at && ` – ${format(parseISO(item.ended_at), 'HH:mm')}`}
                             </div>
-                            {duration !== null && (
-                              <div className="text-[11px] text-muted-foreground uppercase font-medium tracking-wide">
-                                {duration} min
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Avatar */}
-                          <div
-                            className="w-9 h-9 rounded-full bg-muted items-center justify-center shrink-0 cursor-pointer hidden sm:flex"
-                            onClick={() => {
-                              if (mobileSelectMode) { toggleSelect(item.id); return }
-                              const full = appointments.find((a) => a.id === item.id)
-                              if (full) { setSelected(full); setDetailOpen(true) }
-                            }}
-                          >
-                            <User className="h-5 w-5 text-muted-foreground" />
+                            <div className="text-[11px] text-muted-foreground font-medium tabular-nums">
+                              {item.ended_at && format(parseISO(item.ended_at), 'HH:mm')}
+                              {item.ended_at && duration !== null && ' · '}
+                              {duration !== null && `${duration} min`}
+                            </div>
                           </div>
 
                           {/* Nom + notes */}
@@ -1151,22 +1191,20 @@ export default function AppointmentsPage() {
                               if (full) { setSelected(full); setDetailOpen(true) }
                             }}
                           >
-                            <div className="font-semibold text-sm truncate flex items-center gap-1.5">
-                              {isUnassigned && <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" />}
-                              {isUnassigned
-                                ? <span className="text-red-700">{item.client_name === '—' ? 'Sans client' : item.client_name}</span>
-                                : item.client_name
-                              }
-                            </div>
-                            {item.notes && (
-                              <div className="text-xs text-muted-foreground truncate">{item.notes}</div>
-                            )}
+                            <p className="text-sm line-clamp-2 leading-snug">
+                              <span className={`font-semibold${isUnassigned ? ' text-orange-700' : ''}`}>
+                                {isUnassigned ? (item.client_name === '—' ? 'Sans client' : item.client_name) : item.client_name}
+                              </span>
+                              {item.notes && (
+                                <span className="font-normal text-muted-foreground ml-1.5">{item.notes}</span>
+                              )}
+                            </p>
                           </div>
 
                           {/* Badge statut */}
                           <div className="hidden sm:block shrink-0">
                             {isUnassigned ? (
-                              <span className="inline-flex items-center text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-3 py-1">
+                              <span className="inline-flex items-center text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-3 py-1">
                                 Non assigné
                               </span>
                             ) : item.reminderStatus.hasFailed ? (
@@ -1176,10 +1214,10 @@ export default function AppointmentsPage() {
                             ) : (
                               <span className={`inline-flex items-center text-xs font-medium rounded-full px-3 py-1 border ${
                                 item.status === 'show'
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  ? 'bg-green-50 text-green-700 border-green-200'
                                   : item.status === 'no_show'
                                     ? 'bg-red-50 text-red-700 border-red-200'
-                                    : 'bg-green-50 text-green-700 border-green-200'
+                                    : 'bg-gray-100 text-gray-600 border-gray-200'
                               }`}>
                                 {statusLabel(item.status, t)}
                               </span>
@@ -1187,67 +1225,134 @@ export default function AppointmentsPage() {
                           </div>
 
                           {/* Actions */}
-                          <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              title={t('appointments.actions.present')}
-                              onClick={() => markShow(item.id)}
-                              className="p-1.5 rounded-full hover:bg-muted transition-colors"
-                            >
-                              <CheckCircle2 className={`h-5 w-5 transition-colors ${item.status === 'show' ? 'text-green-500' : 'text-muted-foreground/35 hover:text-green-500'}`} />
-                            </button>
-                            <button
-                              title={t('appointments.actions.absent')}
-                              onClick={() => markNoShow(item.id)}
-                              className="p-1.5 rounded-full hover:bg-muted transition-colors"
-                            >
-                              <XCircle className={`h-5 w-5 transition-colors ${item.status === 'no_show' ? 'text-red-500' : 'text-muted-foreground/35 hover:text-red-500'}`} />
-                            </button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => {
-                                  const full = appointments.find((a) => a.id === item.id)
-                                  if (full) {
-                                    const d = parseISO(full.scheduled_at)
-                                    setRescheduleDate(format(d, 'yyyy-MM-dd'))
-                                    setRescheduleHour(format(d, 'HH'))
-                                    setRescheduleMinute(format(d, 'mm'))
-                                    if (full.ended_at) {
-                                      const e = parseISO(full.ended_at)
-                                      setRescheduleEndHour(format(e, 'HH'))
-                                      setRescheduleEndMinute(format(e, 'mm'))
-                                    } else {
-                                      setRescheduleEndHour('')
-                                      setRescheduleEndMinute('00')
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {isApptToday ? (
+                              <>
+                                {/* ✓ Présent */}
+                                <button
+                                  title={t('appointments.actions.present')}
+                                  onClick={() => markShowInline(item.id)}
+                                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                                    item.status === 'show'
+                                      ? 'bg-green-500 shadow-sm'
+                                      : 'bg-green-100 hover:bg-green-200'
+                                  }`}
+                                >
+                                  <Check className={`h-5 w-5 ${item.status === 'show' ? 'text-white' : 'text-green-600'}`} />
+                                </button>
+                                {/* ✗ Absent */}
+                                <button
+                                  title={t('appointments.actions.absent')}
+                                  onClick={() => markNoShowInline(item.id)}
+                                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                                    item.status === 'no_show'
+                                      ? 'bg-red-400 shadow-sm'
+                                      : 'bg-red-100 hover:bg-red-200'
+                                  }`}
+                                >
+                                  <X className={`h-5 w-5 ${item.status === 'no_show' ? 'text-white' : 'text-red-500'}`} />
+                                </button>
+                                {/* … menu */}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => {
+                                      const full = appointments.find((a) => a.id === item.id)
+                                      if (full) {
+                                        const d = parseISO(full.scheduled_at)
+                                        setRescheduleDate(format(d, 'yyyy-MM-dd'))
+                                        setRescheduleHour(format(d, 'HH'))
+                                        setRescheduleMinute(format(d, 'mm'))
+                                        if (full.ended_at) {
+                                          const e = parseISO(full.ended_at)
+                                          setRescheduleEndHour(format(e, 'HH'))
+                                          setRescheduleEndMinute(format(e, 'mm'))
+                                        } else {
+                                          setRescheduleEndHour('')
+                                          setRescheduleEndMinute('00')
+                                        }
+                                        setSelected(full)
+                                        setDetailApptMode('reschedule')
+                                        setDetailOpen(true)
+                                      }
+                                    }}>
+                                      <CalendarClock className="h-4 w-4 mr-2" />Replanifier
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                      const full = appointments.find((a) => a.id === item.id)
+                                      if (full) { setSelected(full); setDetailApptMode('detail'); setDetailOpen(true) }
+                                    }}>
+                                      <Pencil className="h-4 w-4 mr-2" />Modifier
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => {
+                                        const full = appointments.find((a) => a.id === item.id)
+                                        if (full) setDeleteAppt(full)
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />Supprimer
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </>
+                            ) : (
+                              <>
+                                {/* Replanifier */}
+                                <button
+                                  title="Replanifier"
+                                  className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    const full = appointments.find((a) => a.id === item.id)
+                                    if (full) {
+                                      const d = parseISO(full.scheduled_at)
+                                      setRescheduleDate(format(d, 'yyyy-MM-dd'))
+                                      setRescheduleHour(format(d, 'HH'))
+                                      setRescheduleMinute(format(d, 'mm'))
+                                      if (full.ended_at) {
+                                        const e = parseISO(full.ended_at)
+                                        setRescheduleEndHour(format(e, 'HH'))
+                                        setRescheduleEndMinute(format(e, 'mm'))
+                                      } else {
+                                        setRescheduleEndHour('')
+                                        setRescheduleEndMinute('00')
+                                      }
+                                      setSelected(full)
+                                      setDetailApptMode('reschedule')
+                                      setDetailOpen(true)
                                     }
-                                    setSelected(full)
-                                    setDetailApptMode('reschedule')
-                                    setDetailOpen(true)
-                                  }
-                                }}>
-                                  <CalendarClock className="h-4 w-4 mr-2" />Replanifier
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => {
-                                  const full = appointments.find((a) => a.id === item.id)
-                                  if (full) { setSelected(full); setDetailApptMode('detail'); setDetailOpen(true) }
-                                }}>
-                                  <Pencil className="h-4 w-4 mr-2" />Modifier
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
+                                  }}
+                                >
+                                  <CalendarClock className="h-4 w-4" />
+                                </button>
+                                {/* Modifier */}
+                                <button
+                                  title="Modifier"
+                                  className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    const full = appointments.find((a) => a.id === item.id)
+                                    if (full) { setSelected(full); setDetailApptMode('detail'); setDetailOpen(true) }
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                {/* Supprimer */}
+                                <button
+                                  title="Supprimer"
+                                  className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-red-500"
                                   onClick={() => {
                                     const full = appointments.find((a) => a.id === item.id)
                                     if (full) setDeleteAppt(full)
                                   }}
                                 >
-                                  <Trash2 className="h-4 w-4 mr-2" />Supprimer
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )
