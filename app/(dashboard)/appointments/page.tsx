@@ -1999,6 +1999,32 @@ export default function AppointmentsPage() {
                   <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
                   Créneaux disponibles
                 </p>
+                {/* Inline duration picker when not configured */}
+                {!slotHoursLoading && !defaultDuration && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <Clock className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span className="text-[11px] text-amber-600">Durée :</span>
+                    <select
+                      className="text-[11px] border border-border rounded px-1 py-0.5 bg-background text-foreground focus:outline-none"
+                      defaultValue=""
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value)
+                        if (!v) return
+                        setDefaultDuration(v)
+                        fetch('/api/settings/appointment-notifications', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ default_duration_minutes: v }),
+                        }).catch(() => {})
+                      }}
+                    >
+                      <option value="" disabled>— choisir</option>
+                      {[15, 20, 30, 45, 60, 90, 120].map(m => (
+                        <option key={m} value={m}>{m} min</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Loading */}
