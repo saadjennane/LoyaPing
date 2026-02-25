@@ -297,7 +297,7 @@ export async function getAllAppointments(businessId: string): Promise<Appointmen
 
   const { data, error } = await db
     .from('appointments')
-    .select('*, client:clients(id, civility, first_name, last_name, phone_number, magic_token)')
+    .select('*, client:clients!left(id, civility, first_name, last_name, phone_number, magic_token)')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('scheduled_at', { ascending: true })
