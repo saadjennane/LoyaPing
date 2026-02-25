@@ -105,32 +105,48 @@ async function processMicrosoftEvent(
     .map((a) => a.emailAddress?.address)
     .filter(Boolean) as string[]
 
-  let clientId: string | null = null
-  if (attendeeEmails.length > 0) {
-    const { data: clientRow } = await db
-      .from('clients')
-      .select('id')
-      .eq('business_id', businessId)
-      .in('email', attendeeEmails)
-      .maybeSingle()
-    clientId = clientRow?.id ?? null
-  }
+  // Check if this event is already linked to an appointment with a client assigned.
+  // If so, preserve the manual assignment — only update the timing.
+  const { data: existing } = await db
+    .from('appointments')
+    .select('id, client_id')
+    .eq('microsoft_event_id', event.id)
+    .maybeSingle()
 
-  // Always upsert as an appointment — client_id may be null if no email match.
-  // Unassigned appointments (client_id IS NULL) appear as red dots in the agenda.
-  const { error } = await db.from('appointments').upsert(
-    {
-      client_id:          clientId,   // null if no match — allowed since migration 037
-      business_id:        businessId,
-      scheduled_at:       startIso,
-      ended_at:           endIso,
-      notes:              event.subject ?? null,
-      status:             'scheduled',
-      microsoft_event_id: event.id,
-    },
-    { onConflict: 'microsoft_event_id', ignoreDuplicates: false },
-  )
-  if (error) console.error('[ms-calendar] upsert appointment error:', error.message)
+  if (existing?.client_id) {
+    // Client already assigned manually — only sync date/time changes
+    const { error } = await db
+      .from('appointments')
+      .update({ scheduled_at: startIso, ended_at: endIso })
+      .eq('id', existing.id)
+    if (error) console.error('[ms-calendar] update appointment time error:', error.message)
+  } else {
+    // Not yet assigned — try to match by attendee email, then full upsert
+    let clientId: string | null = null
+    if (attendeeEmails.length > 0) {
+      const { data: clientRow } = await db
+        .from('clients')
+        .select('id')
+        .eq('business_id', businessId)
+        .in('email', attendeeEmails)
+        .maybeSingle()
+      clientId = clientRow?.id ?? null
+    }
+
+    const { error } = await db.from('appointments').upsert(
+      {
+        client_id:          clientId,
+        business_id:        businessId,
+        scheduled_at:       startIso,
+        ended_at:           endIso,
+        notes:              event.subject ?? null,
+        status:             'scheduled',
+        microsoft_event_id: event.id,
+      },
+      { onConflict: 'microsoft_event_id', ignoreDuplicates: false },
+    )
+    if (error) console.error('[ms-calendar] upsert appointment error:', error.message)
+  }
 
   // Clean up any stale calendar_import for this event (legacy)
   await db.from('calendar_imports').delete().eq('business_id', businessId).eq('event_id', event.id)
@@ -372,16 +388,20 @@ export async function pushAppointmentToMicrosoft(
   }
 
   if (appt.microsoft_event_id) {
-    // Update existing event (event ID is sufficient, no calendarId needed)
+    // Update existing event — PATCH only start/end to preserve original title and content
     const res = await fetch(
       `${GRAPH_API}/me/events/${appt.microsoft_event_id}`,
       {
         method:  'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify(eventBody),
+        body:    JSON.stringify({
+          start: eventBody.start,
+          end:   eventBody.end,
+        }),
       },
     )
-    if (!res.ok) {
+    // 404/410 = event already deleted on Microsoft side — silently ignore
+    if (!res.ok && res.status !== 404 && res.status !== 410) {
       throw new Error(`[ms-calendar] Event update failed: ${await res.text()}`)
     }
   } else {

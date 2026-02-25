@@ -97,6 +97,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     // Assign a client to an unassigned appointment (client_id was null)
+    // Do NOT push to Google/Outlook — the original calendar event is considered
+    // the source of truth and must not be modified after a client is assigned.
     if (client_id) {
       const db = createServerClient()
       const { error } = await db
@@ -105,13 +107,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         .eq('id', id)
         .eq('business_id', DEFAULT_BUSINESS_ID)
       if (error) throw error
-      // Push to connected calendars with the now-assigned client info (best-effort)
-      pushAppointmentToGoogle(id, DEFAULT_BUSINESS_ID).catch((e) => {
-        console.error('[appointments] Google push failed on client assign:', e)
-      })
-      pushAppointmentToMicrosoft(id, DEFAULT_BUSINESS_ID).catch((e) => {
-        console.error('[appointments] Microsoft push failed on client assign:', e)
-      })
       return NextResponse.json({ data: { id, client_id } })
     }
 

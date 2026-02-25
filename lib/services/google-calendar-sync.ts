@@ -98,33 +98,48 @@ async function processGoogleEvent(
   const endIso   = event.end?.dateTime ?? event.end?.date ?? null
   const attendeeEmails = (event.attendees ?? []).map((a) => a.email).filter(Boolean)
 
-  // Try to find a matching client by email
-  let clientId: string | null = null
-  if (attendeeEmails.length > 0) {
-    const { data: clientRow } = await db
-      .from('clients')
-      .select('id')
-      .eq('business_id', businessId)
-      .in('email', attendeeEmails)
-      .maybeSingle()
-    clientId = clientRow?.id ?? null
-  }
+  // Check if this event is already linked to an appointment with a client assigned.
+  // If so, preserve the manual assignment — only update the timing.
+  const { data: existing } = await db
+    .from('appointments')
+    .select('id, client_id')
+    .eq('google_event_id', event.id)
+    .maybeSingle()
 
-  // Always upsert as an appointment — client_id may be null if no email match.
-  // Unassigned appointments (client_id IS NULL) appear as red dots in the agenda.
-  const { error } = await db.from('appointments').upsert(
-    {
-      client_id:       clientId,   // null if no match — allowed since migration 037
-      business_id:     businessId,
-      scheduled_at:    startIso,
-      ended_at:        endIso,
-      notes:           event.summary ?? null,
-      status:          'scheduled',
-      google_event_id: event.id,
-    },
-    { onConflict: 'google_event_id', ignoreDuplicates: false },
-  )
-  if (error) console.error('[calendar-sync] upsert appointment error:', error.message)
+  if (existing?.client_id) {
+    // Client already assigned manually — only sync date/time changes
+    const { error } = await db
+      .from('appointments')
+      .update({ scheduled_at: startIso, ended_at: endIso })
+      .eq('id', existing.id)
+    if (error) console.error('[calendar-sync] update appointment time error:', error.message)
+  } else {
+    // Not yet assigned — try to match by attendee email, then full upsert
+    let clientId: string | null = null
+    if (attendeeEmails.length > 0) {
+      const { data: clientRow } = await db
+        .from('clients')
+        .select('id')
+        .eq('business_id', businessId)
+        .in('email', attendeeEmails)
+        .maybeSingle()
+      clientId = clientRow?.id ?? null
+    }
+
+    const { error } = await db.from('appointments').upsert(
+      {
+        client_id:       clientId,
+        business_id:     businessId,
+        scheduled_at:    startIso,
+        ended_at:        endIso,
+        notes:           event.summary ?? null,
+        status:          'scheduled',
+        google_event_id: event.id,
+      },
+      { onConflict: 'google_event_id', ignoreDuplicates: false },
+    )
+    if (error) console.error('[calendar-sync] upsert appointment error:', error.message)
+  }
 
   // Clean up any stale calendar_import for this event (legacy)
   await db.from('calendar_imports').delete().eq('business_id', businessId).eq('event_id', event.id)
@@ -269,16 +284,20 @@ export async function pushAppointmentToGoogle(
   }
 
   if (appt.google_event_id) {
-    // Update existing event
+    // Update existing event — PATCH only start/end to preserve original title and content
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${appt.google_event_id}`,
       {
-        method:  'PUT',
+        method:  'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify(eventBody),
+        body:    JSON.stringify({
+          start: eventBody.start,
+          end:   eventBody.end,
+        }),
       },
     )
-    if (!res.ok) {
+    // 404/410 = event already deleted on Google side — silently ignore
+    if (!res.ok && res.status !== 404 && res.status !== 410) {
       throw new Error(`[calendar-sync] Event update failed: ${await res.text()}`)
     }
   } else {
