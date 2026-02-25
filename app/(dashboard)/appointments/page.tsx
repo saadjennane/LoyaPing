@@ -63,6 +63,7 @@ function computeDaySlots(
   bh: BusinessHourRow,
   duration: number,
   dayAppts: Appointment[],
+  minMins = 0,  // ignore slots starting before this time (for "today, now")
 ): SlotDayResult {
   if (bh.is_closed) return { kind: 'fermé' }
 
@@ -78,7 +79,11 @@ function computeDaySlots(
     for (let t = wS; t + duration <= wE; t += duration) allSlots.push(t)
   if (allSlots.length === 0) return { kind: 'fermé' }
 
-  const free = allSlots.filter((slotStart) => {
+  // For today: keep only future slots
+  const relevantSlots = minMins > 0 ? allSlots.filter((t) => t >= minMins) : allSlots
+  if (relevantSlots.length === 0) return { kind: 'fermé' }
+
+  const free = relevantSlots.filter((slotStart) => {
     const slotEnd = slotStart + duration
     return !dayAppts.some((a) => {
       const aS = differenceInMinutes(parseISO(a.scheduled_at), startOfDay(parseISO(a.scheduled_at)))
@@ -90,7 +95,7 @@ function computeDaySlots(
   })
 
   if (free.length === 0) return { kind: 'complet' }
-  return { kind: free.length === allSlots.length ? 'libre' : 'partiel', slots: free }
+  return { kind: free.length === relevantSlots.length ? 'libre' : 'partiel', slots: free }
 }
 
 function minsToLabel(m: number) {
@@ -1179,14 +1184,19 @@ export default function AppointmentsPage() {
   // ── Slot days (useMemo) ──────────────────────────────────────────────────
   const slotDays = useMemo(() => {
     if (!businessHours || !defaultDuration) return []
+    const now     = new Date()
+    const nowMins = now.getHours() * 60 + now.getMinutes()
     return Array.from({ length: 60 }, (_, i) => addDays(startOfToday(), i)).map((date) => {
       const dow      = date.getDay() === 0 ? 7 : date.getDay()
       const bh       = businessHours.find((h) => h.day_of_week === dow)
       if (!bh) return { date, result: { kind: 'fermé' as const } }
+      // Include all non-deleted appointments (show/no_show also block the slot)
       const dayAppts = appointments.filter((a) =>
-        a.status === 'scheduled' && !a.deleted_at && isSameDay(parseISO(a.scheduled_at), date)
+        !a.deleted_at && isSameDay(parseISO(a.scheduled_at), date)
       )
-      return { date, result: computeDaySlots(date, bh, defaultDuration, dayAppts) }
+      // For today: skip slots already in the past
+      const minMins = isSameDay(date, now) ? nowMins : 0
+      return { date, result: computeDaySlots(date, bh, defaultDuration, dayAppts, minMins) }
     }).filter(({ result }) => result.kind !== 'fermé')
   }, [businessHours, defaultDuration, appointments])
 
