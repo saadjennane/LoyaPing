@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     const from = sp.get('from') ?? defaultFrom
     const to   = sp.get('to')   ?? defaultTo
 
-    const statusFilter = (sp.get('statusFilter') ?? 'all') as 'all' | 'upcoming' | 'show' | 'no_show'
+    const statusFilter = (sp.get('statusFilter') ?? 'all') as 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
     const notifFilter  = (sp.get('notifFilter')  ?? 'all') as 'all' | 'failed_only'
 
     const data = await getAppointmentList({

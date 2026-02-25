@@ -34,7 +34,7 @@ import { fr } from 'date-fns/locale'
 type ViewMode = 'calendar' | 'list'
 type CalMode = '1day' | '3day' | '7day' | 'month'
 type ListTab      = 'upcoming' | 'history'
-type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show'
+type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
 
@@ -427,6 +427,7 @@ export default function AppointmentsPage() {
 
   const [calendarConnected, setCalendarConnected] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false })
   const [syncing, setSyncing] = useState(false)
+  const [defaultDuration, setDefaultDuration] = useState<number | null>(null)
 
   // ── Assign client to unassigned appointment ───────────────────────────────
   const [assignClientItem, setAssignClientItem] = useState<CustomerIndexItem | null>(null)
@@ -485,8 +486,21 @@ export default function AppointmentsPage() {
 
   const handleStartHourChange = (h: string) => {
     setApptHour(h)
-    // Auto-set end hour to start + 1h
-    setApptEndHour(String((parseInt(h) + 1) % 24).padStart(2, '0'))
+    const duration = defaultDuration ?? 60 // fallback to 1h if no default set
+    const startMins = parseInt(h) * 60 + parseInt(apptMinute)
+    const endMins   = startMins + duration
+    setApptEndHour(String(Math.floor(endMins / 60) % 24).padStart(2, '0'))
+    setApptEndMinute(String(endMins % 60).padStart(2, '0'))
+  }
+
+  const handleStartMinuteChange = (m: string) => {
+    setApptMinute(m)
+    if (defaultDuration !== null && apptHour) {
+      const startMins = parseInt(apptHour) * 60 + parseInt(m)
+      const endMins   = startMins + defaultDuration
+      setApptEndHour(String(Math.floor(endMins / 60) % 24).padStart(2, '0'))
+      setApptEndMinute(String(endMins % 60).padStart(2, '0'))
+    }
   }
 
   const handleCreateAppt = async (e: React.FormEvent) => {
@@ -569,6 +583,10 @@ export default function AppointmentsPage() {
           microsoft: !!j.data.microsoft,
         })
       }
+    }).catch(() => {})
+    // Fetch default appointment duration
+    fetch('/api/settings/appointment-notifications').then((r) => r.json()).then((j) => {
+      if (j.data?.default_duration_minutes) setDefaultDuration(j.data.default_duration_minutes)
     }).catch(() => {})
   }, [fetchAppointments])
 
@@ -1011,8 +1029,10 @@ export default function AppointmentsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {(['all', 'upcoming', 'show', 'no_show'] as StatusFilter[]).map((key) => (
-                          <SelectItem key={key} value={key}>{t(`appointments.filters.${key}`)}</SelectItem>
+                        {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
+                          <SelectItem key={key} value={key}>
+                            {key === 'unassigned' ? 'Non assigné' : t(`appointments.filters.${key}`)}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -1027,15 +1047,21 @@ export default function AppointmentsPage() {
                     </button>
                   </div>
                   {/* Desktop pills */}
-                  {(['all', 'upcoming', 'show', 'no_show'] as StatusFilter[]).map((key) => (
+                  {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
                     <button
                       key={key}
                       onClick={() => setFilter(key)}
                       className={`hidden md:inline-flex rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
-                        current === key ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'
+                        current === key
+                          ? key === 'unassigned'
+                            ? 'bg-red-600 text-white border-red-600'
+                            : 'bg-primary text-primary-foreground border-primary'
+                          : key === 'unassigned'
+                            ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
+                            : 'border-border bg-background hover:bg-muted'
                       }`}
                     >
-                      {t(`appointments.filters.${key}`)}
+                      {key === 'unassigned' ? 'Non assigné' : t(`appointments.filters.${key}`)}
                     </button>
                   ))}
                 </>
@@ -1126,8 +1152,9 @@ export default function AppointmentsPage() {
             <div className="space-y-6">
               {groupByDay(filteredListItems).map(({ dateKey, label, items: dayItems }) => (
                 <div key={dateKey}>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 capitalize">
-                    {label === 'groupToday' ? t('appointments.groupToday') : label === 'groupTomorrow' ? t('appointments.groupTomorrow') : label}
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 capitalize flex items-center gap-2">
+                    <span>{label === 'groupToday' ? t('appointments.groupToday') : label === 'groupTomorrow' ? t('appointments.groupTomorrow') : label}</span>
+                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-muted text-[10px] font-semibold text-muted-foreground normal-case">{dayItems.length}</span>
                   </h3>
                   {/* Mobile : cartes */}
                   <div className="md:hidden space-y-2">
@@ -1164,11 +1191,23 @@ export default function AppointmentsPage() {
                           </div>
                           {/* Infos client */}
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm truncate">{item.client_name}</div>
+                            <div className="font-medium text-sm truncate flex items-center gap-1.5">
+                              {item.client_id === null && (
+                                <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                              )}
+                              {item.client_id === null
+                                ? <span className="text-red-700">{item.client_name === '—' ? 'Sans client' : item.client_name}</span>
+                                : item.client_name
+                              }
+                            </div>
                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {item.client_id === null ? (
+                                <span className="inline-flex items-center text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0">Non assigné</span>
+                              ) : (
                               <Badge variant={statusVariant(item.status)} className="text-[10px] px-1.5 py-0">
                                 {statusLabel(item.status, t)}
                               </Badge>
+                              )}
                               {item.reminderStatus.hasFailed && (
                                 <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium">
                                   <AlertTriangle className="h-3 w-3" />{t('appointments.failedWA')}
@@ -1238,10 +1277,22 @@ export default function AppointmentsPage() {
                             <span className="font-normal text-xs"> → {format(parseISO(item.ended_at), 'HH:mm')}</span>
                           )}
                         </span>
-                        <span className="flex-1 text-sm font-medium truncate">{item.client_name}</span>
-                        <Badge variant={statusVariant(item.status)}>
-                          {statusLabel(item.status, t)}
-                        </Badge>
+                        <span className="flex-1 text-sm font-medium truncate flex items-center gap-1.5">
+                          {item.client_id === null && (
+                            <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                          )}
+                          {item.client_id === null
+                            ? <span className="text-red-700">{item.client_name === '—' ? 'Sans client' : item.client_name}</span>
+                            : item.client_name
+                          }
+                        </span>
+                        {item.client_id === null ? (
+                          <span className="inline-flex items-center text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 shrink-0">Non assigné</span>
+                        ) : (
+                          <Badge variant={statusVariant(item.status)}>
+                            {statusLabel(item.status, t)}
+                          </Badge>
+                        )}
                         {item.reminderStatus.hasFailed && (
                           <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium shrink-0">
                             <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
@@ -1388,7 +1439,7 @@ export default function AppointmentsPage() {
                         </SelectContent>
                       </Select>
                       <span className="text-muted-foreground font-medium">:</span>
-                      <Select value={apptMinute} onValueChange={setApptMinute}>
+                      <Select value={apptMinute} onValueChange={handleStartMinuteChange}>
                         <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}

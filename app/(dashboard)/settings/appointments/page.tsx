@@ -44,6 +44,7 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
 }
 
 const DEFAULT_APPT_NOTIF: Omit<AppointmentNotificationSettings, 'business_id' | 'updated_at'> = {
+  default_duration_minutes: null,
   reminder1_enabled: true,  reminder1_delay_value: 24, reminder1_delay_unit: 'hours', reminder1_fixed_send_time: null, reminder1_message: 'Bonjour ! Rappel de votre rendez-vous demain. À bientôt !',
   reminder2_enabled: false, reminder2_delay_value: 2,  reminder2_delay_unit: 'hours', reminder2_fixed_send_time: null, reminder2_message: '',
   reminder3_enabled: false, reminder3_delay_value: 30, reminder3_delay_unit: 'minutes', reminder3_fixed_send_time: null, reminder3_message: '',
@@ -85,6 +86,7 @@ export default function AppointmentsSettingsPage() {
     if (json.data) {
       const d = json.data as AppointmentNotificationSettings
       setApptNotif({
+        default_duration_minutes: d.default_duration_minutes ?? null,
         reminder1_enabled: d.reminder1_enabled, reminder1_delay_value: d.reminder1_delay_value, reminder1_delay_unit: d.reminder1_delay_unit, reminder1_fixed_send_time: d.reminder1_fixed_send_time ?? null, reminder1_message: d.reminder1_message,
         reminder2_enabled: d.reminder2_enabled, reminder2_delay_value: d.reminder2_delay_value, reminder2_delay_unit: d.reminder2_delay_unit, reminder2_fixed_send_time: d.reminder2_fixed_send_time ?? null, reminder2_message: d.reminder2_message,
         reminder3_enabled: d.reminder3_enabled, reminder3_delay_value: d.reminder3_delay_value, reminder3_delay_unit: d.reminder3_delay_unit, reminder3_fixed_send_time: d.reminder3_fixed_send_time ?? null, reminder3_message: d.reminder3_message,
@@ -314,6 +316,48 @@ export default function AppointmentsSettingsPage() {
         <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
       ) : (
         <form onSubmit={handleSaveApptNotif} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Durée par défaut</CardTitle>
+              <p className="text-sm text-muted-foreground">Pré-remplit l&apos;heure de fin lors de la création d&apos;un rendez-vous.</p>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min="5"
+                  max="480"
+                  step="5"
+                  className="h-8 w-24 text-sm"
+                  placeholder="—"
+                  value={apptNotif.default_duration_minutes ?? ''}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value)
+                    setApptNotif({ ...apptNotif, default_duration_minutes: isNaN(v) ? null : v })
+                  }}
+                />
+                <span className="text-sm text-muted-foreground">minutes</span>
+                {apptNotif.default_duration_minutes !== null && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => setApptNotif({ ...apptNotif, default_duration_minutes: null })}
+                  >
+                    ✕ Supprimer
+                  </button>
+                )}
+              </div>
+              {apptNotif.default_duration_minutes !== null && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Ex : RDV à 14h00 → fin automatiquement à {(() => {
+                    const end = 14 * 60 + (apptNotif.default_duration_minutes ?? 0)
+                    return `${String(Math.floor(end / 60) % 24).padStart(2, '0')}h${String(end % 60).padStart(2, '0')}`
+                  })()}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Rappels avant le rendez-vous</CardTitle>

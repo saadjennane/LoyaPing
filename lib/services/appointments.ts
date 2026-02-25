@@ -318,7 +318,7 @@ export async function getAppointmentList(params: {
   mode:         'upcoming' | 'history'
   from:         string   // ISO date (inclusive, start of day)
   to:           string   // ISO date (inclusive, end of day)
-  statusFilter: 'all' | 'upcoming' | 'show' | 'no_show'
+  statusFilter: 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
   notifFilter:  'all' | 'failed_only'
 }): Promise<AppointmentListItem[]> {
   const db = createServerClient()
@@ -331,7 +331,7 @@ export async function getAppointmentList(params: {
 
   let query = db
     .from('appointments')
-    .select('id, scheduled_at, ended_at, status, client:clients(civility, first_name, last_name, phone_number)')
+    .select('id, client_id, scheduled_at, ended_at, status, client:clients(civility, first_name, last_name, phone_number)')
     .eq('business_id', params.businessId)
     .is('deleted_at', null)
     .gte('scheduled_at', fromDt.toISOString())
@@ -341,6 +341,7 @@ export async function getAppointmentList(params: {
   if (params.statusFilter === 'upcoming')      query = query.eq('status', 'scheduled')
   else if (params.statusFilter === 'show')     query = query.eq('status', 'show')
   else if (params.statusFilter === 'no_show')  query = query.eq('status', 'no_show')
+  else if (params.statusFilter === 'unassigned') query = query.is('client_id', null)
 
   // upcoming mode → ASC, history → DESC
   query = query.order('scheduled_at', { ascending: params.mode === 'upcoming' })
@@ -350,6 +351,7 @@ export async function getAppointmentList(params: {
 
   type Row = {
     id: string
+    client_id: string | null
     scheduled_at: string
     ended_at: string | null
     status: 'scheduled' | 'show' | 'no_show'
@@ -373,6 +375,7 @@ export async function getAppointmentList(params: {
     const client_name = nameParts.length > 0 ? nameParts.join(' ') : (c?.phone_number ?? '—')
     return {
       id:             r.id,
+      client_id:      r.client_id,
       client_name,
       client_phone:   c?.phone_number ?? '',
       scheduled_at:   r.scheduled_at,

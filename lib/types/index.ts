@@ -160,6 +160,7 @@ export type Appointment = {
 
 export type AppointmentNotificationSettings = {
   business_id: string
+  default_duration_minutes: number | null   // auto end time = start + N minutes; null = no default
   reminder1_enabled: boolean
   reminder1_delay_value: number
   reminder1_delay_unit: 'minutes' | 'hours' | 'days'
@@ -225,9 +226,10 @@ export type ReminderStatus = {
 // ── Appointment list view (lightweight) ──────────────────────────────────────
 export type AppointmentListItem = {
   id: string
-  client_name:    string   // civility + first_name + last_name, fallback to phone
+  client_id:      string | null  // null = imported from calendar with no client match
+  client_name:    string         // civility + first_name + last_name, fallback to phone, or '—'
   client_phone:   string
-  scheduled_at:   string   // ISO timestamp
+  scheduled_at:   string         // ISO timestamp
   ended_at:       string | null
   status:         'scheduled' | 'show' | 'no_show'
   reminderStatus: ReminderStatus
