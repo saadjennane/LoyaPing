@@ -887,7 +887,9 @@ export default function AppointmentsPage() {
 
 
   return (
-    <div className="p-3 md:p-6 space-y-3 md:space-y-4">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] lg:h-dvh overflow-hidden">
+      {/* ─── Section fixe (header, search, banners) ─────── */}
+      <div className="shrink-0 px-3 md:px-6 pt-3 md:pt-6 space-y-3 md:space-y-4">
       {/* WhatsApp config banner */}
       {status !== null && !status.appointments_configured && (
         <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 flex items-start gap-3">
@@ -950,11 +952,14 @@ export default function AppointmentsPage() {
           </button>
         </div>
       )}
+      </div>
 
-      <Tabs value={appView} onValueChange={(v) => { setAppView(v as AppView); setSelectedIds(new Set()); setMobileSelectMode(false) }} className="gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      {/* ─── Tabs card (prend la hauteur restante) ───────── */}
+      <div className="flex-1 min-h-0 px-3 md:px-6 pb-3 md:pb-6 pt-3 md:pt-4 flex flex-col">
+      <Tabs value={appView} onValueChange={(v) => { setAppView(v as AppView); setSelectedIds(new Set()); setMobileSelectMode(false) }} className="flex-1 min-h-0 flex flex-col gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
 
         {/* Mobile : vue selector + bouton Sélectionner */}
-        <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-border">
+        <div className="shrink-0 md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-border">
           <Select value={appView} onValueChange={(v) => { setAppView(v as AppView); setSelectedIds(new Set()); setMobileSelectMode(false) }}>
             <SelectTrigger className="flex-1 h-9 font-medium text-sm">
               <SelectValue />
@@ -979,7 +984,7 @@ export default function AppointmentsPage() {
         </div>
 
         {/* Desktop : onglets */}
-        <TabsList className="hidden md:flex w-full justify-start border-b border-border bg-transparent h-auto p-0 rounded-none px-6 overflow-x-auto">
+        <TabsList className="shrink-0 hidden md:flex w-full justify-start border-b border-border bg-transparent h-auto p-0 rounded-none px-6 overflow-x-auto">
           <TabsTrigger
             value="agenda"
             className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none"
@@ -1001,7 +1006,7 @@ export default function AppointmentsPage() {
         </TabsList>
 
         {/* Filtres + navigation (communs à toutes les vues) */}
-        <div className="flex flex-wrap items-center gap-2 px-3 md:px-6 py-2.5 border-b border-border">
+        <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 md:px-6 py-2.5 border-b border-border">
           {/* Mobile : filtre statut */}
           <div className="md:hidden w-full">
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
@@ -1100,7 +1105,7 @@ export default function AppointmentsPage() {
         </div>
 
         {/* ── Agenda ─────────────────────────────────────────────────────── */}
-        <TabsContent value="agenda" className="mt-0">
+        <TabsContent value="agenda" className="mt-0 flex-1 min-h-0 overflow-y-auto">
           <div className="space-y-4 p-4 md:p-6">
             {loading ? (
               <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
@@ -1366,7 +1371,7 @@ export default function AppointmentsPage() {
         </TabsContent>
 
         {/* ── Semaine ────────────────────────────────────────────────────── */}
-        <TabsContent value="semaine" className="mt-0">
+        <TabsContent value="semaine" className="mt-0 flex-1 min-h-0 overflow-y-auto">
           <div className="overflow-x-auto p-4 md:p-6">
             {loading ? (
               <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
@@ -1381,7 +1386,7 @@ export default function AppointmentsPage() {
         </TabsContent>
 
         {/* ── Mois ───────────────────────────────────────────────────────── */}
-        <TabsContent value="mois" className="mt-0">
+        <TabsContent value="mois" className="mt-0 flex-1 min-h-0 overflow-y-auto">
           <div className="p-4 md:p-6">
             {loading ? (
               <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
@@ -1396,6 +1401,7 @@ export default function AppointmentsPage() {
         </TabsContent>
 
       </Tabs>
+      </div>
 
       {/* Create RDV dialog */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) resetCreate(); setCreateOpen(o) }}>
