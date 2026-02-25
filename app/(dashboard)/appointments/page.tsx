@@ -2041,7 +2041,7 @@ export default function AppointmentsPage() {
                           <p className="text-xs text-red-500">Complet</p>
                         )}
                         {(result.kind === 'libre' || result.kind === 'partiel') && (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="grid grid-cols-6 gap-1.5">
                             {result.slots.map((m) => {
                               const key = `${date.toISOString()}_${m}`
                               const isSelected = selectedSlotKey === key
@@ -2049,7 +2049,7 @@ export default function AppointmentsPage() {
                                 <button
                                   key={m}
                                   onClick={() => handleSelectSlot(date, m)}
-                                  className={`rounded px-2 py-1 text-xs font-medium border transition-colors
+                                  className={`rounded py-1 text-xs font-medium border transition-colors text-center
                                     ${isSelected
                                       ? 'bg-[#3B5BDB] text-white border-[#3B5BDB]'
                                       : result.kind === 'libre'
