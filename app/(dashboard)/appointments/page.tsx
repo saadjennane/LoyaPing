@@ -1334,9 +1334,10 @@ export default function AppointmentsPage() {
 
   // ── Slot days (useMemo) ──────────────────────────────────────────────────
   const slotDays = useMemo(() => {
-    if (!businessHours || !defaultDuration) return []
-    const now     = new Date()
-    const nowMins = now.getHours() * 60 + now.getMinutes()
+    if (!businessHours) return []
+    const duration = defaultDuration ?? 60
+    const now      = new Date()
+    const nowMins  = now.getHours() * 60 + now.getMinutes()
     return Array.from({ length: 60 }, (_, i) => addDays(startOfToday(), i)).map((date) => {
       const dow      = date.getDay() === 0 ? 7 : date.getDay()
       const bh       = businessHours.find((h) => h.day_of_week === dow)
@@ -1358,7 +1359,7 @@ export default function AppointmentsPage() {
       )
       // For today: skip slots already in the past
       const minMins = isSameDay(date, now) ? nowMins : 0
-      return { date, result: computeDaySlots(date, bh, defaultDuration, dayAppts, minMins, partialEx) }
+      return { date, result: computeDaySlots(date, bh, duration, dayAppts, minMins, partialEx) }
     }).filter(({ result }) => result.kind !== 'fermé')
   }, [businessHours, defaultDuration, appointments, exceptions])
 
@@ -2001,7 +2002,7 @@ export default function AppointmentsPage() {
               )}
 
               {/* Missing config */}
-              {!slotHoursLoading && (!businessHours || !defaultDuration) && (
+              {!slotHoursLoading && !businessHours && (
                 <div className="px-3 py-6 text-center space-y-2">
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Configurez la <strong>durée par défaut</strong> et les{' '}
@@ -2014,7 +2015,7 @@ export default function AppointmentsPage() {
               )}
 
               {/* Slot list */}
-              {!slotHoursLoading && businessHours && defaultDuration && (
+              {!slotHoursLoading && businessHours && (
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {slotDays.map(({ date, result }) => {
                     const dayLabel = isSameDay(date, new Date())
