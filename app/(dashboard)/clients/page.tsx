@@ -156,6 +156,8 @@ export default function ClientsPage() {
   // Delete confirm dialog (table row actions)
   const [deleteClient, setDeleteClient] = useState<Client | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  const [deleteLinks, setDeleteLinks] = useState<{ upcomingAppointments: number; orders: number } | null>(null)
+  const [deleteLinksLoading, setDeleteLinksLoading] = useState(false)
 
   // Bulk selection
   const [mobileSelectMode, setMobileSelectMode] = useState(false)
@@ -223,6 +225,7 @@ export default function ClientsPage() {
     }
     if (view === 'edit_points') setDvPointsValue('')
     if (view === 'unlock_reward') setDvUnlockTierId('')
+    if (view === 'delete_confirm') void fetchDeleteLinks(detailClient.id)
     setDetailView(view)
   }
 
@@ -369,7 +372,7 @@ export default function ClientsPage() {
     const res = await fetch(`/api/clients/${detailClient.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (json.error) { toast.error(json.error) }
-    else { toast.success(t('clients.toast.deleted')); closeDetail(); fetchAll() }
+    else { toast.success(t('clients.toast.deleted')); setDeleteLinks(null); closeDetail(); fetchAll() }
     setDvSubmitting(false)
   }
 
@@ -549,9 +552,21 @@ export default function ClientsPage() {
     setBulkPointsSubmitting(false)
   }
 
+  // ── Fetch linked data count before delete ─────────────────────────────
+  const fetchDeleteLinks = async (clientId: string) => {
+    setDeleteLinks(null)
+    setDeleteLinksLoading(true)
+    const res = await fetch(`/api/clients/${clientId}/links`)
+    const json = await res.json()
+    if (json.data) setDeleteLinks(json.data)
+    setDeleteLinksLoading(false)
+  }
+
   // ── Table row: Delete ─────────────────────────────────────────────────
   const openDelete = (client: Client, e: React.MouseEvent) => {
-    e.stopPropagation(); setDeleteClient(client)
+    e.stopPropagation()
+    setDeleteClient(client)
+    void fetchDeleteLinks(client.id)
   }
 
   const handleDelete = async () => {
@@ -560,7 +575,7 @@ export default function ClientsPage() {
     const res = await fetch(`/api/clients/${deleteClient.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (json.error) { toast.error(json.error) }
-    else { toast.success(t('clients.toast.deleted')); setDeleteClient(null); fetchAll() }
+    else { toast.success(t('clients.toast.deleted')); setDeleteClient(null); setDeleteLinks(null); fetchAll() }
     setDeleteSubmitting(false)
   }
 
@@ -969,7 +984,7 @@ export default function ClientsPage() {
       </Dialog>
 
       {/* ── Delete Confirm Dialog (table row) ─────────────────────────────── */}
-      <Dialog open={!!deleteClient} onOpenChange={(o) => !o && setDeleteClient(null)}>
+      <Dialog open={!!deleteClient} onOpenChange={(o) => { if (!o) { setDeleteClient(null); setDeleteLinks(null) } }}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader><DialogTitle>{t('clients.actions.deleteTitle')}</DialogTitle></DialogHeader>
           {deleteClient && (
@@ -977,9 +992,23 @@ export default function ClientsPage() {
               <p className="text-sm">
                 {t('clients.deleteConfirm.body', { name: clientFullName(deleteClient) })}
               </p>
+              {deleteLinksLoading && (
+                <p className="text-xs text-muted-foreground">Vérification des données liées...</p>
+              )}
+              {!deleteLinksLoading && deleteLinks && (deleteLinks.upcomingAppointments > 0 || deleteLinks.orders > 0) && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800 space-y-1">
+                  <p className="font-medium">Ce client est lié à :</p>
+                  {deleteLinks.upcomingAppointments > 0 && (
+                    <p>• {deleteLinks.upcomingAppointments} RDV à venir</p>
+                  )}
+                  {deleteLinks.orders > 0 && (
+                    <p>• {deleteLinks.orders} commande{deleteLinks.orders > 1 ? 's' : ''}</p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => setDeleteClient(null)}>{t('common.cancel')}</Button>
-                <Button variant="destructive" disabled={deleteSubmitting} onClick={handleDelete}>
+                <Button variant="outline" onClick={() => { setDeleteClient(null); setDeleteLinks(null) }}>{t('common.cancel')}</Button>
+                <Button variant="destructive" disabled={deleteSubmitting || deleteLinksLoading} onClick={handleDelete}>
                   {deleteSubmitting ? t('common.deleting') : t('common.delete')}
                 </Button>
               </div>
@@ -1462,9 +1491,23 @@ export default function ClientsPage() {
                   <p className="text-sm">
                     {t('clients.deleteConfirm.body', { name: clientFullName(detailClient) })}
                   </p>
+                  {deleteLinksLoading && (
+                    <p className="text-xs text-muted-foreground">Vérification des données liées...</p>
+                  )}
+                  {!deleteLinksLoading && deleteLinks && (deleteLinks.upcomingAppointments > 0 || deleteLinks.orders > 0) && (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800 space-y-1">
+                      <p className="font-medium">Ce client est lié à :</p>
+                      {deleteLinks.upcomingAppointments > 0 && (
+                        <p>• {deleteLinks.upcomingAppointments} RDV à venir</p>
+                      )}
+                      {deleteLinks.orders > 0 && (
+                        <p>• {deleteLinks.orders} commande{deleteLinks.orders > 1 ? 's' : ''}</p>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" onClick={() => setDetailView('main')}>{t('common.cancel')}</Button>
-                    <Button variant="destructive" disabled={dvSubmitting} onClick={handleDvDelete}>
+                    <Button variant="destructive" disabled={dvSubmitting || deleteLinksLoading} onClick={handleDvDelete}>
                       {dvSubmitting ? t('common.deleting') : t('common.delete')}
                     </Button>
                   </div>
