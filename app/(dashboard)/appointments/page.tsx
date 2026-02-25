@@ -1993,7 +1993,7 @@ export default function AppointmentsPage() {
 
           <div className="flex flex-1 min-h-0 overflow-hidden">
             {/* ── Colonne gauche : Créneaux disponibles (desktop only) ─── */}
-            <div className="hidden md:flex flex-col w-60 shrink-0 border-r bg-muted/20">
+            <div className="hidden md:flex flex-col w-72 shrink-0 border-r bg-muted/20">
               <div className="px-3 pt-3 pb-2 border-b border-border/60 shrink-0">
                 <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                   <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
