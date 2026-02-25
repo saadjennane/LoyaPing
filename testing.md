@@ -93,6 +93,9 @@
 | 4.1.1 | Créer un RDV avec un client existant | RDV créé, visible dans le calendrier et la liste |
 | 4.1.2 | Créer un RDV en créant un nouveau client | Client créé ET RDV créé |
 | 4.1.3 | Créer un RDV avec des notes | Notes visibles dans le détail |
+| 4.1.4 | Configurer une durée par défaut (ex: 60 min) dans Paramètres → RDV | À la sélection d'une heure de début, l'heure de fin est auto-calculée (début + durée) |
+| 4.1.5 | Modifier l'heure de fin après auto-calcul | L'heure de fin reste modifiable librement |
+| 4.1.6 | Sans durée par défaut configurée | Heure de fin non pré-remplie |
 
 ### 4.2 Vues calendrier
 
@@ -141,6 +144,58 @@
 | 4.6.2 | Filtrer par "WhatsApp échoué" | Seuls les RDV avec `hasFailed=true` |
 | 4.6.3 | Sélectionner plusieurs RDV → marquer présents en masse | Tous mis à jour |
 | 4.6.4 | Supprimer plusieurs RDV | Suppression en masse |
+| 4.6.5 | Filtrer la liste par "Non assigné" | Seuls les RDV sans client (point rouge) affichés |
+| 4.6.6 | Vue liste → groupes par date | Chaque groupe de date affiche le nombre de RDV dans un badge |
+
+### 4.7 RDV importés depuis le calendrier (sans client)
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 4.7.1 | Event Google/Outlook sans attendee matchant → sync | RDV rouge (point rouge) visible dans la vue agenda et la liste |
+| 4.7.2 | Cliquer sur un RDV rouge dans la vue agenda | Dialog "Assigner un client" affiché (pas d'options show/absent) |
+| 4.7.3 | Rechercher un client dans le dialog | Liste de clients filtrée en temps réel |
+| 4.7.4 | Sélectionner un client → chip "Nom X" remplace la barre | La barre de recherche est remplacée par un chip avec ✕ |
+| 4.7.5 | Cliquer ✕ sur le chip | Retour à la barre de recherche |
+| 4.7.6 | Cliquer "Assigner ce client" | `client_id` mis à jour, RDV n'est plus rouge |
+| 4.7.7 | Après assignation, cliquer "Synchroniser" | Le RDV reste assigné (client_id non écrasé) |
+| 4.7.8 | Modifier l'heure dans Google/Outlook après assignation | Seule l'heure est mise à jour dans LoyaPing, client_id préservé |
+| 4.7.9 | Supprimer le RDV depuis le dialog | Suppression normale + soft-delete |
+
+### 4.8 Synchronisation Google Calendar
+
+> Prérequis : Google Calendar connecté dans Paramètres → Rendez-vous, `APP_URL` configuré sur Vercel.
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 4.8.1 | Connecter Google Calendar (OAuth) | Ligne dans `calendar_watch_channels`, 1er sync lancé automatiquement |
+| 4.8.2 | Créer un RDV dans LoyaPing | Event créé dans Google Calendar avec `google_event_id` stocké en base |
+| 4.8.3 | Reprogrammer le RDV dans LoyaPing | Google Calendar reçoit un PATCH avec uniquement les nouvelles heures (titre inchangé) |
+| 4.8.4 | Supprimer le RDV dans LoyaPing | Event supprimé dans Google Calendar |
+| 4.8.5 | Créer un event dans Google Calendar (attendee = email client LoyaPing) | RDV créé automatiquement dans LoyaPing avec le bon client |
+| 4.8.6 | Créer un event dans Google Calendar sans attendee matchant | RDV rouge (non assigné) dans LoyaPing |
+| 4.8.7 | Modifier l'heure d'un event dans Google Calendar | `scheduled_at` / `ended_at` mis à jour dans LoyaPing |
+| 4.8.8 | Supprimer un event dans Google Calendar | Soft-delete du RDV dans LoyaPing |
+| 4.8.9 | Assigner un client à un RDV importé → synchroniser | L'event Google Calendar est inchangé (titre/description d'origine préservés) |
+| 4.8.10 | Sélecteur de calendrier : changer vers un calendrier non-primary | Synchro repart sur le nouveau calendrier |
+| 4.8.11 | Vérifier dans Supabase `calendar_watch_channels` | Ligne avec `provider=google`, `channel_id`, `expiry_at` à J+7 |
+| 4.8.12 | Cron `calendar-watch-renew` (6h) | Channels expirant dans 24h renouvelés |
+
+### 4.9 Synchronisation Outlook (Microsoft Calendar)
+
+> Prérequis : Outlook connecté dans Paramètres → Rendez-vous, `APP_URL` configuré sur Vercel.
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 4.9.1 | Connecter Outlook (OAuth) | Ligne dans `calendar_watch_channels`, sync initial lancé |
+| 4.9.2 | Créer un RDV dans LoyaPing | Event créé dans Outlook avec `microsoft_event_id` en base |
+| 4.9.3 | Reprogrammer le RDV dans LoyaPing | Outlook reçoit PATCH avec uniquement les nouvelles heures |
+| 4.9.4 | Supprimer le RDV dans LoyaPing | Event supprimé dans Outlook |
+| 4.9.5 | Créer un event dans Outlook (attendee = email client) | RDV créé dans LoyaPing avec le bon client |
+| 4.9.6 | Créer un event dans Outlook sans attendee matchant | RDV rouge dans LoyaPing |
+| 4.9.7 | Modifier l'heure dans Outlook | `scheduled_at` / `ended_at` mis à jour dans LoyaPing |
+| 4.9.8 | Supprimer un event dans Outlook | Soft-delete du RDV dans LoyaPing |
+| 4.9.9 | Assigner un client → sync | Event Outlook inchangé |
+| 4.9.10 | Sélecteur de calendrier Outlook | Synchro repart sur le calendrier sélectionné |
 
 ---
 
@@ -343,26 +398,59 @@ Ces tests vérifient le comportement de l'outbox directement dans Supabase.
 
 ---
 
-## 12. Cas limites et edge cases
+## 12. Onboarding
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 12.1 | Premier login (status `not_started`) | Redirection automatique vers `/onboarding` |
+| 12.2 | Compléter l'onboarding jusqu'à l'étape 7 → "Finaliser" | Status → `completed`, redirection dashboard, plus de redirect au login |
+| 12.3 | Abandonner à l'étape 3 → retour au dashboard | Dialog "Configuration en cours – Souhaitez-vous la compléter ?" |
+| 12.4 | Dialog → "Continuer la configuration" | Redirection vers `/onboarding` avec données préservées |
+| 12.5 | Dialog → "Non, ignorer" | Dialog fermé, ne réapparaît plus jamais |
+| 12.6 | Settings → "Configuration initiale" | Retour à `/onboarding` étape 1, données préchargées, statut inchangé |
+| 12.7 | Accès direct `/onboarding` sans session | Redirection vers `/login` |
+
+---
+
+## 13. Cas limites et edge cases
 
 | # | Scénario | Résultat attendu |
 |---|----------|-----------------|
-| 12.1 | Client sans numéro de téléphone WhatsApp | Aucun message envoyé, pas d'erreur bloquante |
-| 12.2 | Atteindre le 5ème palier d'un coup (plusieurs paliers franchis) | Tous les coupons créés, cycle réinitialisé |
-| 12.3 | Cliquer 2 fois rapidement sur "Prête" | 2ème clic bloqué (OUTBOX_CONFLICT ou guard PROCESSING) |
-| 12.4 | RDV passé supprimé → rappels futurs | Rappels annulés dans `scheduled_messages` |
-| 12.5 | Programme de fidélité modifié entre 2 commandes | Nouveaux points calculés avec les nouveaux paramètres |
-| 12.6 | Montant 0 avec programme "montant" | 0 points crédités, pas d'erreur |
+| 13.1 | Client sans numéro de téléphone WhatsApp | Aucun message envoyé, pas d'erreur bloquante |
+| 13.2 | Atteindre le 5ème palier d'un coup (plusieurs paliers franchis) | Tous les coupons créés, cycle réinitialisé |
+| 13.3 | Cliquer 2 fois rapidement sur "Prête" | 2ème clic bloqué (OUTBOX_CONFLICT ou guard PROCESSING) |
+| 13.4 | RDV passé supprimé → rappels futurs | Rappels annulés dans `scheduled_messages` |
+| 13.5 | Programme de fidélité modifié entre 2 commandes | Nouveaux points calculés avec les nouveaux paramètres |
+| 13.6 | Montant 0 avec programme "montant" | 0 points crédités, pas d'erreur |
+| 13.7 | Sync Google déclenché juste après assignation client | `client_id` non écrasé (vérification préalable avant upsert) |
+| 13.8 | Event Google supprimé puis reschedule depuis LoyaPing | PATCH retourne 404 → ignoré silencieusement |
+| 13.9 | syncToken Google expiré (erreur 410) | Full resync automatique, nouveau syncToken stocké |
+| 13.10 | Subscription Microsoft expirée | Full resync automatique, nouvelle subscription créée |
+| 13.11 | Client sans email assigné à un RDV → sync | Event Google/Outlook inchangé (titre et description d'origine préservés) |
 
 ---
 
 ## Checklist pre-production
 
+### Général
 - [ ] Toutes les variables d'env configurées sur Vercel
 - [ ] `WHATSAPP_PROVIDER` correctement défini (`twilio` ou `cloud_api`)
-- [ ] Cron jobs actifs dans Vercel → Settings → Cron Jobs (4 crons attendus)
+- [ ] Cron jobs actifs dans Vercel → Settings → Cron Jobs (5 crons attendus : reminders, appointment-reminders, birthday-rewards, calendar-watch-renew, dispatch-scheduled-messages)
 - [ ] `CRON_SECRET` défini et identique dans Vercel
 - [ ] `DEFAULT_BUSINESS_ID` correspond bien au business en base
 - [ ] Programme de fidélité activé (`is_active=true`)
 - [ ] Au moins 1 message configuré dans Paramètres → Commandes et Paramètres → RDV
 - [ ] Sandbox Twilio : numéro de test a rejoint avec `join <mot-clé>`
+
+### Calendrier
+- [ ] `APP_URL` configuré sur Vercel (ex: `https://mon-app.vercel.app`) — requis pour les webhooks Google/Outlook
+- [ ] `GOOGLE_CALENDAR_CLIENT_ID` + `GOOGLE_CALENDAR_CLIENT_SECRET` configurés si Google Calendar utilisé
+- [ ] `MICROSOFT_CLIENT_ID` + `MICROSOFT_CLIENT_SECRET` + `MICROSOFT_TENANT_ID` configurés si Outlook utilisé
+- [ ] Migrations Supabase 035 à 041 appliquées en production (notamment 037 : `client_id` nullable)
+- [ ] RLS activé sur toutes les tables (migrations 039 + 041)
+- [ ] Fonctions SQL avec `search_path` fixé (migration 040)
+- [ ] Leaked Password Protection activée dans Supabase → Authentication → Attack Protection
+
+### Sécurité
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` jamais exposé côté client
+- [ ] Clé `anon` Supabase non utilisée dans les routes API Next.js
