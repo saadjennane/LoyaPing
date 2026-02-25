@@ -1233,9 +1233,14 @@ export default function AppointmentsPage() {
           {/* Navigation — semaine/mois uniquement */}
           {(appView === 'semaine' || appView === 'mois') && (
             <div className="ml-auto flex items-center gap-1">
-              <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
-                {t('appointments.todayBtn')}
-              </Button>
+              {(appView === 'semaine'
+                ? !getDays().some(d => isSameDay(d, new Date()))
+                : !isSameMonth(new Date(), anchor)
+              ) && (
+                <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
+                  {t('appointments.todayBtn')}
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
