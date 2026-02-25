@@ -1638,7 +1638,7 @@ export default function AppointmentsPage() {
                         : null
                       const isUnassigned = item.client_id === null
                       const isSelected = selectedIds.has(item.id)
-                      const isApptToday = isSameDay(parseISO(item.scheduled_at), new Date())
+                      const isApptPastOrToday = parseISO(item.scheduled_at) <= new Date(new Date().setHours(23, 59, 59, 999))
                       return (
                         <div
                           key={item.id}
@@ -1728,7 +1728,7 @@ export default function AppointmentsPage() {
 
                           {/* Actions */}
                           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {isApptToday ? (
+                            {isApptPastOrToday ? (
                               <>
                                 {/* ✓ Présent */}
                                 <button
