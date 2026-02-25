@@ -195,8 +195,8 @@ export default function CustomerAutocomplete({
             <div className="px-3 py-2 text-sm text-gray-400">Aucun client trouvé</div>
           )}
 
-          {/* Create new */}
-          {onCreateNew && (
+          {/* Create new — only shown when there's a typed query */}
+          {onCreateNew && !isEmpty && (
             <div
               onMouseDown={(e) => { e.preventDefault(); handleCreateNew() }}
               className={`px-3 py-2.5 cursor-pointer flex items-center gap-2 border-t transition-colors ${
@@ -205,7 +205,7 @@ export default function CustomerAutocomplete({
             >
               <UserPlus className="h-4 w-4 text-blue-600 shrink-0" />
               <span className="text-sm text-blue-600 font-medium">
-                {query.trim() ? `Créer "${query.trim()}"` : 'Créer un nouveau client'}
+                Créer &ldquo;{query.trim()}&rdquo;
               </span>
             </div>
           )}

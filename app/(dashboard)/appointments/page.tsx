@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
-  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock,
+  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock, UserPlus,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -2021,7 +2021,7 @@ export default function AppointmentsPage() {
 
               {/* Slot list */}
               {!slotHoursLoading && businessHours && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="flex-1 overflow-y-auto p-3 space-y-4">
                   {slotDays.map(({ date, result }) => {
                     const dayLabel = isSameDay(date, new Date())
                       ? `Aujourd'hui · ${format(date, 'd MMM', { locale: fr })}`
@@ -2035,13 +2035,13 @@ export default function AppointmentsPage() {
                       : 'text-foreground'
 
                     return (
-                      <div key={date.toISOString()} className="rounded-md">
-                        <p className={`text-[10px] font-semibold capitalize mb-1 px-1 ${headerCls}`}>{dayLabel}</p>
+                      <div key={date.toISOString()}>
+                        <p className={`text-xs font-semibold capitalize mb-2 ${headerCls}`}>{dayLabel}</p>
                         {result.kind === 'complet' && (
-                          <p className="text-[10px] text-red-500 px-1">Complet</p>
+                          <p className="text-xs text-red-500">Complet</p>
                         )}
                         {(result.kind === 'libre' || result.kind === 'partiel') && (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             {result.slots.map((m) => {
                               const key = `${date.toISOString()}_${m}`
                               const isSelected = selectedSlotKey === key
@@ -2049,7 +2049,7 @@ export default function AppointmentsPage() {
                                 <button
                                   key={m}
                                   onClick={() => handleSelectSlot(date, m)}
-                                  className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors
+                                  className={`rounded px-2 py-1 text-xs font-medium border transition-colors
                                     ${isSelected
                                       ? 'bg-[#3B5BDB] text-white border-[#3B5BDB]'
                                       : result.kind === 'libre'
@@ -2078,13 +2078,21 @@ export default function AppointmentsPage() {
 
               {/* Step 1 — select client */}
               {createStep === 'search' && (
-                <div className="mt-2">
+                <div className="mt-2 space-y-2">
                   <CustomerAutocomplete
                     autoFocus
                     onSelect={handleSelectCreateItem}
                     onCreateNew={handleGoToNewClient}
                     placeholder={t('appointments.form.searchPlaceholder')}
                   />
+                  <button
+                    type="button"
+                    onClick={() => handleGoToNewClient()}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-[#3B5BDB] font-medium border border-border rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    <UserPlus className="h-4 w-4 shrink-0" />
+                    Créer un nouveau client
+                  </button>
                   {/* Show selected slot as hint */}
                   {selectedSlotKey && apptDate && apptHour && (
                     <div className="mt-3 flex items-center gap-1.5 text-xs text-[#3B5BDB] bg-[#EDF2FF] rounded-md px-2.5 py-1.5">
