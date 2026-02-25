@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
     const body = await req.json()
-    const { status, amount, scheduled_at } = body
+    const { status, amount, scheduled_at, client_id } = body
 
     // ── Force override (silent correction) ──────────────────────────────────
     // Corrects a wrong status (show↔no_show↔scheduled) without triggering
@@ -96,7 +96,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ data: { id, scheduled_at } })
     }
 
-    return NextResponse.json({ error: 'Invalid payload. Use status "show"/"no_show" or provide scheduled_at.' }, { status: 400 })
+    // Assign a client to an unassigned appointment (client_id was null)
+    if (client_id) {
+      const db = createServerClient()
+      const { error } = await db
+        .from('appointments')
+        .update({ client_id })
+        .eq('id', id)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+      if (error) throw error
+      // Push to connected calendars with the now-assigned client info (best-effort)
+      pushAppointmentToGoogle(id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Google push failed on client assign:', e)
+      })
+      pushAppointmentToMicrosoft(id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Microsoft push failed on client assign:', e)
+      })
+      return NextResponse.json({ data: { id, client_id } })
+    }
+
+    return NextResponse.json({ error: 'Invalid payload. Use status "show"/"no_show", provide scheduled_at, or provide client_id.' }, { status: 400 })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }

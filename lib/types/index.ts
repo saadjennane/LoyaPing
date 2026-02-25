@@ -141,7 +141,7 @@ export type OrderScheduledNotification = {
 
 export type Appointment = {
   id: string
-  client_id: string
+  client_id: string | null
   business_id: string
   scheduled_at: string
   ended_at: string | null

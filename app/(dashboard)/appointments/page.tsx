@@ -38,14 +38,6 @@ type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
 
-type CalendarImport = {
-  id: string
-  event_id: string
-  summary: string | null
-  start_at: string
-  end_at: string | null
-  attendees: string[] | null
-}
 
 const HOUR_START = 0
 const HOUR_END = 24
@@ -116,15 +108,11 @@ function computeOverlapLayout(
 function TimeGrid({
   days,
   appointments,
-  imports,
   onSelect,
-  onSelectImport,
 }: {
   days: Date[]
   appointments: Appointment[]
-  imports: CalendarImport[]
   onSelect: (a: Appointment) => void
-  onSelectImport: (imp: CalendarImport) => void
 }) {
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => i) // 0..23
   const totalHeight = hours.length * HOUR_HEIGHT
@@ -195,16 +183,9 @@ function TimeGrid({
           const dayAppts = appointments.filter((a) =>
             isSameDay(parseISO(a.scheduled_at), day)
           )
-          const dayImports = imports.filter((i) =>
-            isSameDay(parseISO(i.start_at), day)
+          const layout = computeOverlapLayout(
+            dayAppts.map((a) => ({ id: a.id, start: a.scheduled_at, end: a.ended_at }))
           )
-
-          // Compute overlap layout for all events in the day
-          const allDayEvents = [
-            ...dayAppts.map((a) => ({ id: a.id, start: a.scheduled_at, end: a.ended_at })),
-            ...dayImports.map((i) => ({ id: i.id, start: i.start_at, end: i.end_at })),
-          ]
-          const layout = computeOverlapLayout(allDayEvents)
 
           return (
             <div
@@ -220,13 +201,17 @@ function TimeGrid({
                 />
               ))}
               {dayAppts.map((appt) => {
+                const isUnassigned = appt.client_id === null
                 const { colIdx, totalCols } = layout.get(appt.id) ?? { colIdx: 0, totalCols: 1 }
                 const pctW = 100 / totalCols
                 return (
                   <button
                     key={appt.id}
                     onClick={() => onSelect(appt)}
-                    className={`absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border ${apptColorClass(appt.status)}`}
+                    className={isUnassigned
+                      ? 'absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed'
+                      : `absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border ${apptColorClass(appt.status)}`
+                    }
                     style={{
                       top:    eventTop(appt.scheduled_at),
                       height: eventHeight(appt.scheduled_at, appt.ended_at),
@@ -234,32 +219,19 @@ function TimeGrid({
                       width:  `calc(${pctW}% - 4px)`,
                     }}
                   >
-                    <span className="font-semibold">
-                      {format(parseISO(appt.scheduled_at), 'HH:mm')}
-                    </span>{' '}
-                    {clientFullName(appt.client as Client)}
-                    {appt.reminderStatus?.hasFailed && ' ⚠'}
-                  </button>
-                )
-              })}
-              {dayImports.map((imp) => {
-                const { colIdx, totalCols } = layout.get(imp.id) ?? { colIdx: 0, totalCols: 1 }
-                const pctW = 100 / totalCols
-                return (
-                  <button
-                    key={imp.id}
-                    onClick={() => onSelectImport(imp)}
-                    className="absolute rounded text-[11px] text-left px-1.5 py-0.5 overflow-hidden leading-tight border bg-red-50 text-red-700 border-red-300 border-dashed"
-                    style={{
-                      top:    eventTop(imp.start_at),
-                      height: eventHeight(imp.start_at, imp.end_at),
-                      left:   `calc(${colIdx * pctW}% + 2px)`,
-                      width:  `calc(${pctW}% - 4px)`,
-                    }}
-                  >
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle shrink-0" />
-                    <span className="font-semibold">{format(parseISO(imp.start_at), 'HH:mm')}</span>{' '}
-                    {imp.summary || 'RDV sans client'}
+                    {isUnassigned ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle shrink-0" />
+                        <span className="font-semibold">{format(parseISO(appt.scheduled_at), 'HH:mm')}</span>{' '}
+                        {appt.notes || 'Sans client'}
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-semibold">{format(parseISO(appt.scheduled_at), 'HH:mm')}</span>{' '}
+                        {clientFullName(appt.client as Client)}
+                        {appt.reminderStatus?.hasFailed && ' ⚠'}
+                      </>
+                    )}
                   </button>
                 )
               })}
@@ -276,15 +248,11 @@ function TimeGrid({
 function MonthGrid({
   anchor,
   appointments,
-  imports,
   onSelect,
-  onSelectImport,
 }: {
   anchor: Date
   appointments: Appointment[]
-  imports: CalendarImport[]
   onSelect: (a: Appointment) => void
-  onSelectImport: (imp: CalendarImport) => void
 }) {
   const monthStart = startOfMonth(anchor)
   const monthEnd = endOfMonth(anchor)
@@ -314,9 +282,6 @@ function MonthGrid({
           const dayAppts = appointments.filter((a) =>
             isSameDay(parseISO(a.scheduled_at), day)
           )
-          const dayImports = imports.filter((i) =>
-            isSameDay(parseISO(i.start_at), day)
-          )
           const inMonth = isSameMonth(day, anchor)
           const isToday = isSameDay(day, new Date())
 
@@ -343,11 +308,20 @@ function MonthGrid({
                   <button
                     key={appt.id}
                     onClick={() => onSelect(appt)}
-                    className={`w-full text-left text-[10px] rounded px-1 truncate ${apptColorClass(appt.status)}`}
+                    className={appt.client_id === null
+                      ? 'w-full text-left text-[10px] rounded px-1 truncate bg-red-50 text-red-700 border border-red-200 border-dashed'
+                      : `w-full text-left text-[10px] rounded px-1 truncate ${apptColorClass(appt.status)}`
+                    }
                   >
+                    {appt.client_id === null && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-0.5 align-middle" />
+                    )}
                     {format(parseISO(appt.scheduled_at), 'HH:mm')}{' '}
-                    {clientFullName(appt.client as Client)}
-                    {appt.reminderStatus?.hasFailed && ' ⚠'}
+                    {appt.client_id === null
+                      ? (appt.notes || 'Sans client')
+                      : clientFullName(appt.client as Client)
+                    }
+                    {appt.client_id !== null && appt.reminderStatus?.hasFailed && ' ⚠'}
                   </button>
                 ))}
                 {dayAppts.length > 3 && (
@@ -355,17 +329,6 @@ function MonthGrid({
                     +{dayAppts.length - 3} autres
                   </div>
                 )}
-                {dayImports.map((imp) => (
-                  <button
-                    key={imp.id}
-                    onClick={() => onSelectImport(imp)}
-                    className="w-full text-left text-[10px] rounded px-1 truncate bg-red-50 text-red-700 border border-red-200 border-dashed"
-                  >
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-0.5 align-middle" />
-                    {format(parseISO(imp.start_at), 'HH:mm')}{' '}
-                    {imp.summary || 'Sans client'}
-                  </button>
-                ))}
               </div>
             </div>
           )
@@ -465,9 +428,7 @@ export default function AppointmentsPage() {
   const [calendarConnected, setCalendarConnected] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false })
   const [syncing, setSyncing] = useState(false)
 
-  // ── Calendar imports (unmatched events with no client) ────────────────────
-  const [calendarImports, setCalendarImports] = useState<CalendarImport[]>([])
-  const [assignImport, setAssignImport]       = useState<CalendarImport | null>(null)
+  // ── Assign client to unassigned appointment ───────────────────────────────
   const [assignClientItem, setAssignClientItem] = useState<CustomerIndexItem | null>(null)
   const [assignSubmitting, setAssignSubmitting] = useState(false)
 
@@ -559,12 +520,6 @@ export default function AppointmentsPage() {
     setLoading(false)
   }, [])
 
-  const fetchCalendarImports = useCallback(async () => {
-    const res = await fetch('/api/calendar/imports')
-    const json = await res.json()
-    setCalendarImports(json.data ?? [])
-  }, [])
-
   const syncCalendar = async () => {
     setSyncing(true)
     try {
@@ -574,29 +529,28 @@ export default function AppointmentsPage() {
       await Promise.all(syncs)
       toast.success('Calendrier synchronisé')
       fetchAppointments()
-      fetchCalendarImports()
     } catch { toast.error('Erreur lors de la synchronisation') }
     finally { setSyncing(false) }
   }
 
-  const handleAssignImport = async (e: React.FormEvent) => {
+  const handleAssignClient = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!assignImport || !assignClientItem) return
+    if (!selected || !assignClientItem) return
     setAssignSubmitting(true)
-    const res = await fetch('/api/calendar/imports', {
+    const res = await fetch(`/api/appointments/${selected.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: assignImport.id, client_id: assignClientItem.id }),
+      body: JSON.stringify({ client_id: assignClientItem.id }),
     })
     const json = await res.json()
     if (json.error) {
       toast.error(json.error)
     } else {
-      toast.success('Client assigné — RDV créé')
-      setAssignImport(null)
+      toast.success('Client assigné')
       setAssignClientItem(null)
+      setDetailOpen(false)
       fetchAppointments()
-      fetchCalendarImports()
+      if (viewMode === 'list') void fetchListItems()
     }
     setAssignSubmitting(false)
   }
@@ -607,18 +561,16 @@ export default function AppointmentsPage() {
     fetch('/api/loyalty/programs').then((r) => r.json()).then((j) => {
       if (j.data) setLoyaltyProgram(j.data as LoyaltyProgram)
     }).catch(() => {})
-    // Fetch calendar connection status + imports if connected
+    // Fetch calendar connection status
     fetch('/api/calendar').then((r) => r.json()).then((j) => {
       if (j.data) {
-        const connected = {
+        setCalendarConnected({
           google:    !!j.data.google,
           microsoft: !!j.data.microsoft,
-        }
-        setCalendarConnected(connected)
-        if (connected.google || connected.microsoft) fetchCalendarImports()
+        })
       }
     }).catch(() => {})
-  }, [fetchAppointments, fetchCalendarImports])
+  }, [fetchAppointments])
 
   // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
@@ -1337,9 +1289,7 @@ export default function AppointmentsPage() {
         <MonthGrid
           anchor={anchor}
           appointments={appointments}
-          imports={calendarImports}
           onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
-          onSelectImport={(imp) => { setAssignImport(imp); setAssignClientItem(null) }}
         />
       ) : (
         // ── Time Grid ──────────────────────────────────────────────────────
@@ -1347,9 +1297,7 @@ export default function AppointmentsPage() {
           <TimeGrid
             days={days}
             appointments={appointments}
-            imports={calendarImports}
             onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
-            onSelectImport={(imp) => { setAssignImport(imp); setAssignClientItem(null) }}
           />
         </div>
       )}
@@ -1484,7 +1432,7 @@ export default function AppointmentsPage() {
       </Dialog>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={(o) => { setDetailOpen(o); if (!o) setDetailApptMode('detail') }}>
+      <Dialog open={detailOpen} onOpenChange={(o) => { setDetailOpen(o); if (!o) { setDetailApptMode('detail'); setAssignClientItem(null) } }}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
@@ -1552,7 +1500,12 @@ export default function AppointmentsPage() {
               <div className="space-y-4 mt-2">
                 <div className="grid grid-cols-2 gap-y-2 text-sm">
                   <div className="text-muted-foreground">{t('appointments.detail.client')}</div>
-                  <div className="font-medium">{clientFullName(selected.client as Client)}</div>
+                  <div className="font-medium">
+                    {selected.client_id === null
+                      ? <span className="text-red-600 inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" />Sans client</span>
+                      : clientFullName(selected.client as Client)
+                    }
+                  </div>
                   <div className="text-muted-foreground">{t('appointments.detail.date')}</div>
                   <div className="capitalize">
                     {format(parseISO(selected.scheduled_at), 'EEEE dd MMMM yyyy', { locale: fr })}
@@ -1570,131 +1523,167 @@ export default function AppointmentsPage() {
                       <div>{selected.notes}</div>
                     </>
                   )}
-                  <div className="text-muted-foreground">{t('appointments.detail.status')}</div>
-                  <div>
-                    <Badge variant={statusVariant(selected.status)}>
-                      {statusLabel(selected.status, t)}
-                    </Badge>
-                  </div>
-                  {selected.show_at && (
+                  {selected.client_id !== null && (
                     <>
-                      <div className="text-muted-foreground">{t('appointments.detail.showAt')}</div>
-                      <div className="text-sm">{format(parseISO(selected.show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
-                    </>
-                  )}
-                  {selected.no_show_at && (
-                    <>
-                      <div className="text-muted-foreground">{t('appointments.detail.noShowAt')}</div>
-                      <div className="text-sm">{format(parseISO(selected.no_show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
-                    </>
-                  )}
-                </div>
-
-                {/* Reminder status (from scheduled_messages outbox) */}
-                {selected.reminderStatus && (
-                  selected.reminderStatus.hasFailed ||
-                  selected.reminderStatus.remindersScheduled.r1 ||
-                  selected.reminderStatus.remindersScheduled.r2 ||
-                  selected.reminderStatus.remindersScheduled.r3 ||
-                  selected.reminderStatus.lastReminderSentAt ||
-                  selected.reminderStatus.nextReminderAt
-                ) && (
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      {t('appointments.remindersTitle')}
-                    </p>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {(['r1', 'r2', 'r3'] as const).map((slot) => (
-                        selected.reminderStatus!.remindersScheduled[slot] && (
-                          <span key={slot} className="text-[11px] font-semibold text-green-700 bg-green-50 rounded px-1.5 py-0.5">
-                            {slot.toUpperCase()}
-                          </span>
-                        )
-                      ))}
-                      {selected.reminderStatus.hasFailed && (
-                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
-                          <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
-                        </span>
+                      <div className="text-muted-foreground">{t('appointments.detail.status')}</div>
+                      <div>
+                        <Badge variant={statusVariant(selected.status)}>
+                          {statusLabel(selected.status, t)}
+                        </Badge>
+                      </div>
+                      {selected.show_at && (
+                        <>
+                          <div className="text-muted-foreground">{t('appointments.detail.showAt')}</div>
+                          <div className="text-sm">{format(parseISO(selected.show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
+                        </>
                       )}
-                    </div>
-                    {selected.reminderStatus.lastReminderSentAt && (
-                      <p className="text-xs text-muted-foreground">
-                        {t('appointments.detail.lastReminderSent')} {format(parseISO(selected.reminderStatus.lastReminderSentAt), 'dd MMM à HH:mm', { locale: fr })}
-                      </p>
-                    )}
-                    {selected.reminderStatus.nextReminderAt && (
-                      <p className="text-xs text-muted-foreground">
-                        {t('appointments.detail.nextReminder')} {format(parseISO(selected.reminderStatus.nextReminderAt), 'dd MMM à HH:mm', { locale: fr })}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {selected.status === 'scheduled' && (
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1" onClick={() => markNoShow(selected.id)}>
-                      <UserX className="h-4 w-4 mr-2" />{t('appointments.actions.absent')}
-                    </Button>
-                    <Button className="flex-1" onClick={() => markShow(selected.id)}>
-                      <UserCheck className="h-4 w-4 mr-2" />{t('appointments.actions.present')}
-                    </Button>
-                  </div>
-                )}
-                {selected.status === 'show' && (
-                  <div className="space-y-2 pt-2">
-                    <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'no_show')}>
-                        <UserX className="h-4 w-4 mr-1.5" />{t('appointments.actions.markAbsent')}
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
-                        {t('appointments.actions.resetScheduled')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {selected.status === 'no_show' && (
-                  <div className="space-y-2 pt-2">
-                    <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'show')}>
-                        <UserCheck className="h-4 w-4 mr-1.5" />{t('appointments.actions.markPresent')}
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
-                        {t('appointments.actions.resetScheduled')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                <div className="pt-1 border-t space-y-1">
-                  <Button
-                    variant="outline" size="sm" className="w-full"
-                    onClick={() => {
-                      const d = parseISO(selected.scheduled_at)
-                      setRescheduleDate(format(d, 'yyyy-MM-dd'))
-                      setRescheduleHour(format(d, 'HH'))
-                      setRescheduleMinute(format(d, 'mm'))
-                      if (selected.ended_at) {
-                        const e = parseISO(selected.ended_at)
-                        setRescheduleEndHour(format(e, 'HH'))
-                        setRescheduleEndMinute(format(e, 'mm'))
-                      } else {
-                        setRescheduleEndHour('')
-                        setRescheduleEndMinute('00')
-                      }
-                      setDetailApptMode('reschedule')
-                    }}
-                  >
-                    <CalendarClock className="h-3.5 w-3.5 mr-2" />Replanifier
-                  </Button>
-                  <Button
-                    variant="ghost" size="sm"
-                    className="text-destructive hover:text-destructive w-full"
-                    onClick={() => setDeleteAppt(selected)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-2" />{t('appointments.detail.deleteBtn')}
-                  </Button>
+                      {selected.no_show_at && (
+                        <>
+                          <div className="text-muted-foreground">{t('appointments.detail.noShowAt')}</div>
+                          <div className="text-sm">{format(parseISO(selected.no_show_at), 'dd MMM à HH:mm', { locale: fr })}</div>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
+
+                {/* Unassigned appointment — assign client or delete */}
+                {selected.client_id === null ? (
+                  <div className="space-y-3 pt-1 border-t">
+                    <p className="text-xs text-muted-foreground">Ce RDV a été importé depuis votre calendrier mais aucun client n&apos;a été identifié. Assignez un client ou supprimez-le.</p>
+                    <form onSubmit={handleAssignClient} className="space-y-2">
+                      <CustomerAutocomplete
+                        autoFocus
+                        onSelect={(_, item) => setAssignClientItem(item)}
+                        placeholder="Rechercher un client..."
+                      />
+                      {assignClientItem && (
+                        <div className="text-xs text-muted-foreground px-1">
+                          Client sélectionné : <span className="font-medium text-foreground">{assignClientItem.display_name}</span>
+                        </div>
+                      )}
+                      <Button type="submit" className="w-full" disabled={assignSubmitting || !assignClientItem}>
+                        <UserCheck className="h-4 w-4 mr-2" />
+                        {assignSubmitting ? 'Assignation...' : 'Assigner ce client'}
+                      </Button>
+                    </form>
+                    <Button
+                      variant="ghost" size="sm"
+                      className="text-destructive hover:text-destructive w-full"
+                      onClick={() => setDeleteAppt(selected)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />{t('appointments.detail.deleteBtn')}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Reminder status (from scheduled_messages outbox) */}
+                    {selected.reminderStatus && (
+                      selected.reminderStatus.hasFailed ||
+                      selected.reminderStatus.remindersScheduled.r1 ||
+                      selected.reminderStatus.remindersScheduled.r2 ||
+                      selected.reminderStatus.remindersScheduled.r3 ||
+                      selected.reminderStatus.lastReminderSentAt ||
+                      selected.reminderStatus.nextReminderAt
+                    ) && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          {t('appointments.remindersTitle')}
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(['r1', 'r2', 'r3'] as const).map((slot) => (
+                            selected.reminderStatus!.remindersScheduled[slot] && (
+                              <span key={slot} className="text-[11px] font-semibold text-green-700 bg-green-50 rounded px-1.5 py-0.5">
+                                {slot.toUpperCase()}
+                              </span>
+                            )
+                          ))}
+                          {selected.reminderStatus.hasFailed && (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                              <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
+                            </span>
+                          )}
+                        </div>
+                        {selected.reminderStatus.lastReminderSentAt && (
+                          <p className="text-xs text-muted-foreground">
+                            {t('appointments.detail.lastReminderSent')} {format(parseISO(selected.reminderStatus.lastReminderSentAt), 'dd MMM à HH:mm', { locale: fr })}
+                          </p>
+                        )}
+                        {selected.reminderStatus.nextReminderAt && (
+                          <p className="text-xs text-muted-foreground">
+                            {t('appointments.detail.nextReminder')} {format(parseISO(selected.reminderStatus.nextReminderAt), 'dd MMM à HH:mm', { locale: fr })}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {selected.status === 'scheduled' && (
+                      <div className="flex gap-2 pt-2">
+                        <Button variant="outline" className="flex-1" onClick={() => markNoShow(selected.id)}>
+                          <UserX className="h-4 w-4 mr-2" />{t('appointments.actions.absent')}
+                        </Button>
+                        <Button className="flex-1" onClick={() => markShow(selected.id)}>
+                          <UserCheck className="h-4 w-4 mr-2" />{t('appointments.actions.present')}
+                        </Button>
+                      </div>
+                    )}
+                    {selected.status === 'show' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'no_show')}>
+                            <UserX className="h-4 w-4 mr-1.5" />{t('appointments.actions.markAbsent')}
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
+                            {t('appointments.actions.resetScheduled')}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {selected.status === 'no_show' && (
+                      <div className="space-y-2 pt-2">
+                        <p className="text-xs text-muted-foreground">{t('appointments.actions.correctStatus')}</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'show')}>
+                            <UserCheck className="h-4 w-4 mr-1.5" />{t('appointments.actions.markPresent')}
+                          </Button>
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => forceStatus(selected.id, 'scheduled')}>
+                            {t('appointments.actions.resetScheduled')}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="pt-1 border-t space-y-1">
+                      <Button
+                        variant="outline" size="sm" className="w-full"
+                        onClick={() => {
+                          const d = parseISO(selected.scheduled_at)
+                          setRescheduleDate(format(d, 'yyyy-MM-dd'))
+                          setRescheduleHour(format(d, 'HH'))
+                          setRescheduleMinute(format(d, 'mm'))
+                          if (selected.ended_at) {
+                            const e = parseISO(selected.ended_at)
+                            setRescheduleEndHour(format(e, 'HH'))
+                            setRescheduleEndMinute(format(e, 'mm'))
+                          } else {
+                            setRescheduleEndHour('')
+                            setRescheduleEndMinute('00')
+                          }
+                          setDetailApptMode('reschedule')
+                        }}
+                      >
+                        <CalendarClock className="h-3.5 w-3.5 mr-2" />Replanifier
+                      </Button>
+                      <Button
+                        variant="ghost" size="sm"
+                        className="text-destructive hover:text-destructive w-full"
+                        onClick={() => setDeleteAppt(selected)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />{t('appointments.detail.deleteBtn')}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             )
           )}
@@ -1769,43 +1758,6 @@ export default function AppointmentsPage() {
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Assign calendar import to a client */}
-      <Dialog open={!!assignImport} onOpenChange={(o) => { if (!o) { setAssignImport(null); setAssignClientItem(null) } }}>
-        <DialogContent aria-describedby={undefined} className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Assigner un client</DialogTitle>
-          </DialogHeader>
-          {assignImport && (
-            <div className="space-y-4 mt-2">
-              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm space-y-0.5">
-                <div className="font-medium text-red-900">{assignImport.summary || 'RDV sans titre'}</div>
-                <div className="text-red-700 text-xs">
-                  {format(parseISO(assignImport.start_at), 'EEEE dd MMM à HH:mm', { locale: fr })}
-                </div>
-                {assignImport.attendees && assignImport.attendees.length > 0 && (
-                  <div className="text-red-600 text-xs truncate">{assignImport.attendees.join(', ')}</div>
-                )}
-              </div>
-              <form onSubmit={handleAssignImport} className="space-y-3">
-                <CustomerAutocomplete
-                  autoFocus
-                  onSelect={(_, item) => setAssignClientItem(item)}
-                  placeholder="Rechercher un client..."
-                />
-                {assignClientItem && (
-                  <div className="text-xs text-muted-foreground px-1">
-                    Client sélectionné : <span className="font-medium text-foreground">{assignClientItem.display_name}</span>
-                  </div>
-                )}
-                <Button type="submit" className="w-full" disabled={assignSubmitting || !assignClientItem}>
-                  {assignSubmitting ? 'Assignation...' : 'Assigner et créer le RDV'}
-                </Button>
-              </form>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 

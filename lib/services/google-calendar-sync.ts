@@ -110,51 +110,24 @@ async function processGoogleEvent(
     clientId = clientRow?.id ?? null
   }
 
-  if (clientId) {
-    // Upsert as a proper appointment
-    const { error } = await db.from('appointments').upsert(
-      {
-        client_id:       clientId,
-        business_id:     businessId,
-        scheduled_at:    startIso,
-        ended_at:        endIso,
-        notes:           event.summary ?? null,
-        status:          'scheduled',
-        google_event_id: event.id,
-      },
-      { onConflict: 'google_event_id', ignoreDuplicates: false },
-    )
-    if (error) console.error('[calendar-sync] upsert appointment error:', error.message)
-  } else {
-    // Before creating a calendar_import, check if this event is already linked to an appointment
-    // (happens when LoyaPing pushed the event to Google but the client has no email to match on pull)
-    const { data: existing } = await db
-      .from('appointments')
-      .select('id')
-      .eq('google_event_id', event.id)
-      .maybeSingle()
-    if (existing) {
-      // Clean up any stale calendar_import for this event
-      await db.from('calendar_imports').delete().eq('business_id', businessId).eq('event_id', event.id)
-      return
-    }
+  // Always upsert as an appointment — client_id may be null if no email match.
+  // Unassigned appointments (client_id IS NULL) appear as red dots in the agenda.
+  const { error } = await db.from('appointments').upsert(
+    {
+      client_id:       clientId,   // null if no match — allowed since migration 037
+      business_id:     businessId,
+      scheduled_at:    startIso,
+      ended_at:        endIso,
+      notes:           event.summary ?? null,
+      status:          'scheduled',
+      google_event_id: event.id,
+    },
+    { onConflict: 'google_event_id', ignoreDuplicates: false },
+  )
+  if (error) console.error('[calendar-sync] upsert appointment error:', error.message)
 
-    // Store as unmatched import for manual assignment
-    const { error } = await db.from('calendar_imports').upsert(
-      {
-        business_id: businessId,
-        event_id:    event.id,
-        summary:     event.summary ?? null,
-        description: event.description ?? null,
-        start_at:    startIso,
-        end_at:      endIso,
-        attendees:   attendeeEmails.length > 0 ? attendeeEmails : null,
-        raw:         event as object,
-      },
-      { onConflict: 'business_id,event_id', ignoreDuplicates: false },
-    )
-    if (error) console.error('[calendar-sync] upsert calendar_import error:', error.message)
-  }
+  // Clean up any stale calendar_import for this event (legacy)
+  await db.from('calendar_imports').delete().eq('business_id', businessId).eq('event_id', event.id)
 }
 
 // ── Main sync ─────────────────────────────────────────────────────────────────
