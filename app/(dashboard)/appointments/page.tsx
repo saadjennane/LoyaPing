@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
-  MoreHorizontal, Pencil, Sparkles,
+  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -37,6 +37,20 @@ type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
 
+// ─── Availability exceptions ──────────────────────────────────────────────────
+
+type AvailabilityException = {
+  id: string
+  business_id: string
+  start_date: string       // 'yyyy-MM-dd'
+  end_date: string         // 'yyyy-MM-dd'
+  start_time: string | null  // 'HH:MM'
+  end_time: string | null    // 'HH:MM'
+  label?: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ─── Slot browser types ────────────────────────────────────────────────────────
 
 type BusinessHourRow = {
@@ -64,6 +78,7 @@ function computeDaySlots(
   duration: number,
   dayAppts: Appointment[],
   minMins = 0,  // ignore slots starting before this time (for "today, now")
+  partialExceptions: Array<{ start_time: string; end_time: string }> = [],
 ): SlotDayResult {
   if (bh.is_closed) return { kind: 'fermé' }
 
@@ -85,13 +100,21 @@ function computeDaySlots(
 
   const free = relevantSlots.filter((slotStart) => {
     const slotEnd = slotStart + duration
-    return !dayAppts.some((a) => {
+    // Appointment conflict
+    if (dayAppts.some((a) => {
       const aS = differenceInMinutes(parseISO(a.scheduled_at), startOfDay(parseISO(a.scheduled_at)))
       const aE = a.ended_at
         ? differenceInMinutes(parseISO(a.ended_at), startOfDay(parseISO(a.ended_at)))
         : aS + duration
       return slotStart < aE && slotEnd > aS
-    })
+    })) return false
+    // Partial-exception conflict (e.g. 14h–18h unavailable)
+    if (partialExceptions.some((ex) => {
+      const exS = timeToMins(ex.start_time)
+      const exE = timeToMins(ex.end_time)
+      return slotStart < exE && slotEnd > exS
+    })) return false
+    return true
   })
 
   if (free.length === 0) return { kind: 'complet' }
@@ -570,6 +593,26 @@ export default function AppointmentsPage() {
   const [slotHoursLoading, setSlotHoursLoading] = useState(false)
   const [selectedSlotKey,  setSelectedSlotKey]  = useState<string | null>(null)
 
+  // ── Availability exceptions ───────────────────────────────────────────────
+  const [exceptionsOpen,    setExceptionsOpen]    = useState(false)
+  const [exceptions,        setExceptions]        = useState<AvailabilityException[]>([])
+  const [exceptionsLoading, setExceptionsLoading] = useState(false)
+  const [exTab,             setExTab]             = useState<'add' | 'list'>('add')
+  // Form
+  const [exType,      setExType]      = useState<'day' | 'period'>('day')
+  const [exStartDate, setExStartDate] = useState('')
+  const [exEndDate,   setExEndDate]   = useState('')
+  const [exStartTime, setExStartTime] = useState('')
+  const [exEndTime,   setExEndTime]   = useState('')
+  const [editingExId, setEditingExId] = useState<string | null>(null)
+  const [exSubmitting, setExSubmitting] = useState(false)
+  // Conflict
+  const [conflictAppts,     setConflictAppts]     = useState<Appointment[]>([])
+  const [conflictOpen,      setConflictOpen]       = useState(false)
+  const [pendingException,  setPendingException]   = useState<Record<string, string | null> | null>(null)
+  // Delete confirm
+  const [exDeleteConfirm, setExDeleteConfirm] = useState<string | null>(null)
+
   // ── Assign client to unassigned appointment ───────────────────────────────
   const [assignClientItem, setAssignClientItem] = useState<CustomerIndexItem | null>(null)
   const [assignSubmitting, setAssignSubmitting] = useState(false)
@@ -717,8 +760,118 @@ export default function AppointmentsPage() {
     setAssignSubmitting(false)
   }
 
+  // ── Availability exceptions ───────────────────────────────────────────────
+
+  const fetchExceptions = useCallback(async () => {
+    setExceptionsLoading(true)
+    try {
+      const res  = await fetch('/api/availability-exceptions')
+      const json = await res.json()
+      if (json.data) setExceptions(json.data)
+    } catch {}
+    setExceptionsLoading(false)
+  }, [])
+
+  const resetExForm = () => {
+    setExType('day')
+    setExStartDate('')
+    setExEndDate('')
+    setExStartTime('')
+    setExEndTime('')
+    setEditingExId(null)
+    setExDeleteConfirm(null)
+  }
+
+  const startEditException = (ex: AvailabilityException) => {
+    setEditingExId(ex.id)
+    setExType(ex.start_date === ex.end_date ? 'day' : 'period')
+    setExStartDate(ex.start_date)
+    setExEndDate(ex.end_date)
+    setExStartTime(ex.start_time ?? '')
+    setExEndTime(ex.end_time ?? '')
+    setExTab('add')
+  }
+
+  const saveException = async (payload: Record<string, string | null>) => {
+    setExSubmitting(true)
+    try {
+      const url    = editingExId ? `/api/availability-exceptions/${editingExId}` : '/api/availability-exceptions'
+      const method = editingExId ? 'PATCH' : 'POST'
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const json   = await res.json()
+      if (json.error) {
+        toast.error(json.error)
+      } else {
+        toast.success(editingExId ? 'Indisponibilité modifiée' : 'Indisponibilité ajoutée')
+        await fetchExceptions()
+        resetExForm()
+        setExTab('list')
+      }
+    } catch {
+      toast.error('Erreur lors de la sauvegarde')
+    }
+    setExSubmitting(false)
+  }
+
+  const handleExceptionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const effectiveEnd = exType === 'day' ? exStartDate : exEndDate
+    if (!exStartDate || (exType === 'period' && !exEndDate)) return
+
+    const payload: Record<string, string | null> = {
+      start_date: exStartDate,
+      end_date:   effectiveEnd,
+      start_time: exStartTime || null,
+      end_time:   exEndTime   || null,
+    }
+
+    // Conflict check only on create
+    if (!editingExId) {
+      const conflicts = appointments.filter((a) => {
+        if (a.deleted_at) return false
+        const apptDate = format(parseISO(a.scheduled_at), 'yyyy-MM-dd')
+        if (apptDate < exStartDate || apptDate > effectiveEnd) return false
+        if (!payload.start_time || !payload.end_time) return true
+        const aS   = differenceInMinutes(parseISO(a.scheduled_at), startOfDay(parseISO(a.scheduled_at)))
+        const aE   = a.ended_at
+          ? differenceInMinutes(parseISO(a.ended_at), startOfDay(parseISO(a.ended_at)))
+          : aS + (defaultDuration ?? 60)
+        const exS  = timeToMins(payload.start_time)
+        const exE  = timeToMins(payload.end_time)
+        return aS < exE && aE > exS
+      })
+      if (conflicts.length > 0) {
+        setConflictAppts(conflicts)
+        setPendingException(payload)
+        setConflictOpen(true)
+        return
+      }
+    }
+    await saveException(payload)
+  }
+
+  const handleDeleteException = async (id: string) => {
+    const res  = await fetch(`/api/availability-exceptions/${id}`, { method: 'DELETE' })
+    const json = await res.json()
+    if (json.error) {
+      toast.error(json.error)
+    } else {
+      toast.success('Indisponibilité supprimée')
+      setExceptions((prev) => prev.filter((e) => e.id !== id))
+      setExDeleteConfirm(null)
+    }
+  }
+
+  const formatExceptionLabel = (ex: AvailabilityException) => {
+    const parseD = (d: string) => new Date(`${d}T12:00:00`)
+    if (ex.start_date === ex.end_date)
+      return format(parseD(ex.start_date), 'EEEE d MMMM yyyy', { locale: fr })
+    return `Du ${format(parseD(ex.start_date), 'd MMM', { locale: fr })} au ${format(parseD(ex.end_date), 'd MMMM yyyy', { locale: fr })}`
+  }
+
   useEffect(() => {
     fetchAppointments()
+    fetchExceptions()
     // Fetch loyalty program to decide whether to show amount modal on SHOW
     fetch('/api/loyalty/programs').then((r) => r.json()).then((j) => {
       if (j.data) setLoyaltyProgram(j.data as LoyaltyProgram)
@@ -1171,6 +1324,14 @@ export default function AppointmentsPage() {
     // Don't change step — user stays on current step (search or details)
   }
 
+  // ── Future exceptions (useMemo) ─────────────────────────────────────────
+  const futureExceptions = useMemo(() => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    return [...exceptions]
+      .filter((ex) => ex.end_date >= todayStr)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date))
+  }, [exceptions])
+
   // ── Slot days (useMemo) ──────────────────────────────────────────────────
   const slotDays = useMemo(() => {
     if (!businessHours || !defaultDuration) return []
@@ -1180,15 +1341,26 @@ export default function AppointmentsPage() {
       const dow      = date.getDay() === 0 ? 7 : date.getDay()
       const bh       = businessHours.find((h) => h.day_of_week === dow)
       if (!bh) return { date, result: { kind: 'fermé' as const } }
+
+      // Check availability exceptions for this date
+      const dateStr      = format(date, 'yyyy-MM-dd')
+      const dayExceptions = exceptions.filter((ex) => dateStr >= ex.start_date && dateStr <= ex.end_date)
+      // Full-day exception → treat as closed
+      if (dayExceptions.some((ex) => !ex.start_time)) return { date, result: { kind: 'fermé' as const } }
+      // Partial exceptions (time-bounded)
+      const partialEx = dayExceptions.filter((ex): ex is AvailabilityException & { start_time: string; end_time: string } =>
+        ex.start_time !== null && ex.end_time !== null
+      )
+
       // Include all non-deleted appointments (show/no_show also block the slot)
       const dayAppts = appointments.filter((a) =>
         !a.deleted_at && isSameDay(parseISO(a.scheduled_at), date)
       )
       // For today: skip slots already in the past
       const minMins = isSameDay(date, now) ? nowMins : 0
-      return { date, result: computeDaySlots(date, bh, defaultDuration, dayAppts, minMins) }
+      return { date, result: computeDaySlots(date, bh, defaultDuration, dayAppts, minMins, partialEx) }
     }).filter(({ result }) => result.kind !== 'fermé')
-  }, [businessHours, defaultDuration, appointments])
+  }, [businessHours, defaultDuration, appointments, exceptions])
 
   const filteredListItems = listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
@@ -1217,6 +1389,10 @@ export default function AppointmentsPage() {
           <p className="text-sm text-muted-foreground">{upcomingCount} à venir</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}>
+            <CalendarX className="h-4 w-4 mr-1.5" />
+            <span className="hidden sm:inline">Indisponibilités</span>
+          </Button>
           <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => { resetCreate(); setCreateOpen(true) }}>
             <Plus className="h-4 w-4 mr-2" />{t('appointments.newBtn')}
           </Button>
@@ -2391,6 +2567,250 @@ export default function AppointmentsPage() {
               <Button variant="outline" onClick={() => setBulkDeleteConfirm(false)}>Annuler</Button>
               <Button variant="destructive" disabled={bulkDeleting} onClick={handleBulkDelete}>
                 {bulkDeleting ? 'Suppression...' : `Supprimer (${selectedIds.size})`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Availability exceptions dialog ──────────────────────────────────── */}
+      <Dialog open={exceptionsOpen} onOpenChange={(o) => { if (!o) resetExForm(); setExceptionsOpen(o) }}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
+          <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <CalendarX className="h-4 w-4 text-muted-foreground" />
+              Indisponibilités
+            </DialogTitle>
+          </DialogHeader>
+
+          <Tabs value={exTab} onValueChange={(v) => { setExTab(v as 'add' | 'list'); setExDeleteConfirm(null) }} className="flex flex-col flex-1 min-h-0">
+            <TabsList className="shrink-0 mx-6 mt-4 mb-1">
+              <TabsTrigger value="add" className="flex-1">
+                {editingExId ? 'Modifier' : 'Ajouter'}
+              </TabsTrigger>
+              <TabsTrigger value="list" className="flex-1">
+                Programmées
+                {futureExceptions.length > 0 && (
+                  <span className="ml-1.5 bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">
+                    {futureExceptions.length}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ── Add / Edit tab ── */}
+            <TabsContent value="add" className="flex-1 overflow-y-auto px-6 py-4 mt-0">
+              <form onSubmit={handleExceptionSubmit} className="space-y-5">
+                {/* Type selector */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Type d&apos;indisponibilité</p>
+                  <div className="flex gap-6">
+                    {(['day', 'period'] as const).map((type) => (
+                      <label key={type} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="exType"
+                          value={type}
+                          checked={exType === type}
+                          onChange={() => { setExType(type); setExEndDate('') }}
+                          className="accent-[#3B5BDB]"
+                        />
+                        <span className="text-sm">{type === 'day' ? 'Un jour' : 'Une période'}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date fields */}
+                {exType === 'day' ? (
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Date</label>
+                    <input
+                      type="date"
+                      value={exStartDate}
+                      onChange={(e) => setExStartDate(e.target.value)}
+                      required
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Date début</label>
+                      <input
+                        type="date"
+                        value={exStartDate}
+                        onChange={(e) => { setExStartDate(e.target.value); if (exEndDate && e.target.value > exEndDate) setExEndDate('') }}
+                        required
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Date fin</label>
+                      <input
+                        type="date"
+                        value={exEndDate}
+                        min={exStartDate}
+                        onChange={(e) => setExEndDate(e.target.value)}
+                        required
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Time fields (optional) */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-sm font-medium text-muted-foreground">Horaires <span className="font-normal">(optionnel)</span></p>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    Sans horaire : {exType === 'day' ? 'journée complète' : 'journées complètes'} bloquée{exType === 'period' ? 's' : ''}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Heure début</label>
+                      <input
+                        type="time"
+                        value={exStartTime}
+                        onChange={(e) => setExStartTime(e.target.value)}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Heure fin</label>
+                      <input
+                        type="time"
+                        value={exEndTime}
+                        min={exStartTime || undefined}
+                        onChange={(e) => setExEndTime(e.target.value)}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  {editingExId && (
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => { resetExForm(); setExTab('list') }}>
+                      Annuler
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white"
+                    disabled={exSubmitting || !exStartDate || (exType === 'period' && !exEndDate)}
+                  >
+                    {exSubmitting ? 'Enregistrement...' : editingExId ? 'Enregistrer les modifications' : 'Ajouter l\'indisponibilité'}
+                  </Button>
+                </div>
+              </form>
+            </TabsContent>
+
+            {/* ── Scheduled list tab ── */}
+            <TabsContent value="list" className="flex-1 overflow-y-auto px-6 py-4 mt-0">
+              {exceptionsLoading ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Chargement...</p>
+              ) : futureExceptions.length === 0 ? (
+                <div className="text-center py-8 space-y-2">
+                  <CalendarX className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+                  <p className="text-sm text-muted-foreground">Aucune indisponibilité programmée.</p>
+                  <Button variant="outline" size="sm" onClick={() => setExTab('add')}>Ajouter</Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {futureExceptions.map((ex) => (
+                    <div key={ex.id} className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium capitalize leading-snug">{formatExceptionLabel(ex)}</p>
+                          {ex.start_time && ex.end_time && (
+                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {ex.start_time.slice(0, 5)} – {ex.end_time.slice(0, 5)}
+                            </p>
+                          )}
+                          {!ex.start_time && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {ex.start_date === ex.end_date ? 'Journée complète' : 'Journées complètes'}
+                            </p>
+                          )}
+                        </div>
+                        {exDeleteConfirm !== ex.id && (
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => startEditException(ex)}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              title="Modifier"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setExDeleteConfirm(ex.id)}
+                              className="rounded p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {exDeleteConfirm === ex.id && (
+                        <div className="bg-red-50 rounded-md px-3 py-2 space-y-2">
+                          <p className="text-xs text-red-700 font-medium">Rendre cette période disponible ?</p>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => setExDeleteConfirm(null)}>
+                              Annuler
+                            </Button>
+                            <Button size="sm" variant="destructive" className="flex-1 h-7 text-xs" onClick={() => handleDeleteException(ex.id)}>
+                              Supprimer
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Conflict warning dialog ─────────────────────────────────────────── */}
+      <Dialog open={conflictOpen} onOpenChange={setConflictOpen}>
+        <DialogContent className="max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              RDV déjà planifiés
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-1">
+            <p className="text-sm text-muted-foreground">
+              {conflictAppts.length} rendez-vous {conflictAppts.length > 1 ? 'sont' : 'est'} déjà planifié{conflictAppts.length > 1 ? 's' : ''} sur cette période.
+              L&apos;indisponibilité sera créée sans annuler ces rendez-vous.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConflictOpen(false)
+                  setExceptionsOpen(false)
+                  setAppView('agenda')
+                }}
+              >
+                Voir les RDV
+              </Button>
+              <Button
+                className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white"
+                onClick={async () => {
+                  setConflictOpen(false)
+                  if (pendingException) { await saveException(pendingException); setPendingException(null) }
+                }}
+              >
+                Confirmer
               </Button>
             </div>
           </div>
