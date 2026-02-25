@@ -2583,7 +2583,7 @@ export default function AppointmentsPage() {
 
       {/* ── Availability exceptions dialog ──────────────────────────────────── */}
       <Dialog open={exceptionsOpen} onOpenChange={(o) => { if (!o) resetExForm(); setExceptionsOpen(o) }}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md min-h-[580px] max-h-[85vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
           <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2 text-base">
               <CalendarX className="h-4 w-4 text-muted-foreground" />
