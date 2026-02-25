@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { syncGoogleCalendar } from '@/lib/services/google-calendar-sync'
 
@@ -30,10 +30,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (resourceState === 'exists') {
-      // Fire sync asynchronously — return 200 immediately so Google doesn't retry
-      syncGoogleCalendar(channel.business_id).catch((e) => {
-        console.error('[calendar/google/webhook] sync error:', e)
-      })
+      // Use after() so Vercel keeps the function alive until the sync completes
+      after(() =>
+        syncGoogleCalendar(channel.business_id).catch((e) => {
+          console.error('[calendar/google/webhook] sync error:', e)
+        }),
+      )
     }
 
     return NextResponse.json({ status: 'ok' })

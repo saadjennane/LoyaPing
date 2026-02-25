@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { syncMicrosoftCalendar } from '@/lib/services/microsoft-calendar-sync'
 
@@ -34,10 +34,12 @@ export async function POST(req: NextRequest) {
           .maybeSingle()
 
         if (channel) {
-          // Fire async — return 200 immediately so Microsoft doesn't retry
-          syncMicrosoftCalendar(channel.business_id).catch((e) => {
-            console.error('[calendar/microsoft/webhook] sync error:', e)
-          })
+          // Use after() so Vercel keeps the function alive until the sync completes
+          after(() =>
+            syncMicrosoftCalendar(channel.business_id).catch((e) => {
+              console.error('[calendar/microsoft/webhook] sync error:', e)
+            }),
+          )
         }
       }
     }
