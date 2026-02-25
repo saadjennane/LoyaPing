@@ -11,6 +11,21 @@ export async function POST() {
   try {
     const db = createServerClient()
 
+    // 0. Cleanup: remove calendar_imports that are duplicates of existing appointments
+    const { data: linked } = await db
+      .from('appointments')
+      .select('microsoft_event_id')
+      .eq('business_id', DEFAULT_BUSINESS_ID)
+      .not('microsoft_event_id', 'is', null)
+    if (linked && linked.length > 0) {
+      const eventIds = linked.map((a) => a.microsoft_event_id).filter(Boolean) as string[]
+      await db
+        .from('calendar_imports')
+        .delete()
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+        .in('event_id', eventIds)
+    }
+
     // 1. Pull: Outlook → LoyaPing
     await syncMicrosoftCalendar(DEFAULT_BUSINESS_ID)
 

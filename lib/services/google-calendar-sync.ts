@@ -133,7 +133,11 @@ async function processGoogleEvent(
       .select('id')
       .eq('google_event_id', event.id)
       .maybeSingle()
-    if (existing) return // already an appointment — skip import
+    if (existing) {
+      // Clean up any stale calendar_import for this event
+      await db.from('calendar_imports').delete().eq('business_id', businessId).eq('event_id', event.id)
+      return
+    }
 
     // Store as unmatched import for manual assignment
     const { error } = await db.from('calendar_imports').upsert(
