@@ -6,6 +6,7 @@ import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
 } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Calendar as CalendarPicker } from '@/components/ui/calendar'
@@ -894,43 +895,18 @@ export default function AppointmentsPage() {
         </div>
       )}
 
-      {/* ── Tab header (Agenda / Semaine / Mois) ─────────────────────────────── */}
-      <div className="border-b -mx-3 md:-mx-6 px-3 md:px-6">
-        <div className="flex">
-          {([
-            { view: 'agenda',  label: 'Agenda' },
-            { view: 'semaine', label: 'Semaine' },
-            { view: 'mois',    label: 'Mois' },
-          ] as { view: AppView; label: string }[]).map(({ view, label }) => (
-            <button
-              key={view}
-              onClick={() => setAppView(view)}
-              className={`px-4 py-3 text-sm font-medium transition-colors ${
-                appView === view
-                  ? 'text-[#3B5BDB] font-bold shadow-[inset_0_-3px_0_#3B5BDB]'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <Tabs value={appView} onValueChange={(v) => { setAppView(v as AppView); setSelectedIds(new Set()); setMobileSelectMode(false) }} className="gap-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
 
-      {/* ── Filters + navigation (all views) ─────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Mobile: dropdown */}
-        <div className="md:hidden flex items-center gap-2 w-full">
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-            <SelectTrigger className="h-9 flex-1 font-medium text-sm">
+        {/* Mobile : vue selector + bouton Sélectionner */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-border">
+          <Select value={appView} onValueChange={(v) => { setAppView(v as AppView); setSelectedIds(new Set()); setMobileSelectMode(false) }}>
+            <SelectTrigger className="flex-1 h-9 font-medium text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
-                <SelectItem key={key} value={key}>
-                  {key === 'unassigned' ? 'Non assigné' : key === 'upcoming' ? 'Planifié' : t(`appointments.filters.${key}`)}
-                </SelectItem>
-              ))}
+              <SelectItem value="agenda">Agenda</SelectItem>
+              <SelectItem value="semaine">Semaine</SelectItem>
+              <SelectItem value="mois">Mois</SelectItem>
             </SelectContent>
           </Select>
           {appView === 'agenda' && (
@@ -946,101 +922,139 @@ export default function AppointmentsPage() {
           )}
         </div>
 
-        {/* Desktop: pills */}
-        {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
+        {/* Desktop : onglets */}
+        <TabsList className="hidden md:flex w-full justify-start border-b border-border bg-transparent h-auto p-0 rounded-none px-6 overflow-x-auto">
+          <TabsTrigger
+            value="agenda"
+            className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none"
+          >
+            Agenda
+          </TabsTrigger>
+          <TabsTrigger
+            value="semaine"
+            className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none"
+          >
+            Semaine
+          </TabsTrigger>
+          <TabsTrigger
+            value="mois"
+            className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none"
+          >
+            Mois
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Filtres + navigation (communs à toutes les vues) */}
+        <div className="flex flex-wrap items-center gap-2 px-3 md:px-6 py-2.5 border-b border-border">
+          {/* Mobile : filtre statut */}
+          <div className="md:hidden w-full">
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+              <SelectTrigger className="h-9 w-full font-medium text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {key === 'unassigned' ? 'Non assigné' : key === 'upcoming' ? 'Planifié' : t(`appointments.filters.${key}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Desktop : pills statut */}
+          {(['all', 'upcoming', 'show', 'no_show', 'unassigned'] as StatusFilter[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`hidden md:inline-flex rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
+                statusFilter === key
+                  ? key === 'unassigned'
+                    ? 'bg-red-600 text-white border-red-600'
+                    : 'bg-primary text-primary-foreground border-primary'
+                  : key === 'unassigned'
+                    ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
+                    : 'border-border bg-background hover:bg-muted'
+              }`}
+            >
+              {key === 'unassigned' ? 'Non assigné' : key === 'upcoming' ? 'Planifié' : t(`appointments.filters.${key}`)}
+            </button>
+          ))}
+
+          {/* WhatsApp error toggle */}
           <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            className={`hidden md:inline-flex rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
-              statusFilter === key
-                ? key === 'unassigned'
-                  ? 'bg-red-600 text-white border-red-600'
-                  : 'bg-primary text-primary-foreground border-primary'
-                : key === 'unassigned'
-                  ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100'
-                  : 'border-border bg-background hover:bg-muted'
+            onClick={() => setNotifFilter(notifFilter === 'failed_only' ? 'all' : 'failed_only')}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
+              notifFilter === 'failed_only'
+                ? 'bg-amber-500 text-white border-amber-500'
+                : 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100'
             }`}
           >
-            {key === 'unassigned' ? 'Non assigné' : key === 'upcoming' ? 'Planifié' : t(`appointments.filters.${key}`)}
+            <AlertTriangle className="h-3 w-3" />
+            {t('appointments.filters.errorWA')}
           </button>
-        ))}
 
-        {/* WhatsApp error toggle */}
-        <button
-          onClick={() => setNotifFilter(notifFilter === 'failed_only' ? 'all' : 'failed_only')}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium border transition-colors ${
-            notifFilter === 'failed_only'
-              ? 'bg-amber-500 text-white border-amber-500'
-              : 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100'
-          }`}
-        >
-          <AlertTriangle className="h-3 w-3" />
-          {t('appointments.filters.errorWA')}
-        </button>
-
-        {/* Go-to date — agenda only */}
-        {appView === 'agenda' && (
-          <div className="ml-auto flex items-center gap-1.5">
-            <Popover open={gotoOpen} onOpenChange={setGotoOpen}>
-              <PopoverTrigger asChild>
-                <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap">
-                  {gotoDate
-                    ? format(parseISO(gotoDate), 'd MMM yyyy', { locale: fr })
-                    : 'Aller à une date'}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <CalendarPicker
-                  mode="single"
-                  selected={gotoDate ? parseISO(gotoDate) : undefined}
-                  locale={fr}
-                  onSelect={(day) => {
-                    if (day) setGotoDate(format(day, 'yyyy-MM-dd'))
-                    setGotoOpen(false)
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            {gotoDate && (
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setGotoDate('')}>✕</Button>
-            )}
-          </div>
-        )}
-
-        {/* Navigation — semaine/mois only */}
-        {(appView === 'semaine' || appView === 'mois') && (
-          <div className="ml-auto flex items-center gap-1">
-            <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
-              {t('appointments.todayBtn')}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-medium min-w-[180px] text-center capitalize">
-              {navLabel()}
-            </span>
-            <Button variant="ghost" size="sm" onClick={() => navigate(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div className="text-muted-foreground text-sm">{t('common.loading')}</div>
-      ) : appView === 'agenda' ? (
-        // ── Agenda (list) view ─────────────────────────────────────────────
-        <div className="space-y-4">
-          {/* Day-grouped content */}
-          {listLoading ? (
-            <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
-          ) : filteredListItems.length === 0 ? (
-            <div className="rounded-lg border text-center py-16 text-muted-foreground text-sm">
-              {listSearch.trim() ? t('common.noResults') : t('appointments.noAppointments')}
+          {/* Aller à une date — agenda uniquement */}
+          {appView === 'agenda' && (
+            <div className="ml-auto flex items-center gap-1.5">
+              <Popover open={gotoOpen} onOpenChange={setGotoOpen}>
+                <PopoverTrigger asChild>
+                  <button className="h-8 border border-input rounded-md px-2 text-xs text-muted-foreground bg-background whitespace-nowrap">
+                    {gotoDate
+                      ? format(parseISO(gotoDate), 'd MMM yyyy', { locale: fr })
+                      : 'Aller à une date'}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <CalendarPicker
+                    mode="single"
+                    selected={gotoDate ? parseISO(gotoDate) : undefined}
+                    locale={fr}
+                    onSelect={(day) => {
+                      if (day) setGotoDate(format(day, 'yyyy-MM-dd'))
+                      setGotoOpen(false)
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              {gotoDate && (
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setGotoDate('')}>✕</Button>
+              )}
             </div>
-          ) : (
+          )}
+
+          {/* Navigation — semaine/mois uniquement */}
+          {(appView === 'semaine' || appView === 'mois') && (
+            <div className="ml-auto flex items-center gap-1">
+              <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
+                {t('appointments.todayBtn')}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-medium min-w-[180px] text-center capitalize">
+                {navLabel()}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => navigate(1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Agenda ─────────────────────────────────────────────────────── */}
+        <TabsContent value="agenda" className="mt-0">
+          <div className="space-y-4 p-4 md:p-6">
+            {loading ? (
+              <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
+            ) : listLoading ? (
+              <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
+            ) : filteredListItems.length === 0 ? (
+              <div className="rounded-lg border text-center py-16 text-muted-foreground text-sm">
+                {listSearch.trim() ? t('common.noResults') : t('appointments.noAppointments')}
+              </div>
+            ) : (
             <div className="space-y-6">
               {groupByDay(filteredListItems).map(({ dateKey, label, items: dayItems }) => (
                 <div key={dateKey}>
@@ -1226,24 +1240,40 @@ export default function AppointmentsPage() {
               ))}
             </div>
           )}
-        </div>
-      ) : appView === 'mois' ? (
-        // ── Mois ───────────────────────────────────────────────────────────
-        <MonthGrid
-          anchor={anchor}
-          appointments={appointments}
-          onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
-        />
-      ) : (
-        // ── Semaine ────────────────────────────────────────────────────────
-        <div className="overflow-x-auto">
-          <TimeGrid
-            days={days}
-            appointments={appointments}
-            onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
-          />
-        </div>
-      )}
+          </div>
+        </TabsContent>
+
+        {/* ── Semaine ────────────────────────────────────────────────────── */}
+        <TabsContent value="semaine" className="mt-0">
+          <div className="overflow-x-auto p-4 md:p-6">
+            {loading ? (
+              <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
+            ) : (
+              <TimeGrid
+                days={days}
+                appointments={appointments}
+                onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
+              />
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Mois ───────────────────────────────────────────────────────── */}
+        <TabsContent value="mois" className="mt-0">
+          <div className="p-4 md:p-6">
+            {loading ? (
+              <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
+            ) : (
+              <MonthGrid
+                anchor={anchor}
+                appointments={appointments}
+                onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
+              />
+            )}
+          </div>
+        </TabsContent>
+
+      </Tabs>
 
       {/* Create RDV dialog */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) resetCreate(); setCreateOpen(o) }}>
