@@ -1964,10 +1964,14 @@ export default function AppointmentsPage() {
 
       {/* Create RDV dialog — with integrated slot browser */}
       <Dialog open={createOpen} onOpenChange={(o) => {
-        if (o && !businessHours) {
+        if (o && (!businessHours || !defaultDuration)) {
           setSlotHoursLoading(true)
-          fetch('/api/settings/hours').then(r => r.json()).then(j => {
-            if (j.data) setBusinessHours(j.data)
+          Promise.all([
+            !businessHours ? fetch('/api/settings/hours').then(r => r.json()) : Promise.resolve(null),
+            !defaultDuration ? fetch('/api/settings/appointment-notifications').then(r => r.json()) : Promise.resolve(null),
+          ]).then(([hoursJson, notifJson]) => {
+            if (hoursJson?.data) setBusinessHours(hoursJson.data)
+            if (notifJson?.data?.default_duration_minutes) setDefaultDuration(notifJson.data.default_duration_minutes)
             setSlotHoursLoading(false)
           }).catch(() => setSlotHoursLoading(false))
         }
