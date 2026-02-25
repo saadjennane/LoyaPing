@@ -172,9 +172,18 @@ export async function markOrderPickedUp(orderId: string): Promise<Order & { poin
     .single()
 
   if (error || !order) throw new Error('Order not found or not in ready state')
-  if (order.points_credited) throw new Error('Points already credited')
 
   const now = new Date().toISOString()
+
+  // Points already credited on a previous pickup — just flip the status, skip re-crediting
+  if (order.points_credited) {
+    await db
+      .from('orders')
+      .update({ status: 'completed', picked_up_at: now, completed_at: now })
+      .eq('id', orderId)
+    return { ...(order as Order), pointsCredited: 0 }
+  }
+
   await db
     .from('orders')
     .update({
