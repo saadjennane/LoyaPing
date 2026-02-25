@@ -15,14 +15,13 @@ export async function POST() {
     await syncGoogleCalendar(DEFAULT_BUSINESS_ID)
 
     // 2. Push: LoyaPing → Google
-    // Fetch all upcoming scheduled appointments that don't have a google_event_id yet
+    // Fetch ALL upcoming scheduled appointments (new + existing) to create or update Google events
     const { data: appts } = await db
       .from('appointments')
       .select('id')
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .eq('status', 'scheduled')
       .is('deleted_at', null)
-      .is('google_event_id', null)
       .gte('scheduled_at', new Date().toISOString())
 
     if (appts && appts.length > 0) {

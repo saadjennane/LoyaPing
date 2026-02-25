@@ -126,6 +126,15 @@ async function processGoogleEvent(
     )
     if (error) console.error('[calendar-sync] upsert appointment error:', error.message)
   } else {
+    // Before creating a calendar_import, check if this event is already linked to an appointment
+    // (happens when LoyaPing pushed the event to Google but the client has no email to match on pull)
+    const { data: existing } = await db
+      .from('appointments')
+      .select('id')
+      .eq('google_event_id', event.id)
+      .maybeSingle()
+    if (existing) return // already an appointment — skip import
+
     // Store as unmatched import for manual assignment
     const { error } = await db.from('calendar_imports').upsert(
       {

@@ -131,6 +131,14 @@ async function processMicrosoftEvent(
     )
     if (error) console.error('[ms-calendar] upsert appointment error:', error.message)
   } else {
+    // Before creating a calendar_import, check if this event is already linked to an appointment
+    const { data: existing } = await db
+      .from('appointments')
+      .select('id')
+      .eq('microsoft_event_id', event.id)
+      .maybeSingle()
+    if (existing) return // already an appointment — skip import
+
     const { error } = await db.from('calendar_imports').upsert(
       {
         business_id: businessId,
