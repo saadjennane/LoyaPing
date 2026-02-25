@@ -5,7 +5,11 @@ import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
+  MoreHorizontal, CheckCircle2, XCircle, User, Pencil,
 } from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -1058,183 +1062,196 @@ export default function AppointmentsPage() {
             <div className="space-y-6">
               {groupByDay(filteredListItems).map(({ dateKey, label, items: dayItems }) => (
                 <div key={dateKey}>
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 capitalize flex items-center gap-2">
-                    <span>{label === 'groupToday' ? t('appointments.groupToday') : label === 'groupTomorrow' ? t('appointments.groupTomorrow') : label}</span>
-                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-muted text-[10px] font-semibold text-muted-foreground normal-case">{dayItems.length}</span>
-                  </h3>
-                  {/* Mobile : cartes */}
-                  <div className="md:hidden space-y-2">
+                  {/* En-tête de jour */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-base font-bold capitalize">
+                      {label === 'groupToday'
+                        ? `Aujourd'hui – ${format(parseISO(dateKey), 'd MMMM yyyy', { locale: fr })}`
+                        : label === 'groupTomorrow'
+                          ? `Demain – ${format(parseISO(dateKey), 'd MMMM yyyy', { locale: fr })}`
+                          : label}
+                    </h3>
+                    <span className="inline-flex items-center text-[11px] font-semibold text-[#3B5BDB] bg-[#EDF2FF] rounded-full px-2.5 py-0.5 uppercase tracking-wide whitespace-nowrap">
+                      {dayItems.length} RDV
+                    </span>
+                  </div>
+
+                  {/* Lignes */}
+                  <div className="border rounded-xl overflow-hidden divide-y bg-card">
                     {dayItems.map((item) => {
+                      const duration = item.ended_at
+                        ? differenceInMinutes(parseISO(item.ended_at), parseISO(item.scheduled_at))
+                        : null
+                      const isUnassigned = item.client_id === null
                       const isSelected = selectedIds.has(item.id)
                       return (
                         <div
                           key={item.id}
-                          className={`bg-card border rounded-xl p-3 flex items-center gap-3 cursor-pointer active:bg-muted/30 transition-colors ${
-                            isSelected ? 'border-indigo-400 bg-indigo-50/30' : 'border-border'
-                          }`}
-                          onClick={() => {
-                            if (mobileSelectMode) { toggleSelect(item.id); return }
-                            const full = appointments.find((a) => a.id === item.id)
-                            if (full) { setSelected(full); setDetailOpen(true) }
-                          }}
+                          className={`flex items-center gap-3 px-4 py-3.5 transition-colors ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-muted/30'}`}
                         >
-                          {/* Checkbox en mode sélection */}
-                          {mobileSelectMode && (
-                            <div className="shrink-0">
-                              <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                                isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-muted-foreground/40'
-                              }`}>
+                          {/* Checkbox */}
+                          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {mobileSelectMode ? (
+                              <div
+                                className={`h-5 w-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors ${
+                                  isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-muted-foreground/40'
+                                }`}
+                                onClick={() => toggleSelect(item.id)}
+                              >
                                 {isSelected && <Check className="h-3 w-3 text-white" />}
                               </div>
-                            </div>
-                          )}
-                          {/* Heure */}
-                          <div className="tabular-nums text-sm font-bold shrink-0 text-muted-foreground text-right w-16">
-                            <div>{format(parseISO(item.scheduled_at), 'HH:mm')}</div>
-                            {item.ended_at && (
-                              <div className="text-[10px] font-normal">{format(parseISO(item.ended_at), 'HH:mm')}</div>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                className="hidden md:block h-4 w-4 rounded border-gray-300 cursor-pointer"
+                                checked={isSelected}
+                                onChange={() => toggleSelect(item.id)}
+                              />
                             )}
                           </div>
-                          {/* Infos client */}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm truncate flex items-center gap-1.5">
-                              {item.client_id === null && (
-                                <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                              )}
-                              {item.client_id === null
+
+                          {/* Heure + durée */}
+                          <div
+                            className="w-24 shrink-0 cursor-pointer"
+                            onClick={() => {
+                              if (mobileSelectMode) { toggleSelect(item.id); return }
+                              const full = appointments.find((a) => a.id === item.id)
+                              if (full) { setSelected(full); setDetailOpen(true) }
+                            }}
+                          >
+                            <div className="text-sm font-semibold tabular-nums">
+                              {format(parseISO(item.scheduled_at), 'HH:mm')}
+                              {item.ended_at && ` – ${format(parseISO(item.ended_at), 'HH:mm')}`}
+                            </div>
+                            {duration !== null && (
+                              <div className="text-[11px] text-muted-foreground uppercase font-medium tracking-wide">
+                                {duration} min
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Avatar */}
+                          <div
+                            className="w-9 h-9 rounded-full bg-muted items-center justify-center shrink-0 cursor-pointer hidden sm:flex"
+                            onClick={() => {
+                              if (mobileSelectMode) { toggleSelect(item.id); return }
+                              const full = appointments.find((a) => a.id === item.id)
+                              if (full) { setSelected(full); setDetailOpen(true) }
+                            }}
+                          >
+                            <User className="h-5 w-5 text-muted-foreground" />
+                          </div>
+
+                          {/* Nom + notes */}
+                          <div
+                            className="flex-1 min-w-0 cursor-pointer"
+                            onClick={() => {
+                              if (mobileSelectMode) { toggleSelect(item.id); return }
+                              const full = appointments.find((a) => a.id === item.id)
+                              if (full) { setSelected(full); setDetailOpen(true) }
+                            }}
+                          >
+                            <div className="font-semibold text-sm truncate flex items-center gap-1.5">
+                              {isUnassigned && <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+                              {isUnassigned
                                 ? <span className="text-red-700">{item.client_name === '—' ? 'Sans client' : item.client_name}</span>
                                 : item.client_name
                               }
                             </div>
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              {item.client_id === null ? (
-                                <span className="inline-flex items-center text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-1.5 py-0">Non assigné</span>
-                              ) : (
-                              <Badge variant={statusVariant(item.status)} className="text-[10px] px-1.5 py-0">
-                                {statusLabel(item.status, t)}
-                              </Badge>
-                              )}
-                              {item.reminderStatus.hasFailed && (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium">
-                                  <AlertTriangle className="h-3 w-3" />{t('appointments.failedWA')}
-                                </span>
-                              )}
-                              {(item.reminderStatus.remindersScheduled.r1 || item.reminderStatus.remindersScheduled.r2 || item.reminderStatus.remindersScheduled.r3) && (
-                                <span className="flex items-center gap-0.5">
-                                  {item.reminderStatus.remindersScheduled.r1 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R1</span>}
-                                  {item.reminderStatus.remindersScheduled.r2 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R2</span>}
-                                  {item.reminderStatus.remindersScheduled.r3 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R3</span>}
-                                </span>
-                              )}
-                            </div>
+                            {item.notes && (
+                              <div className="text-xs text-muted-foreground truncate">{item.notes}</div>
+                            )}
                           </div>
-                          {/* Actions — masquées en mode sélection */}
-                          {!mobileSelectMode && (
-                            <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              {item.status === 'scheduled' && (
-                                <>
-                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title={t('appointments.actions.absent')} onClick={() => markNoShow(item.id)}>
-                                    <UserX className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title={t('appointments.actions.present')} onClick={() => markShow(item.id)}>
-                                    <UserCheck className="h-3.5 w-3.5" />
-                                  </Button>
-                                </>
-                              )}
-                              <Button
-                                size="icon" variant="ghost"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() => {
+
+                          {/* Badge statut */}
+                          <div className="hidden sm:block shrink-0">
+                            {isUnassigned ? (
+                              <span className="inline-flex items-center text-xs font-medium text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-3 py-1">
+                                Non assigné
+                              </span>
+                            ) : item.reminderStatus.hasFailed ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+                                <AlertTriangle className="h-3 w-3" />Erreur WA
+                              </span>
+                            ) : (
+                              <span className={`inline-flex items-center text-xs font-medium rounded-full px-3 py-1 border ${
+                                item.status === 'show'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : item.status === 'no_show'
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-green-50 text-green-700 border-green-200'
+                              }`}>
+                                {statusLabel(item.status, t)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              title={t('appointments.actions.present')}
+                              onClick={() => markShow(item.id)}
+                              className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                            >
+                              <CheckCircle2 className={`h-5 w-5 transition-colors ${item.status === 'show' ? 'text-green-500' : 'text-muted-foreground/35 hover:text-green-500'}`} />
+                            </button>
+                            <button
+                              title={t('appointments.actions.absent')}
+                              onClick={() => markNoShow(item.id)}
+                              className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                            >
+                              <XCircle className={`h-5 w-5 transition-colors ${item.status === 'no_show' ? 'text-red-500' : 'text-muted-foreground/35 hover:text-red-500'}`} />
+                            </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {
                                   const full = appointments.find((a) => a.id === item.id)
-                                  if (full) setDeleteAppt(full)
-                                }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          )}
+                                  if (full) {
+                                    const d = parseISO(full.scheduled_at)
+                                    setRescheduleDate(format(d, 'yyyy-MM-dd'))
+                                    setRescheduleHour(format(d, 'HH'))
+                                    setRescheduleMinute(format(d, 'mm'))
+                                    if (full.ended_at) {
+                                      const e = parseISO(full.ended_at)
+                                      setRescheduleEndHour(format(e, 'HH'))
+                                      setRescheduleEndMinute(format(e, 'mm'))
+                                    } else {
+                                      setRescheduleEndHour('')
+                                      setRescheduleEndMinute('00')
+                                    }
+                                    setSelected(full)
+                                    setDetailApptMode('reschedule')
+                                    setDetailOpen(true)
+                                  }
+                                }}>
+                                  <CalendarClock className="h-4 w-4 mr-2" />Replanifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  const full = appointments.find((a) => a.id === item.id)
+                                  if (full) { setSelected(full); setDetailApptMode('detail'); setDetailOpen(true) }
+                                }}>
+                                  <Pencil className="h-4 w-4 mr-2" />Modifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => {
+                                    const full = appointments.find((a) => a.id === item.id)
+                                    if (full) setDeleteAppt(full)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />Supprimer
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                       )
                     })}
-                  </div>
-
-                  {/* Desktop : lignes */}
-                  <div className="hidden md:block border rounded-lg overflow-hidden divide-y">
-                    {dayItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 cursor-pointer transition-colors"
-                        onClick={() => {
-                          const full = appointments.find((a) => a.id === item.id)
-                          if (full) { setSelected(full); setDetailOpen(true) }
-                        }}
-                      >
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 cursor-pointer"
-                            checked={selectedIds.has(item.id)}
-                            onChange={() => toggleSelect(item.id)}
-                          />
-                        </div>
-                        <span className="tabular-nums text-sm font-semibold shrink-0 text-muted-foreground w-24">
-                          {format(parseISO(item.scheduled_at), 'HH:mm')}
-                          {item.ended_at && (
-                            <span className="font-normal text-xs"> → {format(parseISO(item.ended_at), 'HH:mm')}</span>
-                          )}
-                        </span>
-                        <span className="flex-1 text-sm font-medium truncate flex items-center gap-1.5">
-                          {item.client_id === null && (
-                            <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                          )}
-                          {item.client_id === null
-                            ? <span className="text-red-700">{item.client_name === '—' ? 'Sans client' : item.client_name}</span>
-                            : item.client_name
-                          }
-                        </span>
-                        {item.client_id === null ? (
-                          <span className="inline-flex items-center text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 shrink-0">Non assigné</span>
-                        ) : (
-                          <Badge variant={statusVariant(item.status)}>
-                            {statusLabel(item.status, t)}
-                          </Badge>
-                        )}
-                        {item.reminderStatus.hasFailed && (
-                          <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium shrink-0">
-                            <AlertTriangle className="h-3.5 w-3.5" />{t('appointments.failedWA')}
-                          </span>
-                        )}
-                        {(item.reminderStatus.remindersScheduled.r1 || item.reminderStatus.remindersScheduled.r2 || item.reminderStatus.remindersScheduled.r3) && (
-                          <span className="flex items-center gap-0.5 shrink-0">
-                            {item.reminderStatus.remindersScheduled.r1 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R1</span>}
-                            {item.reminderStatus.remindersScheduled.r2 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R2</span>}
-                            {item.reminderStatus.remindersScheduled.r3 && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1">R3</span>}
-                          </span>
-                        )}
-                        <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {item.status === 'scheduled' && (
-                            <>
-                              <Button size="sm" variant="ghost" title={t('appointments.actions.absent')} onClick={() => markNoShow(item.id)}>
-                                <UserX className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button size="sm" variant="ghost" title={t('appointments.actions.present')} onClick={() => markShow(item.id)}>
-                                <UserCheck className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            size="icon" variant="ghost"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => {
-                              const full = appointments.find((a) => a.id === item.id)
-                              if (full) setDeleteAppt(full)
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               ))}

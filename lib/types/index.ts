@@ -232,6 +232,7 @@ export type AppointmentListItem = {
   scheduled_at:   string         // ISO timestamp
   ended_at:       string | null
   status:         'scheduled' | 'show' | 'no_show'
+  notes:          string | null
   reminderStatus: ReminderStatus
 }
 

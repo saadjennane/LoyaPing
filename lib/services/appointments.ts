@@ -331,7 +331,7 @@ export async function getAppointmentList(params: {
 
   let query = db
     .from('appointments')
-    .select('id, client_id, scheduled_at, ended_at, status, client:clients(civility, first_name, last_name, phone_number)')
+    .select('id, client_id, scheduled_at, ended_at, status, notes, client:clients(civility, first_name, last_name, phone_number)')
     .eq('business_id', params.businessId)
     .is('deleted_at', null)
     .gte('scheduled_at', fromDt.toISOString())
@@ -355,6 +355,7 @@ export async function getAppointmentList(params: {
     scheduled_at: string
     ended_at: string | null
     status: 'scheduled' | 'show' | 'no_show'
+    notes: string | null
     client: { civility: string | null; first_name: string | null; last_name: string | null; phone_number: string } | null
   }
 
@@ -381,6 +382,7 @@ export async function getAppointmentList(params: {
       scheduled_at:   r.scheduled_at,
       ended_at:       r.ended_at ?? null,
       status:         r.status,
+      notes:          r.notes ?? null,
       reminderStatus: reminderMap.get(r.id) ?? emptyReminderStatus(),
     }
   })
