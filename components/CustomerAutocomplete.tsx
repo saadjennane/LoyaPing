@@ -120,9 +120,8 @@ export default function CustomerAutocomplete({
   const isLoading    = status === 'loading'
   const isError      = status === 'error'
   const isEmpty      = query.trim() === ''
-  const showDropdown = open
-    && (status === 'ready' || isLoading || (isError && !!onCreateNew))
-    && (!isEmpty || !!onCreateNew || isLoading)
+  const hasDropdownContent = isLoading || results.length > 0 || (!isEmpty && !!onCreateNew)
+  const showDropdown = open && hasDropdownContent
 
   useEffect(() => {
     if (showDropdown && wrapperRef.current) {
