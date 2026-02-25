@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, UserPlus, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
@@ -27,6 +28,7 @@ export default function CustomerAutocomplete({
   const [results, setResults]   = useState<CustomerIndexItem[]>([])
   const [open, setOpen]         = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
+  const [portalStyle, setPortalStyle] = useState<{ top: number; left: number; width: number } | null>(null)
 
   const wrapperRef  = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -113,15 +115,23 @@ export default function CustomerAutocomplete({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Portal position ───────────────────────────────────────────────────────
 
   const isLoading    = status === 'loading'
   const isError      = status === 'error'
   const isEmpty      = query.trim() === ''
-  // Show dropdown when there's something to display: results, a Créer button, or a loading state
   const showDropdown = open
     && (status === 'ready' || isLoading || (isError && !!onCreateNew))
     && (!isEmpty || !!onCreateNew || isLoading)
+
+  useEffect(() => {
+    if (showDropdown && wrapperRef.current) {
+      const rect = wrapperRef.current.getBoundingClientRect()
+      setPortalStyle({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    }
+  }, [showDropdown])
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -144,9 +154,18 @@ export default function CustomerAutocomplete({
         />
       </div>
 
-      {/* Dropdown */}
-      {showDropdown && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+      {/* Dropdown — rendered in a portal to escape overflow:hidden parents */}
+      {showDropdown && portalStyle && createPortal(
+        <div
+          className="bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
+          style={{
+            position: 'fixed',
+            zIndex: 9999,
+            top: portalStyle.top,
+            left: portalStyle.left,
+            width: portalStyle.width,
+          }}
+        >
           {/* Loading skeleton */}
           {isLoading && (
             <div className="px-3 py-3 text-sm text-gray-400 flex items-center gap-2">
@@ -190,7 +209,8 @@ export default function CustomerAutocomplete({
               </span>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

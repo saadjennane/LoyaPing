@@ -1797,9 +1797,9 @@ export default function AppointmentsPage() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-1 min-h-0">
+          <div className="flex flex-1 min-h-0 overflow-hidden">
             {/* ── Colonne gauche : Créneaux disponibles (desktop only) ─── */}
-            <div className="hidden md:flex flex-col w-60 shrink-0 border-r overflow-y-auto bg-muted/20">
+            <div className="hidden md:flex flex-col w-60 shrink-0 border-r bg-muted/20">
               <div className="px-3 pt-3 pb-2 border-b border-border/60 shrink-0">
                 <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                   <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
@@ -1813,7 +1813,7 @@ export default function AppointmentsPage() {
               )}
 
               {/* Missing config */}
-              {!slotHoursLoading && !defaultDuration && (
+              {!slotHoursLoading && (!businessHours || !defaultDuration) && (
                 <div className="px-3 py-6 text-center space-y-2">
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Configurez la <strong>durée par défaut</strong> et les{' '}
@@ -1880,7 +1880,7 @@ export default function AppointmentsPage() {
             </div>
 
             {/* ── Colonne droite : formulaire ─────────────────────────── */}
-            <div className="flex-1 px-6 py-5 overflow-visible">
+            <div className="flex-1 px-6 py-5 overflow-y-auto">
 
               {/* Step 1 — select client */}
               {createStep === 'search' && (
