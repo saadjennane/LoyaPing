@@ -352,14 +352,13 @@ export async function pushAppointmentToMicrosoft(
   }
 
   // Build title: "[notes] – Nom" or "RDV – Nom" or fallback
-  const subject = clientName
-    ? (appt.notes ? `${appt.notes} – ${clientName}` : `RDV – ${clientName}`)
-    : (appt.notes ?? 'Rendez-vous')
+  // Build title: "RDV – Nom" or fallback
+  const subject = clientName ? `RDV – ${clientName}` : 'Rendez-vous'
 
-  // Build body: phone + notes
+  // Build body: notes + phone
   const bodyLines: string[] = []
+  if (appt.notes)  bodyLines.push(appt.notes)
   if (clientPhone) bodyLines.push(`Tél : ${clientPhone}`)
-  if (appt.notes)  bodyLines.push(`Notes : ${appt.notes}`)
   const bodyContent = bodyLines.join('\n')
 
   // Read selected calendar

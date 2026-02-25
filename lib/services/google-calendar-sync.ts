@@ -252,14 +252,13 @@ export async function pushAppointmentToGoogle(
   }
 
   // Build title: "[notes] – Nom" or "RDV – Nom" or fallback
-  const summary = clientName
-    ? (appt.notes ? `${appt.notes} – ${clientName}` : `RDV – ${clientName}`)
-    : (appt.notes ?? 'Rendez-vous')
+  // Build title: "RDV – Nom" or fallback
+  const summary = clientName ? `RDV – ${clientName}` : 'Rendez-vous'
 
-  // Build description: phone + notes
+  // Build description: notes + phone
   const descLines: string[] = []
+  if (appt.notes)  descLines.push(appt.notes)
   if (clientPhone) descLines.push(`Tél : ${clientPhone}`)
-  if (appt.notes)  descLines.push(`Notes : ${appt.notes}`)
   const description = descLines.length > 0 ? descLines.join('\n') : undefined
 
   // Read selected calendar
