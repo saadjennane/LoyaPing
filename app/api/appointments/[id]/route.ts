@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { cancelPendingReminders, scheduleRemindersForAppointment } from '@/lib/services/appointment-reminders'
 import { pushAppointmentToGoogle, deleteGoogleEvent } from '@/lib/services/google-calendar-sync'
 import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services/microsoft-calendar-sync'
+import { reverseSourceCredit } from '@/lib/services/loyalty'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -44,10 +45,30 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.force && ['show', 'no_show', 'scheduled'].includes(status)) {
       const db = createServerClient()
       const now = new Date().toISOString()
-      const updates: Record<string, string | null> = { status }
+      const updates: Record<string, string | boolean | null> = { status }
       if (status === 'show')      { updates.show_at = now; updates.no_show_at = null }
       if (status === 'no_show')   { updates.no_show_at = now; updates.show_at = null }
       if (status === 'scheduled') { updates.show_at = null; updates.no_show_at = null }
+
+      // When reverting to scheduled: reverse any points credited for this appointment
+      if (status === 'scheduled') {
+        const { data: appt } = await db
+          .from('appointments')
+          .select('points_credited, client_id, business_id')
+          .eq('id', id)
+          .maybeSingle()
+
+        if (appt?.points_credited && appt.client_id) {
+          await reverseSourceCredit({
+            clientId:   appt.client_id,
+            businessId: appt.business_id ?? DEFAULT_BUSINESS_ID,
+            sourceType: 'appointment',
+            sourceId:   id,
+          }).catch((e) => console.error('[appointments] Failed to reverse points:', e))
+          updates.points_credited = false
+        }
+      }
+
       const { error } = await db.from('appointments').update(updates).eq('id', id)
       if (error) throw error
       return NextResponse.json({ data: { id, status, forced: true, whatsappQueued: false } })

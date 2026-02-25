@@ -135,6 +135,70 @@ export async function creditPoints({
 }
 
 // =========================================
+// REVERSE A SPECIFIC SOURCE CREDIT
+// Used when an appointment/order is un-marked (show → scheduled)
+// =========================================
+export async function reverseSourceCredit({
+  clientId,
+  businessId,
+  sourceType,
+  sourceId,
+}: {
+  clientId: string
+  businessId: string
+  sourceType: string
+  sourceId: string
+}): Promise<{ reversed: boolean; delta: number }> {
+  const db = createServerClient()
+
+  // Find the original credit log entry for this specific source
+  const { data: log } = await db
+    .from('points_log')
+    .select('*')
+    .eq('client_id', clientId)
+    .eq('business_id', businessId)
+    .eq('source_type', sourceType)
+    .eq('source_id', sourceId)
+    .gt('points_delta', 0)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!log || !(log as PointsLog).points_delta) return { reversed: false, delta: 0 }
+
+  const pointsLog = log as PointsLog
+  const delta = pointsLog.points_delta
+
+  const { data: client } = await db
+    .from('clients')
+    .select('loyalty_points, current_cycle_points')
+    .eq('id', clientId)
+    .single()
+
+  if (!client) throw new Error('Client not found')
+
+  const newLoyaltyPoints = Math.max(0, (client.loyalty_points as number) - delta)
+  const newCyclePoints   = Math.max(0, (client.current_cycle_points as number) - delta)
+
+  await db.from('clients').update({
+    loyalty_points:       newLoyaltyPoints,
+    current_cycle_points: newCyclePoints,
+  }).eq('id', clientId)
+
+  await db.from('points_log').insert({
+    client_id:           clientId,
+    business_id:         businessId,
+    source_type:         'undo',
+    source_id:           pointsLog.id,
+    points_delta:        -delta,
+    cycle_points_before: client.current_cycle_points,
+    cycle_points_after:  newCyclePoints,
+  })
+
+  return { reversed: true, delta }
+}
+
+// =========================================
 // UNDO LAST POINTS CREDIT
 // =========================================
 export async function undoLastCredit(clientId: string, businessId: string) {
