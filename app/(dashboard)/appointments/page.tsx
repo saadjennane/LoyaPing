@@ -891,6 +891,22 @@ export default function AppointmentsPage() {
     }).catch(() => {})
   }, [fetchAppointments])
 
+  // Fetch business hours when create dialog opens (onOpenChange not triggered on programmatic open)
+  useEffect(() => {
+    if (!createOpen) return
+    if (businessHours && defaultDuration) return
+    setSlotHoursLoading(true)
+    Promise.all([
+      !businessHours   ? fetch('/api/settings/hours').then(r => r.json())                      : Promise.resolve(null),
+      !defaultDuration ? fetch('/api/settings/appointment-notifications').then(r => r.json()) : Promise.resolve(null),
+    ]).then(([hoursJson, notifJson]) => {
+      if (hoursJson?.data) setBusinessHours(hoursJson.data)
+      if (notifJson?.data?.default_duration_minutes) setDefaultDuration(notifJson.data.default_duration_minutes)
+      setSlotHoursLoading(false)
+    }).catch(() => setSlotHoursLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createOpen])
+
   // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -1965,17 +1981,6 @@ export default function AppointmentsPage() {
 
       {/* Create RDV dialog — with integrated slot browser */}
       <Dialog open={createOpen} onOpenChange={(o) => {
-        if (o && (!businessHours || !defaultDuration)) {
-          setSlotHoursLoading(true)
-          Promise.all([
-            !businessHours ? fetch('/api/settings/hours').then(r => r.json()) : Promise.resolve(null),
-            !defaultDuration ? fetch('/api/settings/appointment-notifications').then(r => r.json()) : Promise.resolve(null),
-          ]).then(([hoursJson, notifJson]) => {
-            if (hoursJson?.data) setBusinessHours(hoursJson.data)
-            if (notifJson?.data?.default_duration_minutes) setDefaultDuration(notifJson.data.default_duration_minutes)
-            setSlotHoursLoading(false)
-          }).catch(() => setSlotHoursLoading(false))
-        }
         if (!o) resetCreate()
         setCreateOpen(o)
       }}>
