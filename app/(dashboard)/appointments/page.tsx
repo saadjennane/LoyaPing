@@ -565,10 +565,10 @@ export default function AppointmentsPage() {
   const [syncing, setSyncing] = useState(false)
   const [defaultDuration, setDefaultDuration] = useState<number | null>(null)
 
-  // ── Slot browser ──────────────────────────────────────────────────────────
-  const [slotOpen,         setSlotOpen]         = useState(false)
+  // ── Slot browser (intégré dans le modal Nouveau RDV) ─────────────────────
   const [businessHours,    setBusinessHours]    = useState<BusinessHourRow[] | null>(null)
   const [slotHoursLoading, setSlotHoursLoading] = useState(false)
+  const [selectedSlotKey,  setSelectedSlotKey]  = useState<string | null>(null)
 
   // ── Assign client to unassigned appointment ───────────────────────────────
   const [assignClientItem, setAssignClientItem] = useState<CustomerIndexItem | null>(null)
@@ -593,6 +593,7 @@ export default function AppointmentsPage() {
     setApptEndMinute('00')
     setApptNotes('')
     setCreateSubmitting(false)
+    setSelectedSlotKey(null)
   }
 
   const handleSelectCreateItem = (_id: string, item: CustomerIndexItem) => {
@@ -1159,26 +1160,15 @@ export default function AppointmentsPage() {
     setCreateOpen(true)
   }
 
-  const openSlotBrowser = async () => {
-    setSlotOpen(true)
-    if (businessHours) return
-    setSlotHoursLoading(true)
-    const res  = await fetch('/api/settings/hours')
-    const json = await res.json()
-    if (json.data) setBusinessHours(json.data)
-    setSlotHoursLoading(false)
-  }
-
-  const selectSlot = (date: Date, slotMins: number) => {
+  const handleSelectSlot = (date: Date, slotMins: number) => {
     const endMins = slotMins + (defaultDuration ?? 60)
-    resetCreate()
     setApptDate(format(date, 'yyyy-MM-dd'))
     setApptHour(String(Math.floor(slotMins / 60)).padStart(2, '0'))
     setApptMinute(String(slotMins % 60).padStart(2, '0'))
     setApptEndHour(String(Math.floor(endMins / 60)).padStart(2, '0'))
     setApptEndMinute(String(endMins % 60).padStart(2, '0'))
-    setSlotOpen(false)
-    setCreateOpen(true)
+    setSelectedSlotKey(`${date.toISOString()}_${slotMins}`)
+    // Don't change step — user stays on current step (search or details)
   }
 
   // ── Slot days (useMemo) ──────────────────────────────────────────────────
@@ -1227,10 +1217,6 @@ export default function AppointmentsPage() {
           <p className="text-sm text-muted-foreground">{upcomingCount} à venir</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={openSlotBrowser}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            Créneaux
-          </Button>
           <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => { resetCreate(); setCreateOpen(true) }}>
             <Plus className="h-4 w-4 mr-2" />{t('appointments.newBtn')}
           </Button>
@@ -1792,224 +1778,248 @@ export default function AppointmentsPage() {
       </Tabs>
       </div>
 
-      {/* Slot browser dialog */}
-      <Dialog open={slotOpen} onOpenChange={setSlotOpen}>
-        <DialogContent className="sm:max-w-sm max-h-[85vh] flex flex-col p-0" aria-describedby={undefined}>
-          <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-[#3B5BDB]" />
-              Créneaux disponibles
-            </DialogTitle>
-          </DialogHeader>
-
-          {/* Paramètres manquants */}
-          {!slotHoursLoading && !defaultDuration && (
-            <div className="px-4 py-8 text-center space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Configurez la <strong>durée par défaut</strong> et les{' '}
-                <strong>horaires d&apos;ouverture</strong> pour utiliser cet assistant.
-              </p>
-              <Button size="sm" asChild onClick={() => setSlotOpen(false)}>
-                <a href="/settings/appointments">Configurer maintenant</a>
-              </Button>
-            </div>
-          )}
-
-          {/* Chargement */}
-          {slotHoursLoading && (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">Chargement...</div>
-          )}
-
-          {/* Liste des 60 jours */}
-          {!slotHoursLoading && businessHours && defaultDuration && (
-            <div className="overflow-y-auto flex-1 p-4 space-y-3">
-              {slotDays.map(({ date, result }) => {
-                const dayLabel = isSameDay(date, new Date())
-                  ? `Aujourd'hui · ${format(date, 'd MMMM', { locale: fr })}`
-                  : isSameDay(date, addDays(new Date(), 1))
-                    ? `Demain · ${format(date, 'd MMMM', { locale: fr })}`
-                    : format(date, 'EEEE d MMMM', { locale: fr })
-
-                const colorCls =
-                  result.kind === 'complet' ? 'border-red-200 bg-red-50'
-                  : result.kind === 'libre'   ? 'border-green-200 bg-green-50'
-                  : 'border-border bg-card'
-
-                const labelCls =
-                  result.kind === 'complet' ? 'text-red-700'
-                  : result.kind === 'libre'   ? 'text-green-700'
-                  : 'text-foreground'
-
-                return (
-                  <div key={date.toISOString()} className={`rounded-lg border p-3 ${colorCls}`}>
-                    <p className={`text-xs font-semibold capitalize mb-2 ${labelCls}`}>{dayLabel}</p>
-
-                    {result.kind === 'complet' && (
-                      <p className="text-xs text-red-600 font-medium">Complet</p>
-                    )}
-
-                    {(result.kind === 'libre' || result.kind === 'partiel') && (
-                      <>
-                        {result.kind === 'libre' && (
-                          <p className="text-[10px] text-green-700 mb-1.5 font-medium uppercase tracking-wide">
-                            Entièrement libre
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-1.5">
-                          {result.slots.map((m) => (
-                            <button
-                              key={m}
-                              onClick={() => selectSlot(date, m)}
-                              className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors
-                                hover:bg-[#3B5BDB] hover:text-white hover:border-[#3B5BDB]
-                                ${result.kind === 'libre'
-                                  ? 'border-green-300 bg-green-50 text-green-700'
-                                  : 'border-border bg-background text-foreground'
-                                }`}
-                            >
-                              {minsToLabel(m)}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-              {slotDays.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">Aucun jour ouvert trouvé.</p>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Create RDV dialog */}
-      <Dialog open={createOpen} onOpenChange={(o) => { if (!o) resetCreate(); setCreateOpen(o) }}>
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
+      {/* Create RDV dialog — with integrated slot browser */}
+      <Dialog open={createOpen} onOpenChange={(o) => {
+        if (o && !businessHours) {
+          setSlotHoursLoading(true)
+          fetch('/api/settings/hours').then(r => r.json()).then(j => {
+            if (j.data) setBusinessHours(j.data)
+            setSlotHoursLoading(false)
+          }).catch(() => setSlotHoursLoading(false))
+        }
+        if (!o) resetCreate()
+        setCreateOpen(o)
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
+          <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
             <DialogTitle>
               {createStep === 'new_client' ? t('appointments.form.newClientTitle') : t('appointments.form.newApptTitle')}
             </DialogTitle>
           </DialogHeader>
 
-          {/* Step 1 — select client */}
-          {createStep === 'search' && (
-            <div className="mt-2">
-              <CustomerAutocomplete
-                autoFocus
-                onSelect={handleSelectCreateItem}
-                onCreateNew={handleGoToNewClient}
-                placeholder={t('appointments.form.searchPlaceholder')}
-              />
-            </div>
-          )}
-
-          {/* Step 2 — create new client */}
-          {createStep === 'new_client' && (
-            <div className="space-y-4 mt-2">
-              <Button type="button" variant="ghost" size="sm" className="-ml-2 text-gray-500"
-                onClick={() => setCreateStep('search')}>
-                <ArrowLeft className="h-3.5 w-3.5 mr-1" />{t('common.back')}
-              </Button>
-              <form onSubmit={handleCreateNewClient} className="space-y-4">
-                <div className="flex gap-2">
-                  <Select value={newClientForm.civility}
-                    onValueChange={(v) => setNewClientForm({ ...newClientForm, civility: v === '_' ? '' : v })}>
-                    <SelectTrigger className="w-20 shrink-0"><SelectValue placeholder="—" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_">—</SelectItem>
-                      <SelectItem value="Mr">Mr</SelectItem>
-                      <SelectItem value="Mme">Mme</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input autoFocus placeholder={t('common.firstName')} value={newClientForm.first_name} required
-                    onChange={(e) => setNewClientForm({ ...newClientForm, first_name: e.target.value })} />
-                  <Input placeholder={t('common.lastName')} value={newClientForm.last_name} required
-                    onChange={(e) => setNewClientForm({ ...newClientForm, last_name: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label>{t('common.phone')}</Label>
-                  <PhoneInput
-                    required
-                    value={newClientForm.phone_number}
-                    onChange={v => setNewClientForm({ ...newClientForm, phone_number: v })}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={createSubmitting}>
-                  {createSubmitting ? t('common.creating_ellipsis') : t('common.continue')}
-                </Button>
-              </form>
-            </div>
-          )}
-
-          {/* Step 3 — appointment details */}
-          {createStep === 'details' && createItem && (
-            <div className="space-y-4 mt-2">
-              <div className="px-3 py-2.5 bg-muted/30 rounded-lg">
-                <div className="text-sm font-medium">{createItem.display_name}</div>
-                {createItem.display_name !== createItem.phone && (
-                  <div className="text-xs text-gray-500">{createItem.phone}</div>
-                )}
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            {/* ── Colonne gauche : Créneaux disponibles (desktop only) ─── */}
+            <div className="hidden md:flex flex-col w-60 shrink-0 border-r overflow-y-auto bg-muted/20">
+              <div className="px-3 pt-3 pb-2 border-b border-border/60 shrink-0">
+                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
+                  Créneaux disponibles
+                </p>
               </div>
-              <form onSubmit={handleCreateAppt} className="space-y-4">
-                <div className="space-y-1">
-                  <Label>{t('appointments.form.dateLabel')}</Label>
-                  <Input type="date" required value={apptDate}
-                    onChange={(e) => setApptDate(e.target.value)} />
+
+              {/* Loading */}
+              {slotHoursLoading && (
+                <div className="px-3 py-6 text-center text-xs text-muted-foreground">Chargement...</div>
+              )}
+
+              {/* Missing config */}
+              {!slotHoursLoading && !defaultDuration && (
+                <div className="px-3 py-6 text-center space-y-2">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Configurez la <strong>durée par défaut</strong> et les{' '}
+                    <strong>horaires d&apos;ouverture</strong> pour voir les créneaux.
+                  </p>
+                  <a href="/settings/appointments" className="text-xs text-[#3B5BDB] underline" onClick={() => setCreateOpen(false)}>
+                    Configurer
+                  </a>
                 </div>
-                <div className="flex items-end gap-2">
-                  {/* Start time */}
-                  <div className="space-y-1">
-                    <Label>Début</Label>
-                    <div className="flex items-center gap-1">
-                      <Select value={apptHour} onValueChange={handleStartHourChange}>
-                        <SelectTrigger className="w-20"><SelectValue placeholder="hh" /></SelectTrigger>
-                        <SelectContent>
-                          {HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-muted-foreground font-medium">:</span>
-                      <Select value={apptMinute} onValueChange={handleStartMinuteChange}>
-                        <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <span className="text-muted-foreground pb-2 text-sm">→</span>
-                  {/* End time */}
-                  <div className="space-y-1">
-                    <Label>Fin</Label>
-                    <div className="flex items-center gap-1">
-                      <Select value={apptEndHour} onValueChange={setApptEndHour}>
-                        <SelectTrigger className="w-20"><SelectValue placeholder="hh" /></SelectTrigger>
-                        <SelectContent>
-                          {HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-muted-foreground font-medium">:</span>
-                      <Select value={apptEndMinute} onValueChange={setApptEndMinute}>
-                        <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+              )}
+
+              {/* Slot list */}
+              {!slotHoursLoading && businessHours && defaultDuration && (
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {slotDays.map(({ date, result }) => {
+                    const dayLabel = isSameDay(date, new Date())
+                      ? `Aujourd'hui · ${format(date, 'd MMM', { locale: fr })}`
+                      : isSameDay(date, addDays(new Date(), 1))
+                        ? `Demain · ${format(date, 'd MMM', { locale: fr })}`
+                        : format(date, 'EEE d MMM', { locale: fr })
+
+                    const headerCls =
+                      result.kind === 'complet' ? 'text-red-600'
+                      : result.kind === 'libre'   ? 'text-green-700'
+                      : 'text-foreground'
+
+                    return (
+                      <div key={date.toISOString()} className="rounded-md">
+                        <p className={`text-[10px] font-semibold capitalize mb-1 px-1 ${headerCls}`}>{dayLabel}</p>
+                        {result.kind === 'complet' && (
+                          <p className="text-[10px] text-red-500 px-1">Complet</p>
+                        )}
+                        {(result.kind === 'libre' || result.kind === 'partiel') && (
+                          <div className="flex flex-wrap gap-1">
+                            {result.slots.map((m) => {
+                              const key = `${date.toISOString()}_${m}`
+                              const isSelected = selectedSlotKey === key
+                              return (
+                                <button
+                                  key={m}
+                                  onClick={() => handleSelectSlot(date, m)}
+                                  className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors
+                                    ${isSelected
+                                      ? 'bg-[#3B5BDB] text-white border-[#3B5BDB]'
+                                      : result.kind === 'libre'
+                                        ? 'border-green-300 bg-green-50 text-green-700 hover:bg-[#3B5BDB] hover:text-white hover:border-[#3B5BDB]'
+                                        : 'border-border bg-background text-foreground hover:bg-[#3B5BDB] hover:text-white hover:border-[#3B5BDB]'
+                                    }`}
+                                >
+                                  {minsToLabel(m)}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {slotDays.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-4">Aucun créneau trouvé.</p>
+                  )}
                 </div>
-                <div className="space-y-1">
-                  <Label>{t('appointments.form.notesLabel')} <span className="text-xs text-gray-400 font-normal">{t('appointments.form.notesHint')}</span></Label>
-                  <Input placeholder="Coupe + couleur…" value={apptNotes}
-                    onChange={(e) => setApptNotes(e.target.value)} />
-                </div>
-                <Button type="submit" className="w-full" disabled={createSubmitting}>
-                  {createSubmitting ? t('appointments.form.creating') : t('appointments.form.createBtn')}
-                </Button>
-              </form>
+              )}
             </div>
-          )}
+
+            {/* ── Colonne droite : formulaire ─────────────────────────── */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+
+              {/* Step 1 — select client */}
+              {createStep === 'search' && (
+                <div className="mt-2">
+                  <CustomerAutocomplete
+                    autoFocus
+                    onSelect={handleSelectCreateItem}
+                    onCreateNew={handleGoToNewClient}
+                    placeholder={t('appointments.form.searchPlaceholder')}
+                  />
+                  {/* Show selected slot as hint */}
+                  {selectedSlotKey && apptDate && apptHour && (
+                    <div className="mt-3 flex items-center gap-1.5 text-xs text-[#3B5BDB] bg-[#EDF2FF] rounded-md px-2.5 py-1.5">
+                      <Sparkles className="h-3 w-3 shrink-0" />
+                      <span>
+                        Créneau : {format(parseISO(apptDate), 'EEE d MMM', { locale: fr })} · {apptHour}h{apptMinute} → {apptEndHour}h{apptEndMinute}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 2 — create new client */}
+              {createStep === 'new_client' && (
+                <div className="space-y-4 mt-2">
+                  <Button type="button" variant="ghost" size="sm" className="-ml-2 text-gray-500"
+                    onClick={() => setCreateStep('search')}>
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" />{t('common.back')}
+                  </Button>
+                  <form onSubmit={handleCreateNewClient} className="space-y-4">
+                    <div className="flex gap-2">
+                      <Select value={newClientForm.civility}
+                        onValueChange={(v) => setNewClientForm({ ...newClientForm, civility: v === '_' ? '' : v })}>
+                        <SelectTrigger className="w-20 shrink-0"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_">—</SelectItem>
+                          <SelectItem value="Mr">Mr</SelectItem>
+                          <SelectItem value="Mme">Mme</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input autoFocus placeholder={t('common.firstName')} value={newClientForm.first_name} required
+                        onChange={(e) => setNewClientForm({ ...newClientForm, first_name: e.target.value })} />
+                      <Input placeholder={t('common.lastName')} value={newClientForm.last_name} required
+                        onChange={(e) => setNewClientForm({ ...newClientForm, last_name: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>{t('common.phone')}</Label>
+                      <PhoneInput
+                        required
+                        value={newClientForm.phone_number}
+                        onChange={v => setNewClientForm({ ...newClientForm, phone_number: v })}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={createSubmitting}>
+                      {createSubmitting ? t('common.creating_ellipsis') : t('common.continue')}
+                    </Button>
+                  </form>
+                </div>
+              )}
+
+              {/* Step 3 — appointment details */}
+              {createStep === 'details' && createItem && (
+                <div className="space-y-4 mt-2">
+                  <div className="px-3 py-2.5 bg-muted/30 rounded-lg">
+                    <div className="text-sm font-medium">{createItem.display_name}</div>
+                    {createItem.display_name !== createItem.phone && (
+                      <div className="text-xs text-gray-500">{createItem.phone}</div>
+                    )}
+                  </div>
+                  {/* Pill — slot pre-selected from left panel */}
+                  {selectedSlotKey && apptDate && apptHour && (
+                    <div className="flex items-center gap-1.5 text-xs text-[#3B5BDB] bg-[#EDF2FF] rounded-md px-2.5 py-1.5">
+                      <Sparkles className="h-3 w-3 shrink-0" />
+                      <span>
+                        Créneau sélectionné : {format(parseISO(apptDate), 'EEE d MMM', { locale: fr })} · {apptHour}h{apptMinute} → {apptEndHour}h{apptEndMinute}
+                      </span>
+                    </div>
+                  )}
+                  <form onSubmit={handleCreateAppt} className="space-y-4">
+                    <div className="space-y-1">
+                      <Label>{t('appointments.form.dateLabel')}</Label>
+                      <Input type="date" required value={apptDate}
+                        onChange={(e) => setApptDate(e.target.value)} />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      {/* Start time */}
+                      <div className="space-y-1">
+                        <Label>Début</Label>
+                        <div className="flex items-center gap-1">
+                          <Select value={apptHour} onValueChange={handleStartHourChange}>
+                            <SelectTrigger className="w-20"><SelectValue placeholder="hh" /></SelectTrigger>
+                            <SelectContent>
+                              {HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-muted-foreground font-medium">:</span>
+                          <Select value={apptMinute} onValueChange={handleStartMinuteChange}>
+                            <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <span className="text-muted-foreground pb-2 text-sm">→</span>
+                      {/* End time */}
+                      <div className="space-y-1">
+                        <Label>Fin</Label>
+                        <div className="flex items-center gap-1">
+                          <Select value={apptEndHour} onValueChange={setApptEndHour}>
+                            <SelectTrigger className="w-20"><SelectValue placeholder="hh" /></SelectTrigger>
+                            <SelectContent>
+                              {HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-muted-foreground font-medium">:</span>
+                          <Select value={apptEndMinute} onValueChange={setApptEndMinute}>
+                            <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>{t('appointments.form.notesLabel')} <span className="text-xs text-gray-400 font-normal">{t('appointments.form.notesHint')}</span></Label>
+                      <Input placeholder="Coupe + couleur…" value={apptNotes}
+                        onChange={(e) => setApptNotes(e.target.value)} />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={createSubmitting}>
+                      {createSubmitting ? t('appointments.form.creating') : t('appointments.form.createBtn')}
+                    </Button>
+                  </form>
+                </div>
+              )}
+
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
