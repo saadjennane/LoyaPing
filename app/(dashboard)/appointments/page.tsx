@@ -1389,10 +1389,6 @@ export default function AppointmentsPage() {
           <p className="text-sm text-muted-foreground">{upcomingCount} à venir</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}>
-            <CalendarX className="h-4 w-4 mr-1.5" />
-            <span className="hidden sm:inline">Indisponibilités</span>
-          </Button>
           <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => { resetCreate(); setCreateOpen(true) }}>
             <Plus className="h-4 w-4 mr-2" />{t('appointments.newBtn')}
           </Button>
@@ -1460,6 +1456,13 @@ export default function AppointmentsPage() {
               {mobileSelectMode ? 'Annuler' : 'Sélectionner'}
             </button>
           )}
+          <button
+            onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}
+            className="h-9 w-9 flex items-center justify-center rounded-md border border-input bg-background shrink-0"
+            title="Indisponibilités"
+          >
+            <CalendarX className="h-4 w-4 text-muted-foreground" />
+          </button>
           {(calendarConnected.google || calendarConnected.microsoft) && (
             <button
               onClick={syncCalendar}
@@ -1491,20 +1494,25 @@ export default function AppointmentsPage() {
           >
             Mois
           </TabsTrigger>
-          {(calendarConnected.google || calendarConnected.microsoft) && (
-            <div className="ml-auto flex items-center pr-3 py-2">
-              <Button
-                variant="ghost"
-                size="sm"
+          <div className="ml-auto flex items-center gap-1 pr-3 py-2">
+            <button
+              onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}
+              className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title="Indisponibilités"
+            >
+              <CalendarX className="h-4 w-4" />
+            </button>
+            {(calendarConnected.google || calendarConnected.microsoft) && (
+              <button
                 onClick={syncCalendar}
                 disabled={syncing}
-                className="h-8 text-muted-foreground hover:text-foreground text-sm"
+                className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+                title="Synchroniser le calendrier"
               >
-                <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-                Synchroniser
-              </Button>
-            </div>
-          )}
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
         </TabsList>
 
         {/* Filtres + navigation (communs à toutes les vues) */}
