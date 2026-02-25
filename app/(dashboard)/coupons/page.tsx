@@ -582,11 +582,11 @@ export default function CouponsPage() {
           </p>
         </div>
         <div className="flex flex-col gap-1.5 items-end md:flex-row md:gap-2 md:items-center">
-          <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => setRedeemOpen(true)}>
-            <QrCode className="h-4 w-4 mr-2" />Valider un coupon
-          </Button>
           <Button variant="outline" onClick={() => setOfferOpen(true)}>
             <Gift className="h-4 w-4 mr-2" />{t('coupons.offerBtn')}
+          </Button>
+          <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm" onClick={() => setRedeemOpen(true)}>
+            <QrCode className="h-4 w-4 mr-2" />Valider un coupon
           </Button>
         </div>
       </div>

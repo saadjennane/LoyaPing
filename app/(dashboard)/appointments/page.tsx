@@ -26,13 +26,13 @@ import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 import {
-  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  addDays, subDays, addMonths, isSameDay, isSameMonth, parseISO,
+  format, startOfWeek, endOfWeek,
+  addDays, subDays, isSameDay, parseISO,
   setHours, setMinutes, differenceInMinutes, startOfDay, startOfToday,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
-type AppView      = 'agenda' | 'semaine' | 'mois'
+type AppView      = 'agenda' | 'semaine'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
@@ -200,12 +200,14 @@ function TimeGrid({
   onSelect,
   defaultDuration,
   onCreateSlot,
+  exceptions,
 }: {
   days: Date[]
   appointments: Appointment[]
   onSelect: (a: Appointment) => void
   defaultDuration: number
   onCreateSlot: (date: Date, startMins: number, endMins: number) => void
+  exceptions: AvailabilityException[]
 }) {
   const hours = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => i) // 0..23
   const totalHeight = hours.length * HOUR_HEIGHT
@@ -281,17 +283,19 @@ function TimeGrid({
         <div className="w-14 shrink-0 border-r bg-muted/20" />
         {days.map((day) => {
           const isToday = isSameDay(day, new Date())
+          const dateStr = format(day, 'yyyy-MM-dd')
+          const isUnavailable = exceptions.some(ex => !ex.start_time && dateStr >= ex.start_date && dateStr <= ex.end_date)
           return (
             <div
               key={day.toISOString()}
-              className={`flex-1 border-r last:border-r-0 h-10 flex flex-col items-center justify-center text-xs font-medium ${
-                isToday ? 'bg-primary/10' : ''
+              className={`flex-1 border-r last:border-r-0 h-10 flex flex-col items-center justify-center text-xs font-medium relative ${
+                isUnavailable ? 'bg-muted/40' : isToday ? 'bg-primary/10' : ''
               }`}
             >
-              <span className={isToday ? 'text-primary' : 'text-muted-foreground'}>
+              <span className={isUnavailable ? 'text-muted-foreground/50' : isToday ? 'text-primary' : 'text-muted-foreground'}>
                 {format(day, 'EEE', { locale: fr })}
               </span>
-              <span className={`font-bold ${isToday ? 'text-primary' : ''}`}>
+              <span className={`font-bold ${isUnavailable ? 'text-muted-foreground/50 line-through' : isToday ? 'text-primary' : ''}`}>
                 {format(day, 'd')}
               </span>
             </div>
@@ -323,6 +327,9 @@ function TimeGrid({
             dayAppts.map((a) => ({ id: a.id, start: a.scheduled_at, end: a.ended_at }))
           )
           const ghost = dragSlot && isSameDay(dragSlot.date, day) ? dragSlot : null
+          const dateStr = format(day, 'yyyy-MM-dd')
+          const dayFullException = exceptions.find(ex => !ex.start_time && dateStr >= ex.start_date && dateStr <= ex.end_date)
+          const partialExceptions = exceptions.filter(ex => ex.start_time && ex.end_time && dateStr >= ex.start_date && dateStr <= ex.end_date)
 
           return (
             <div
@@ -331,6 +338,36 @@ function TimeGrid({
               style={{ height: totalHeight }}
               onMouseDown={(e) => handleMouseDown(e, day)}
             >
+              {/* Full-day unavailability overlay */}
+              {dayFullException && (
+                <div className="absolute inset-0 pointer-events-none z-10"
+                  style={{ background: 'repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(0,0,0,0.04) 6px, rgba(0,0,0,0.04) 12px)' }}>
+                  <div className="absolute inset-0 bg-muted/25" />
+                  {dayFullException.label && (
+                    <span className="absolute top-1 left-0 right-0 text-center text-[10px] text-muted-foreground/70 font-medium truncate px-1">
+                      {dayFullException.label}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Partial unavailability overlays */}
+              {partialExceptions.map((ex) => {
+                const startMins = ex.start_time ? parseInt(ex.start_time.split(':')[0]) * 60 + parseInt(ex.start_time.split(':')[1]) : 0
+                const endMins   = ex.end_time   ? parseInt(ex.end_time.split(':')[0])   * 60 + parseInt(ex.end_time.split(':')[1])   : 24 * 60
+                return (
+                  <div
+                    key={ex.id}
+                    className="absolute left-0 right-0 pointer-events-none z-10"
+                    style={{
+                      top:    (startMins / 60) * HOUR_HEIGHT,
+                      height: ((endMins - startMins) / 60) * HOUR_HEIGHT,
+                      background: 'repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(0,0,0,0.04) 6px, rgba(0,0,0,0.04) 12px)',
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-muted/25" />
+                  </div>
+                )
+              })}
               {hours.map((h) => (
                 <div
                   key={h}
@@ -400,100 +437,6 @@ function TimeGrid({
   )
 }
 
-// ─── Month Grid ───────────────────────────────────────────────────────────────
-
-function MonthGrid({
-  anchor,
-  appointments,
-  onSelect,
-}: {
-  anchor: Date
-  appointments: Appointment[]
-  onSelect: (a: Appointment) => void
-}) {
-  const monthStart = startOfMonth(anchor)
-  const monthEnd = endOfMonth(anchor)
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-
-  const days: Date[] = []
-  let cur = gridStart
-  while (cur <= gridEnd) {
-    days.push(cur)
-    cur = addDays(cur, 1)
-  }
-
-  const DAY_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
-
-  return (
-    <div className="border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-7 border-b bg-muted/20">
-        {DAY_NAMES.map((d) => (
-          <div key={d} className="py-2 text-center text-xs font-medium text-muted-foreground">
-            {d}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7">
-        {days.map((day) => {
-          const dayAppts = appointments.filter((a) =>
-            isSameDay(parseISO(a.scheduled_at), day)
-          )
-          const inMonth = isSameMonth(day, anchor)
-          const isToday = isSameDay(day, new Date())
-
-          return (
-            <div
-              key={day.toISOString()}
-              className={`min-h-[100px] border-b border-r p-1 last:border-r-0 ${
-                !inMonth ? 'bg-muted/10' : ''
-              }`}
-            >
-              <div
-                className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
-                  isToday
-                    ? 'bg-primary text-primary-foreground'
-                    : !inMonth
-                    ? 'text-muted-foreground'
-                    : ''
-                }`}
-              >
-                {format(day, 'd')}
-              </div>
-              <div className="space-y-0.5">
-                {dayAppts.slice(0, 3).map((appt) => (
-                  <button
-                    key={appt.id}
-                    onClick={() => onSelect(appt)}
-                    className={appt.client_id === null
-                      ? 'w-full text-left text-[10px] rounded px-1 truncate bg-red-50 text-red-700 border border-red-200 border-dashed'
-                      : `w-full text-left text-[10px] rounded px-1 truncate ${apptColorClass(appt.status)}`
-                    }
-                  >
-                    {appt.client_id === null && (
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-0.5 align-middle" />
-                    )}
-                    {format(parseISO(appt.scheduled_at), 'HH:mm')}{' '}
-                    {appt.client_id === null
-                      ? (appt.notes || 'Sans client')
-                      : clientFullName(appt.client as Client)
-                    }
-                    {appt.client_id !== null && appt.reminderStatus?.hasFailed && ' ⚠'}
-                  </button>
-                ))}
-                {dayAppts.length > 3 && (
-                  <div className="text-[10px] text-muted-foreground px-1">
-                    +{dayAppts.length - 3} autres
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 // ─── Time picker options ───────────────────────────────────────────────────────
 const HOURS   = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
@@ -1036,7 +979,7 @@ export default function AppointmentsPage() {
     }
   })
 
-  // Auto-scroll to target date on initial load or gotoDate change
+  // Auto-scroll to target date (only when using "Aller à une date")
   useEffect(() => {
     if (!listLoading && listItems.length > 0 && !initialScrollDone.current) {
       const t = setTimeout(() => {
@@ -1050,13 +993,8 @@ export default function AppointmentsPage() {
             const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top
             container.scrollTop += offset
           }
-        } else {
-          const today = todayRef.current
-          if (today) {
-            const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
-            container.scrollTop += offset
-          }
         }
+        // No auto-scroll on normal load — show past 3 days + Voir plus at top naturally
         initialScrollDone.current = true
       }, 50)
       return () => clearTimeout(t)
@@ -1081,8 +1019,7 @@ export default function AppointmentsPage() {
 
   // ── Navigation ───────────────────────────────────────────────────────────
   function navigate(dir: 1 | -1) {
-    if (appView === 'semaine') setAnchor((d) => addDays(d, dir * 7))
-    else setAnchor((d) => addMonths(d, dir))
+    setAnchor((d) => addDays(d, dir * 7))
   }
 
   function getDays(): Date[] {
@@ -1467,7 +1404,6 @@ export default function AppointmentsPage() {
             <SelectContent>
               <SelectItem value="agenda">Agenda</SelectItem>
               <SelectItem value="semaine">Semaine</SelectItem>
-              <SelectItem value="mois">Mois</SelectItem>
             </SelectContent>
           </Select>
           {appView === 'agenda' && (
@@ -1512,12 +1448,6 @@ export default function AppointmentsPage() {
             className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none"
           >
             Semaine
-          </TabsTrigger>
-          <TabsTrigger
-            value="mois"
-            className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#3B5BDB] data-[state=active]:text-[#3B5BDB] data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-[#3B5BDB] bg-transparent shadow-none flex-none"
-          >
-            Mois
           </TabsTrigger>
           <div className="ml-auto flex items-center gap-1 pr-3 py-2">
             <button
@@ -1638,13 +1568,10 @@ export default function AppointmentsPage() {
             </div>
           )}
 
-          {/* Navigation — semaine/mois uniquement */}
-          {(appView === 'semaine' || appView === 'mois') && (
+          {/* Navigation — semaine uniquement */}
+          {appView === 'semaine' && (
             <div className="ml-auto flex items-center gap-1">
-              {(appView === 'semaine'
-                ? !getDays().some(d => isSameDay(d, new Date()))
-                : !isSameMonth(new Date(), anchor)
-              ) && (
+              {!getDays().some(d => isSameDay(d, new Date())) && (
                 <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>
                   {t('appointments.todayBtn')}
                 </Button>
@@ -1964,21 +1891,7 @@ export default function AppointmentsPage() {
                 onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
                 defaultDuration={defaultDuration ?? 60}
                 onCreateSlot={handleCreateSlot}
-              />
-            )}
-          </div>
-        </TabsContent>
-
-        {/* ── Mois ───────────────────────────────────────────────────────── */}
-        <TabsContent value="mois" className="mt-0 flex-1 min-h-0 overflow-y-auto">
-          <div className="p-4 md:p-6">
-            {loading ? (
-              <div className="text-muted-foreground text-sm py-8 text-center">{t('common.loading')}</div>
-            ) : (
-              <MonthGrid
-                anchor={anchor}
-                appointments={appointments}
-                onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
+                exceptions={exceptions}
               />
             )}
           </div>
