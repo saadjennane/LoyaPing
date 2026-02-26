@@ -7,8 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ReviewSettings } from '@/lib/types'
 import { useModules } from '@/lib/context/modules'
+
+type DelayUnit = 'minutes' | 'hours' | 'days'
+
+function toHours(value: number, unit: DelayUnit): number {
+  if (unit === 'minutes') return Math.round(value / 60) || 1
+  if (unit === 'days')    return value * 24
+  return value
+}
+
+function fromHours(hours: number): { value: number; unit: DelayUnit } {
+  if (hours >= 24 && hours % 24 === 0) return { value: hours / 24, unit: 'days' }
+  return { value: hours, unit: 'hours' }
+}
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
@@ -48,6 +62,10 @@ export default function ReviewsSettingsPage() {
   const [saving,   setSaving]   = useState(false)
   const [togglingModule, setTogglingModule] = useState(false)
 
+  // Local delay display (value + unit) — converted to/from hours on load/save
+  const [delayValue, setDelayValue] = useState(24)
+  const [delayUnit,  setDelayUnit]  = useState<DelayUnit>('hours')
+
   useEffect(() => {
     fetch('/api/settings/reviews')
       .then((r) => r.json())
@@ -55,6 +73,9 @@ export default function ReviewsSettingsPage() {
         if (data) {
           const { business_id: _b, updated_at: _u, ...rest } = data
           setSettings(rest)
+          const { value, unit } = fromHours(rest.delay_after_interaction_hours ?? 24)
+          setDelayValue(value)
+          setDelayUnit(unit)
         }
         setLoading(false)
       })
@@ -62,10 +83,11 @@ export default function ReviewsSettingsPage() {
 
   const save = async () => {
     setSaving(true)
+    const payload = { ...settings, delay_after_interaction_hours: toHours(delayValue, delayUnit) }
     const res  = await fetch('/api/settings/reviews', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(payload),
     })
     const json = await res.json()
     if (json.error) toast.error('Erreur lors de la sauvegarde')
@@ -157,17 +179,29 @@ export default function ReviewsSettingsPage() {
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="delay_hours">Délai après interaction (h)</Label>
-              <Input
-                id="delay_hours"
-                type="number"
-                min={0}
-                max={720}
-                value={settings.delay_after_interaction_hours}
-                onChange={(e) => setSettings((s) => ({ ...s, delay_after_interaction_hours: parseInt(e.target.value) || 24 }))}
-              />
+              <Label>Délai après interaction</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={delayValue}
+                  onChange={(e) => setDelayValue(parseInt(e.target.value) || 1)}
+                  className="w-24 shrink-0"
+                />
+                <Select value={delayUnit} onValueChange={(v) => setDelayUnit(v as DelayUnit)}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">Minutes</SelectItem>
+                    <SelectItem value="hours">Heures</SelectItem>
+                    <SelectItem value="days">Jours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Délai en heures avant l'envoi de la demande
+                Délai avant l'envoi de la demande d'avis
               </p>
             </div>
           </div>
