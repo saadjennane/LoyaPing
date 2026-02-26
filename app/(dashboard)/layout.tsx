@@ -9,13 +9,13 @@ import { DEFAULT_CLIENT_FIELD_CONFIG, type ClientFieldConfig } from '@/lib/conte
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  let modules = { orders_enabled: true, appointments_enabled: true, loyalty_enabled: true }
+  let modules = { orders_enabled: true, appointments_enabled: true, loyalty_enabled: true, reviews_enabled: false }
   let fieldConfig: ClientFieldConfig = DEFAULT_CLIENT_FIELD_CONFIG
   try {
     const db = createServerClient()
     const [modulesRes, fieldRes, onboardingRes] = await Promise.all([
       db.from('business_modules')
-        .select('orders_enabled, appointments_enabled, loyalty_enabled')
+        .select('orders_enabled, appointments_enabled, loyalty_enabled, reviews_enabled')
         .eq('business_id', DEFAULT_BUSINESS_ID)
         .maybeSingle(),
       db.from('client_field_config')

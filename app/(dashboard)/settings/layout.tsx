@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut, Wand2 } from 'lucide-react'
+import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut, Wand2, Star } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
 import { createBrowserClient } from '@supabase/ssr'
@@ -37,6 +37,13 @@ const MODULE_ITEMS = [
     icon:      Gift,
     moduleKey: 'loyalty_enabled'      as const,
     statusKey: 'loyalty_configured'   as const,
+  },
+  {
+    href:      '/settings/reviews',
+    label:     'Reviews',
+    icon:      Star,
+    moduleKey: 'reviews_enabled' as const,
+    statusKey: null as 'orders_configured' | null,
   },
 ]
 
@@ -91,7 +98,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               </p>
               {MODULE_ITEMS.filter((m) => modules[m.moduleKey]).map(
                 ({ href, label, icon: Icon, statusKey }) => {
-                  const configured = status ? status[statusKey] : null
+                  const configured = statusKey && status ? status[statusKey] : null
                   return (
                     <Link
                       key={href}

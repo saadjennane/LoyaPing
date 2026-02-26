@@ -2,15 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutGrid, Package, CalendarDays, UsersRound, Tag, Settings2 } from 'lucide-react'
+import { LayoutGrid, Package, CalendarDays, UsersRound, Tag, Settings2, Star } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 
-const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean }) => [
+const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean; reviews_enabled: boolean }) => [
   { href: '/',             icon: LayoutGrid,  label: 'Dashboard',  gradient: 'from-red-400 to-orange-400',       show: true },
   { href: '/clients',      icon: UsersRound,  label: 'Clients',    gradient: 'from-emerald-400 to-teal-500',     show: true },
   { href: '/orders',       icon: Package,     label: 'Commandes',  gradient: 'from-blue-400 to-cyan-500',        show: modules.orders_enabled },
   { href: '/appointments', icon: CalendarDays,label: 'RDV',        gradient: 'from-violet-400 to-purple-500',    show: modules.appointments_enabled },
   { href: '/coupons',      icon: Tag,         label: 'Fidélité',   gradient: 'from-fuchsia-400 to-pink-500',     show: modules.loyalty_enabled },
+  { href: '/reviews',      icon: Star,        label: 'Reviews',    gradient: 'from-amber-400 to-yellow-500',     show: modules.reviews_enabled },
   { href: '/settings',     icon: Settings2,   label: 'Paramètres', gradient: 'from-slate-400 to-slate-600',      show: true },
 ].filter(item => item.show)
 

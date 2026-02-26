@@ -5,12 +5,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutGrid, Package, CalendarDays, UsersRound, Tag, Settings2,
-  ChevronLeft, ChevronRight, Sun, Moon, Monitor, FlaskConical,
+  ChevronLeft, ChevronRight, Sun, Moon, Monitor, FlaskConical, Star,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useModules } from '@/lib/context/modules'
 
-const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean }) => [
+const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean; reviews_enabled: boolean }) => [
   {
     href: '/',
     icon: LayoutGrid,
@@ -45,6 +45,13 @@ const navItems = (modules: { orders_enabled: boolean; appointments_enabled: bool
     label: 'Fidélité',
     gradient: 'from-fuchsia-400 to-pink-500',
     show: modules.loyalty_enabled,
+  },
+  {
+    href: '/reviews',
+    icon: Star,
+    label: 'Reviews',
+    gradient: 'from-amber-400 to-yellow-500',
+    show: modules.reviews_enabled,
   },
 ].filter((item) => item.show)
 

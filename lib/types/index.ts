@@ -295,7 +295,53 @@ export type BusinessModules = {
   orders_enabled:       boolean
   appointments_enabled: boolean
   loyalty_enabled:      boolean
+  reviews_enabled:      boolean
   updated_at:           string
+}
+
+// ── Reviews ──────────────────────────────────────────────────────────────────
+
+export type ReviewEventType =
+  | 'request_sent'
+  | 'positive_response'
+  | 'negative_response'
+  | 'google_intent'
+  | 'reminder_sent'
+  | 'confirmed'
+
+export type ReviewEvent = {
+  id:              string
+  business_id:     string
+  client_id:       string | null
+  type:            ReviewEventType
+  message_content: string | null
+  treated:         boolean
+  created_at:      string
+  // joined
+  client?: Pick<Client, 'id' | 'first_name' | 'last_name' | 'civility' | 'phone_number'>
+}
+
+export type ReviewStats = {
+  request_sent:     number
+  positive_response: number
+  negative_response: number
+  google_intent:    number
+  reminder_sent:    number
+  untreated_negative: number
+}
+
+export type ReviewSettings = {
+  business_id:                   string
+  is_active:                     boolean
+  min_interactions:              number
+  delay_after_interaction_hours: number
+  satisfaction_message:          string
+  positive_message:              string
+  negative_message:              string
+  reminder_enabled:              boolean
+  reminder_delay_hours:          number
+  google_review_link:            string | null
+  updated_at:                    string
 }
 
 // =========================================

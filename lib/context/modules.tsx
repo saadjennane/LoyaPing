@@ -6,6 +6,7 @@ export type Modules = {
   orders_enabled:       boolean
   appointments_enabled: boolean
   loyalty_enabled:      boolean
+  reviews_enabled:      boolean
 }
 
 type ModulesContextValue = {
