@@ -6,7 +6,7 @@ const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-00
 export async function GET() {
   const db = createServerClient()
 
-  const [orderNotifRes, apptNotifRes, tiersRes] = await Promise.all([
+  const [orderNotifRes, apptNotifRes, tiersRes, reviewSettingsRes] = await Promise.all([
     db
       .from('order_notification_settings')
       .select('ready_message')
@@ -23,11 +23,17 @@ export async function GET() {
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .eq('is_enabled', true)
       .limit(1),
+    db
+      .from('review_settings')
+      .select('google_review_link, is_active')
+      .eq('business_id', DEFAULT_BUSINESS_ID)
+      .maybeSingle(),
   ])
 
   const orders_configured       = !!(orderNotifRes.data?.ready_message?.trim())
   const appointments_configured = !!(apptNotifRes.data?.reminder1_enabled)
   const loyalty_configured      = (tiersRes.data?.length ?? 0) > 0
+  const reviews_configured      = !!(reviewSettingsRes.data?.google_review_link?.trim()) && !!(reviewSettingsRes.data?.is_active)
 
-  return NextResponse.json({ data: { orders_configured, appointments_configured, loyalty_configured } })
+  return NextResponse.json({ data: { orders_configured, appointments_configured, loyalty_configured, reviews_configured } })
 }

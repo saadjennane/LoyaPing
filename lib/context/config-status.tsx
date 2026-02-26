@@ -6,6 +6,7 @@ export type ConfigStatus = {
   orders_configured:       boolean
   appointments_configured: boolean
   loyalty_configured:      boolean
+  reviews_configured:      boolean
 }
 
 type ConfigStatusContextValue = {

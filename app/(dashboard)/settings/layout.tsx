@@ -13,7 +13,6 @@ const ALWAYS_ITEMS = [
   { href: '/settings/modules',      label: 'Modules',        icon: LayoutGrid },
   { href: '/settings/clients',      label: 'Clients',        icon: Users },
   { href: '/settings/portal',       label: 'Portail client', icon: Globe },
-  { href: '/settings/reviews',      label: 'Reviews',        icon: Star },
   { href: '/settings/trash',        label: 'Corbeille',      icon: Trash2 },
 ] as const
 
@@ -38,6 +37,13 @@ const MODULE_ITEMS = [
     icon:      Gift,
     moduleKey: 'loyalty_enabled'      as const,
     statusKey: 'loyalty_configured'   as const,
+  },
+  {
+    href:      '/settings/reviews',
+    label:     'Reviews',
+    icon:      Star,
+    moduleKey: 'reviews_enabled'      as const,
+    statusKey: 'reviews_configured'   as const,
   },
 ]
 
@@ -92,7 +98,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               </p>
               {MODULE_ITEMS.filter((m) => modules[m.moduleKey]).map(
                 ({ href, label, icon: Icon, statusKey }) => {
-                  const configured = statusKey && status ? status[statusKey] : null
+                  const configured = status ? status[statusKey] : null
                   return (
                     <Link
                       key={href}

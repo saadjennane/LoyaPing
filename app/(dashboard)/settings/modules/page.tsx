@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { ShoppingBag, CalendarDays, Gift, CheckCircle2, AlertCircle, Settings2 } from 'lucide-react'
+import { ShoppingBag, CalendarDays, Gift, Star, CheckCircle2, AlertCircle, Settings2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { BusinessModules } from '@/lib/types'
@@ -52,6 +52,15 @@ const MODULE_DEFS = [
     settingsHref: '/settings/loyalty',
     guidance:    'La fidélité doit être configurée avant de pouvoir être utilisée. Créez au moins un palier pour activer le système.',
     configKey:   'loyalty_configured'   as const,
+  },
+  {
+    key:         'reviews_enabled'      as const,
+    label:       'Reviews',
+    desc:        "Demandes d'avis automatiques par WhatsApp",
+    icon:        Star,
+    settingsHref: '/settings/reviews',
+    guidance:    "Ajoutez votre lien Google Reviews et activez l'envoi automatique pour commencer à collecter des avis.",
+    configKey:   'reviews_configured'   as const,
   },
 ]
 
