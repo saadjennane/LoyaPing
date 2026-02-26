@@ -11,7 +11,7 @@ import { useI18n } from '@/lib/i18n/provider'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
 
-type ModulesState = Pick<BusinessModules, 'orders_enabled' | 'appointments_enabled' | 'loyalty_enabled'>
+type ModulesState = Pick<BusinessModules, 'orders_enabled' | 'appointments_enabled' | 'loyalty_enabled' | 'reviews_enabled'>
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
@@ -60,7 +60,7 @@ export default function ModulesPage() {
   const { setModules: setContextModules } = useModules()
   const { status, refresh: refreshStatus } = useConfigStatus()
 
-  const [modules, setModules]     = useState<ModulesState>({ orders_enabled: true, appointments_enabled: true, loyalty_enabled: true })
+  const [modules, setModules]     = useState<ModulesState>({ orders_enabled: true, appointments_enabled: true, loyalty_enabled: true, reviews_enabled: false })
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
 
@@ -73,6 +73,7 @@ export default function ModulesPage() {
         orders_enabled:       json.data.orders_enabled,
         appointments_enabled: json.data.appointments_enabled,
         loyalty_enabled:      json.data.loyalty_enabled,
+        reviews_enabled:      json.data.reviews_enabled ?? false,
       })
     }
     setLoading(false)
