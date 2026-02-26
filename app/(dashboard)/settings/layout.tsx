@@ -13,6 +13,7 @@ const ALWAYS_ITEMS = [
   { href: '/settings/modules',      label: 'Modules',        icon: LayoutGrid },
   { href: '/settings/clients',      label: 'Clients',        icon: Users },
   { href: '/settings/portal',       label: 'Portail client', icon: Globe },
+  { href: '/settings/reviews',      label: 'Reviews',        icon: Star },
   { href: '/settings/trash',        label: 'Corbeille',      icon: Trash2 },
 ] as const
 
@@ -37,13 +38,6 @@ const MODULE_ITEMS = [
     icon:      Gift,
     moduleKey: 'loyalty_enabled'      as const,
     statusKey: 'loyalty_configured'   as const,
-  },
-  {
-    href:      '/settings/reviews',
-    label:     'Reviews',
-    icon:      Star,
-    moduleKey: 'reviews_enabled' as const,
-    statusKey: null as 'orders_configured' | null,
   },
 ]
 
