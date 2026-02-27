@@ -124,6 +124,8 @@ export default function OrganizationPage() {
     google_maps_url: null, waze_url: null,
     instagram_url: null, tiktok_url: null, facebook_url: null, youtube_url: null,
     timezone: DEFAULT_TIMEZONE,
+    urgent_notify_reschedule: false, urgent_notify_negative_review: false,
+    urgent_whatsapp_number_1: null, urgent_whatsapp_number_2: null,
   })
   const [phonePrefix, setPhonePrefix]   = useState('+33')
   const [phoneNumber, setPhoneNumber]   = useState('')
@@ -168,6 +170,10 @@ export default function OrganizationPage() {
         facebook_url:        p.facebook_url        ?? null,
         youtube_url:         p.youtube_url         ?? null,
         timezone:            p.timezone            ?? DEFAULT_TIMEZONE,
+        urgent_notify_reschedule:      p.urgent_notify_reschedule      ?? false,
+        urgent_notify_negative_review: p.urgent_notify_negative_review ?? false,
+        urgent_whatsapp_number_1:      p.urgent_whatsapp_number_1      ?? null,
+        urgent_whatsapp_number_2:      p.urgent_whatsapp_number_2      ?? null,
       })
       if (!isPreset) setCurrencyCustom(p.currency)
       const split = splitPhonePrefix(p.phone)
