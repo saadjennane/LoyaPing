@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -59,6 +60,14 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) throw error
+
+    // Urgent notification for negative reviews (best-effort)
+    if (type === 'negative_response') {
+      createAndNotifyUrgentEvent('negative_review', data.id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[reviews] Urgent notification failed:', e)
+      })
+    }
+
     return NextResponse.json({ data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

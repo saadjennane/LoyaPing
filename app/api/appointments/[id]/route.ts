@@ -5,6 +5,7 @@ import { cancelPendingReminders, scheduleRemindersForAppointment } from '@/lib/s
 import { pushAppointmentToGoogle, deleteGoogleEvent } from '@/lib/services/google-calendar-sync'
 import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services/microsoft-calendar-sync'
 import { reverseSourceCredit } from '@/lib/services/loyalty'
+import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -84,17 +85,81 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ data: { id, status: 'no_show' } })
     }
 
+    // ── Confirm appointment (WhatsApp button "Je confirme") ─────────────────
+    if (status === 'confirmed') {
+      const db = createServerClient()
+      const now = new Date().toISOString()
+      const { error } = await db
+        .from('appointments')
+        .update({ status: 'confirmed', confirmed_at: now })
+        .eq('id', id)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+      if (error) throw error
+      // Log event (best-effort)
+      db.from('appointment_events').insert({ appointment_id: id, type: 'confirmed' }).then(() => {})
+      return NextResponse.json({ data: { id, status: 'confirmed' } })
+    }
+
+    // ── Request reschedule (WhatsApp button "Replanifier") ──────────────────
+    if (status === 'reschedule_requested') {
+      const db = createServerClient()
+      const now = new Date().toISOString()
+
+      // Fetch current scheduled_at to store as previous date/time
+      const { data: current } = await db
+        .from('appointments')
+        .select('scheduled_at')
+        .eq('id', id)
+        .maybeSingle()
+
+      const updates: Record<string, string | null> = {
+        status: 'reschedule_requested',
+        reschedule_requested_at: now,
+      }
+      if (current?.scheduled_at) {
+        const d = new Date(current.scheduled_at)
+        updates.stored_previous_date = d.toISOString().slice(0, 10)
+        updates.stored_previous_time = d.toISOString().slice(11, 19)
+      }
+
+      const { error } = await db
+        .from('appointments')
+        .update(updates)
+        .eq('id', id)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+      if (error) throw error
+
+      // Cancel pending reminders — slot is now free
+      try { await cancelPendingReminders(id) } catch (e) {
+        console.error('[appointments] Failed to cancel reminders on reschedule_requested:', e)
+      }
+
+      // Log event (best-effort)
+      db.from('appointment_events').insert({ appointment_id: id, type: 'reschedule_requested' }).then(() => {})
+
+      // Urgent notification (best-effort)
+      createAndNotifyUrgentEvent('reschedule', id, DEFAULT_BUSINESS_ID).catch((e) => {
+        console.error('[appointments] Urgent notification failed:', e)
+      })
+
+      return NextResponse.json({ data: { id, status: 'reschedule_requested' } })
+    }
+
     // Reschedule: update scheduled_at (+ ended_at if provided), cancel old reminders, schedule new ones
     if (scheduled_at) {
       const db = createServerClient()
       const updateFields: Record<string, string | null> = { scheduled_at }
       if ('ended_at' in body) updateFields.ended_at = body.ended_at ?? null
+      // If rescheduling from reschedule_requested, reset to scheduled and clear previous
+      updateFields.status = 'scheduled'
+      updateFields.stored_previous_date = null
+      updateFields.stored_previous_time = null
 
       const { error } = await db
         .from('appointments')
         .update(updateFields)
         .eq('id', id)
-        .eq('status', 'scheduled')
+        .in('status', ['scheduled', 'confirmed', 'reschedule_requested'])
 
       if (error) throw error
 

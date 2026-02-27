@@ -35,9 +35,11 @@ function formatTime(iso: string): string {
 }
 
 const STATUS_META = {
-  scheduled: { label: 'Prévu',   icon: Clock,        color: 'text-muted-foreground/40' },
-  show:      { label: 'Présent', icon: CheckCircle2, color: 'text-green-500' },
-  no_show:   { label: 'Absent',  icon: XCircle,      color: 'text-red-400' },
+  scheduled:            { label: 'Prévu',         icon: Clock,        color: 'text-muted-foreground/40' },
+  confirmed:            { label: 'Confirmé',       icon: CheckCircle2, color: 'text-emerald-500' },
+  reschedule_requested: { label: 'À replanifier', icon: Clock,        color: 'text-orange-400' },
+  show:                 { label: 'Présent',        icon: CheckCircle2, color: 'text-green-500' },
+  no_show:              { label: 'Absent',         icon: XCircle,      color: 'text-red-400' },
 } as const
 
 export default function AppointmentsDashboardCard({ data }: Props) {

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useModules } from '@/lib/context/modules'
+import { useUrgentCount } from '@/lib/context/urgent-count'
 
 const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean; reviews_enabled: boolean }) => [
   {
@@ -64,6 +65,7 @@ const settingsItem = {
 
 export default function Sidebar() {
   const { modules } = useModules()
+  const { pendingCount } = useUrgentCount()
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const asideRef = useRef<HTMLElement>(null)
@@ -115,18 +117,32 @@ export default function Sidebar() {
           collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2'
         } ${active ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent/50'}`}
       >
-        <div
-          className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center shrink-0`}
-        >
-          <Icon className="h-[18px] w-[18px] text-white" strokeWidth={2} />
+        <div className="relative shrink-0">
+          <div
+            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center`}
+          >
+            <Icon className="h-[18px] w-[18px] text-white" strokeWidth={2} />
+          </div>
+          {/* Urgent badge — only on settings item */}
+          {item.href === '/settings' && pendingCount > 0 && (
+            <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+              {pendingCount > 9 ? '9+' : pendingCount}
+            </span>
+          )}
         </div>
         {!collapsed && (
           <span
-            className={`text-sm ${
+            className={`text-sm flex-1 ${
               active ? 'font-semibold text-sidebar-foreground' : 'font-medium text-muted-foreground'
             }`}
           >
             {item.label}
+          </span>
+        )}
+        {/* Inline badge label when expanded */}
+        {!collapsed && item.href === '/settings' && pendingCount > 0 && (
+          <span className="inline-flex items-center justify-center min-w-[18px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+            {pendingCount > 9 ? '9+' : pendingCount}
           </span>
         )}
       </Link>

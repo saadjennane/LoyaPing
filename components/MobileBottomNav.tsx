@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutGrid, Package, CalendarDays, UsersRound, Tag, Settings2, Star } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
+import { useUrgentCount } from '@/lib/context/urgent-count'
 
 const navItems = (modules: { orders_enabled: boolean; appointments_enabled: boolean; loyalty_enabled: boolean; reviews_enabled: boolean }) => [
   { href: '/',             icon: LayoutGrid,  label: 'Dashboard',  gradient: 'from-red-400 to-orange-400',       show: true },
@@ -17,6 +18,7 @@ const navItems = (modules: { orders_enabled: boolean; appointments_enabled: bool
 
 export default function MobileBottomNav() {
   const { modules } = useModules()
+  const { pendingCount } = useUrgentCount()
   const pathname = usePathname()
 
   return (
@@ -31,8 +33,15 @@ export default function MobileBottomNav() {
               href={item.href}
               className="flex-1 flex flex-col items-center justify-center py-2 gap-1"
             >
-              <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-35'}`}>
-                <Icon className="h-4 w-4 text-white" strokeWidth={2} />
+              <div className="relative">
+                <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-35'}`}>
+                  <Icon className="h-4 w-4 text-white" strokeWidth={2} />
+                </div>
+                {item.href === '/settings' && pendingCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+                    {pendingCount > 9 ? '9+' : pendingCount}
+                  </span>
+                )}
               </div>
               <span className={`text-[10px] leading-none transition-colors ${isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                 {item.label}

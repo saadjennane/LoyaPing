@@ -95,9 +95,11 @@ function SkeletonSecondary() {
 // ── Focus Cards ───────────────────────────────────────────────────────────────
 
 const APPT_META = {
-  scheduled: { Icon: Clock,         color: 'text-muted-foreground/40' },
-  show:      { Icon: CheckCircle2,  color: 'text-green-500' },
-  no_show:   { Icon: XCircle,       color: 'text-red-400' },
+  scheduled:             { Icon: Clock,         color: 'text-muted-foreground/40' },
+  confirmed:             { Icon: CheckCircle2,  color: 'text-emerald-500' },
+  reschedule_requested:  { Icon: Clock,         color: 'text-orange-400' },
+  show:                  { Icon: CheckCircle2,  color: 'text-green-500' },
+  no_show:               { Icon: XCircle,       color: 'text-red-400' },
 } as const
 
 function FocusOrders({

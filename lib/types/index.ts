@@ -139,13 +139,20 @@ export type OrderScheduledNotification = {
   created_at:    string
 }
 
+export type AppointmentStatus =
+  | 'scheduled'
+  | 'confirmed'
+  | 'reschedule_requested'
+  | 'show'
+  | 'no_show'
+
 export type Appointment = {
   id: string
   client_id: string | null
   business_id: string
   scheduled_at: string
   ended_at: string | null
-  status: 'scheduled' | 'show' | 'no_show'
+  status: AppointmentStatus
   amount: number | null
   points_credited: boolean
   notes: string | null
@@ -153,9 +160,21 @@ export type Appointment = {
   no_show_at: string | null
   deleted_at: string | null
   created_at: string
+  // V1.5 confirm & reschedule
+  confirmed_at:            string | null
+  reschedule_requested_at: string | null
+  stored_previous_date:    string | null  // DATE as ISO string (YYYY-MM-DD)
+  stored_previous_time:    string | null  // TIME as string (HH:MM:SS)
   // joined
   client?: Client
   reminderStatus?: ReminderStatus
+}
+
+export type AppointmentEvent = {
+  id:             string
+  appointment_id: string
+  type:           'reminder_sent' | 'confirmed' | 'reschedule_requested'
+  created_at:     string
 }
 
 export type AppointmentNotificationSettings = {
@@ -231,9 +250,13 @@ export type AppointmentListItem = {
   client_phone:   string
   scheduled_at:   string         // ISO timestamp
   ended_at:       string | null
-  status:         'scheduled' | 'show' | 'no_show'
+  status:         AppointmentStatus
   notes:          string | null
   reminderStatus: ReminderStatus
+  // V1.5 reschedule
+  reschedule_requested_at: string | null
+  stored_previous_date:    string | null
+  stored_previous_time:    string | null
 }
 
 export type PointsLog = {
@@ -278,6 +301,23 @@ export type BusinessProfile = {
   youtube_url:          string | null
   timezone:             string          // IANA timezone, e.g. "Africa/Casablanca"
   updated_at:           string
+  // Urgent notifications (V1)
+  urgent_notify_reschedule:      boolean
+  urgent_notify_negative_review: boolean
+  urgent_whatsapp_number_1:      string | null
+  urgent_whatsapp_number_2:      string | null
+}
+
+export type UrgentEventType = 'reschedule' | 'negative_review'
+
+export type UrgentEvent = {
+  id:          string
+  business_id: string
+  type:        UrgentEventType
+  entity_id:   string | null
+  status:      'pending' | 'sent'
+  created_at:  string
+  sent_at:     string | null
 }
 
 export type BusinessHours = {
@@ -438,7 +478,7 @@ export type DashboardApptItem = {
   id:           string
   scheduled_at: string
   client_name:  string
-  status:       'scheduled' | 'show' | 'no_show'
+  status:       AppointmentStatus
 }
 
 export type DashboardLoyaltyItem = {

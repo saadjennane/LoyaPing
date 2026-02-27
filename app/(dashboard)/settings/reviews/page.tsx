@@ -66,6 +66,9 @@ export default function ReviewsSettingsPage() {
   const [delayValue, setDelayValue] = useState(24)
   const [delayUnit,  setDelayUnit]  = useState<DelayUnit>('hours')
 
+  const [reminderValue, setReminderValue] = useState(48)
+  const [reminderUnit,  setReminderUnit]  = useState<DelayUnit>('hours')
+
   useEffect(() => {
     fetch('/api/settings/reviews')
       .then((r) => r.json())
@@ -76,6 +79,9 @@ export default function ReviewsSettingsPage() {
           const { value, unit } = fromHours(rest.delay_after_interaction_hours ?? 24)
           setDelayValue(value)
           setDelayUnit(unit)
+          const { value: rv, unit: ru } = fromHours(rest.reminder_delay_hours ?? 48)
+          setReminderValue(rv)
+          setReminderUnit(ru)
         }
         setLoading(false)
       })
@@ -83,7 +89,11 @@ export default function ReviewsSettingsPage() {
 
   const save = async () => {
     setSaving(true)
-    const payload = { ...settings, delay_after_interaction_hours: toHours(delayValue, delayUnit) }
+    const payload = {
+      ...settings,
+      delay_after_interaction_hours: toHours(delayValue, delayUnit),
+      reminder_delay_hours: toHours(reminderValue, reminderUnit),
+    }
     const res  = await fetch('/api/settings/reviews', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -293,15 +303,27 @@ export default function ReviewsSettingsPage() {
 
           {settings.reminder_enabled && (
             <div className="space-y-1.5">
-              <Label htmlFor="reminder_delay">Délai avant relance (h)</Label>
-              <Input
-                id="reminder_delay"
-                type="number"
-                min={1}
-                max={720}
-                value={settings.reminder_delay_hours}
-                onChange={(e) => setSettings((s) => ({ ...s, reminder_delay_hours: parseInt(e.target.value) || 48 }))}
-              />
+              <Label>Délai avant relance</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={reminderValue}
+                  onChange={(e) => setReminderValue(parseInt(e.target.value) || 1)}
+                  className="w-24 shrink-0"
+                />
+                <Select value={reminderUnit} onValueChange={(v) => setReminderUnit(v as DelayUnit)}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">Minutes</SelectItem>
+                    <SelectItem value="hours">Heures</SelectItem>
+                    <SelectItem value="days">Jours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
         </CardContent>

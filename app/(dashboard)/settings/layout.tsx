@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut, Wand2, Star } from 'lucide-react'
+import { Building2, LayoutGrid, Globe, Trash2, ShoppingBag, CalendarDays, Gift, Users, ChevronLeft, LogOut, Wand2, Star, BellRing } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
 import { createBrowserClient } from '@supabase/ssr'
@@ -13,6 +13,7 @@ const ALWAYS_ITEMS = [
   { href: '/settings/modules',      label: 'Modules',        icon: LayoutGrid },
   { href: '/settings/clients',      label: 'Clients',        icon: Users },
   { href: '/settings/portal',       label: 'Portail client', icon: Globe },
+  { href: '/settings/urgent',       label: 'Urgences',       icon: BellRing },
   { href: '/settings/trash',        label: 'Corbeille',      icon: Trash2 },
 ] as const
 

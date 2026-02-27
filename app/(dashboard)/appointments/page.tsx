@@ -32,7 +32,7 @@ import {
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
-type AppView      = 'agenda' | 'semaine'
+type AppView      = 'agenda' | 'semaine' | 'a_replanifier'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
 type NotifFilter  = 'all' | 'failed_only'
 type DetailApptMode = 'detail' | 'reschedule'
@@ -143,6 +143,7 @@ function clientFullName(client: Client | null | undefined): string {
 
 function statusLabel(status: string, t: (k: string) => string): string {
   if (status === 'scheduled') return t('appointments.status.scheduled')
+  if (status === 'confirmed') return 'Confirmé'
   if (status === 'show') return t('appointments.status.show')
   if (status === 'no_show') return t('appointments.status.no_show')
   return status
@@ -157,6 +158,7 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
 function apptColorClass(status: string) {
   if (status === 'show') return 'bg-green-100 text-green-800 border-green-300'
   if (status === 'no_show') return 'bg-red-100 text-red-800 border-red-300'
+  if (status === 'confirmed') return 'bg-emerald-100 text-emerald-800 border-emerald-300'
   return 'bg-blue-100 text-blue-800 border-blue-300'
 }
 
@@ -1261,7 +1263,9 @@ export default function AppointmentsPage() {
   }
 
   const reminderErrorCount = appointments.filter((a) => a.reminderStatus?.hasFailed).length
-  const upcomingCount = appointments.filter((a) => new Date(a.scheduled_at) >= new Date()).length
+  const upcomingCount = appointments.filter((a) => new Date(a.scheduled_at) >= new Date() && a.status !== 'reschedule_requested').length
+  const rescheduleItems = appointments.filter((a) => a.status === 'reschedule_requested')
+  const rescheduleCount = rescheduleItems.length
   const days = appView === 'semaine' ? getDays() : []
 
   const handleCreateSlot = (date: Date, startMins: number, endMins: number) => {
@@ -1324,9 +1328,10 @@ export default function AppointmentsPage() {
     }).filter(({ result }) => result.kind !== 'fermé')
   }, [businessHours, defaultDuration, appointments, exceptions])
 
-  const filteredListItems = listSearch.trim()
+  const filteredListItems = (listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
     : listItems
+  ).filter(item => item.status !== 'reschedule_requested')
 
 
   return (
@@ -1404,6 +1409,9 @@ export default function AppointmentsPage() {
             <SelectContent>
               <SelectItem value="agenda">Agenda</SelectItem>
               <SelectItem value="semaine">Semaine</SelectItem>
+              {rescheduleCount > 0 && (
+                <SelectItem value="a_replanifier">🔴 À replanifier ({rescheduleCount})</SelectItem>
+              )}
             </SelectContent>
           </Select>
           {appView === 'agenda' && (
@@ -1449,6 +1457,17 @@ export default function AppointmentsPage() {
           >
             Semaine
           </TabsTrigger>
+          {rescheduleCount > 0 && (
+            <TabsTrigger
+              value="a_replanifier"
+              className="rounded-none px-6 py-7 text-base font-medium text-muted-foreground data-[state=active]:shadow-[inset_0_-3px_0_#ef4444] data-[state=active]:text-red-600 data-[state=active]:font-bold data-[state=active]:bg-transparent hover:text-red-500 bg-transparent shadow-none flex-none flex items-center gap-2"
+            >
+              À replanifier
+              <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-red-500 text-white text-[11px] font-bold px-1.5">
+                {rescheduleCount}
+              </span>
+            </TabsTrigger>
+          )}
           <div className="ml-auto flex items-center gap-1 pr-3 py-2">
             <button
               onClick={() => { fetchExceptions(); setExceptionsOpen(true) }}
@@ -1719,7 +1738,9 @@ export default function AppointmentsPage() {
                                   ? 'bg-green-50 text-green-700 border-green-200'
                                   : item.status === 'no_show'
                                     ? 'bg-red-50 text-red-700 border-red-200'
-                                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                                    : item.status === 'confirmed'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-gray-100 text-gray-600 border-gray-200'
                               }`}>
                                 {statusLabel(item.status, t)}
                               </span>
@@ -1887,12 +1908,97 @@ export default function AppointmentsPage() {
             ) : (
               <TimeGrid
                 days={days}
-                appointments={appointments}
+                appointments={appointments.filter(a => a.status !== 'reschedule_requested')}
                 onSelect={(a) => { setSelected(a); setDetailOpen(true) }}
                 defaultDuration={defaultDuration ?? 60}
                 onCreateSlot={handleCreateSlot}
                 exceptions={exceptions}
               />
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── À replanifier ──────────────────────────────────────────────── */}
+        <TabsContent value="a_replanifier" className="mt-0 flex-1 min-h-0 overflow-y-auto">
+          <div className="p-4 md:p-6 space-y-4 max-w-2xl">
+            {rescheduleItems.length === 0 ? (
+              <div className="rounded-lg border text-center py-16 text-muted-foreground text-sm">
+                Aucun RDV à replanifier
+              </div>
+            ) : (
+              rescheduleItems.map((appt) => {
+                const previousDate = appt.stored_previous_date
+                  ? format(new Date(`${appt.stored_previous_date}T12:00:00`), 'EEEE d MMMM yyyy', { locale: fr })
+                  : appt.scheduled_at
+                    ? format(parseISO(appt.scheduled_at), 'EEEE d MMMM yyyy', { locale: fr })
+                    : '—'
+                const previousTime = appt.stored_previous_time
+                  ? appt.stored_previous_time.slice(0, 5)
+                  : appt.scheduled_at
+                    ? format(parseISO(appt.scheduled_at), 'HH:mm')
+                    : '—'
+                const requestedAt = appt.reschedule_requested_at
+                  ? format(parseISO(appt.reschedule_requested_at), "d MMMM 'à' HH:mm", { locale: fr })
+                  : '—'
+                const clientName = appt.client
+                  ? clientFullName(appt.client)
+                  : '—'
+
+                return (
+                  <div key={appt.id} className="rounded-xl border bg-card p-4 space-y-3">
+                    {/* Client + demande */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-sm">{clientName}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Demande le {requestedAt}
+                        </p>
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2.5 py-1 shrink-0">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />
+                        À replanifier
+                      </span>
+                    </div>
+
+                    {/* Ancienne date/heure */}
+                    <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5">
+                      <p className="text-[11px] uppercase tracking-wide font-semibold text-muted-foreground mb-1">
+                        Ancien créneau
+                      </p>
+                      <p className="text-sm font-medium capitalize">{previousDate} · {previousTime}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white flex-1"
+                        onClick={() => {
+                          setSelected(appt)
+                          setDetailApptMode('reschedule')
+                          setRescheduleDate(format(parseISO(appt.scheduled_at), 'yyyy-MM-dd'))
+                          setRescheduleHour(format(parseISO(appt.scheduled_at), 'HH'))
+                          setRescheduleMinute(format(parseISO(appt.scheduled_at), 'mm'))
+                          setRescheduleEndHour(appt.ended_at ? format(parseISO(appt.ended_at), 'HH') : '')
+                          setRescheduleEndMinute(appt.ended_at ? format(parseISO(appt.ended_at), 'mm') : '00')
+                          setDetailOpen(true)
+                        }}
+                      >
+                        <CalendarClock className="h-4 w-4 mr-1.5" />
+                        Replanifier
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/5"
+                        onClick={() => setDeleteAppt(appt)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
         </TabsContent>

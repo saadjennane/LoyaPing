@@ -288,7 +288,7 @@ export async function getUpcomingAppointments(businessId: string): Promise<Appoi
     .from('appointments')
     .select('*, client:clients(id, phone_number, magic_token)')
     .eq('business_id', businessId)
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'confirmed'])
     .is('deleted_at', null)
     .gte('scheduled_at', new Date().toISOString())
     .order('scheduled_at', { ascending: true })
@@ -345,11 +345,13 @@ export async function getAppointmentList(params: {
     .gte('scheduled_at', fromDt.toISOString())
     .lte('scheduled_at', toDt.toISOString())
 
-  // 'upcoming' param = status='scheduled' in DB
-  if (params.statusFilter === 'upcoming')      query = query.eq('status', 'scheduled')
-  else if (params.statusFilter === 'show')     query = query.eq('status', 'show')
-  else if (params.statusFilter === 'no_show')  query = query.eq('status', 'no_show')
+  // 'upcoming' param = status='scheduled' or 'confirmed' in DB
+  if (params.statusFilter === 'upcoming')        query = query.in('status', ['scheduled', 'confirmed'])
+  else if (params.statusFilter === 'show')       query = query.eq('status', 'show')
+  else if (params.statusFilter === 'no_show')    query = query.eq('status', 'no_show')
   else if (params.statusFilter === 'unassigned') query = query.is('client_id', null)
+  // 'all' filter: exclude reschedule_requested (they appear in dedicated tab)
+  else query = query.not('status', 'eq', 'reschedule_requested')
 
   // upcoming mode → ASC, history → DESC
   query = query.order('scheduled_at', { ascending: params.mode === 'upcoming' })
@@ -362,7 +364,7 @@ export async function getAppointmentList(params: {
     client_id: string | null
     scheduled_at: string
     ended_at: string | null
-    status: 'scheduled' | 'show' | 'no_show'
+    status: 'scheduled' | 'confirmed' | 'reschedule_requested' | 'show' | 'no_show'
     notes: string | null
     client: { civility: string | null; first_name: string | null; last_name: string | null; phone_number: string } | null
   }
@@ -383,15 +385,18 @@ export async function getAppointmentList(params: {
     const nameParts = [c?.civility, c?.first_name, c?.last_name].filter(Boolean)
     const client_name = nameParts.length > 0 ? nameParts.join(' ') : (c?.phone_number ?? '—')
     return {
-      id:             r.id,
-      client_id:      r.client_id,
+      id:                      r.id,
+      client_id:               r.client_id,
       client_name,
-      client_phone:   c?.phone_number ?? '',
-      scheduled_at:   r.scheduled_at,
-      ended_at:       r.ended_at ?? null,
-      status:         r.status,
-      notes:          r.notes ?? null,
-      reminderStatus: reminderMap.get(r.id) ?? emptyReminderStatus(),
+      client_phone:            c?.phone_number ?? '',
+      scheduled_at:            r.scheduled_at,
+      ended_at:                r.ended_at ?? null,
+      status:                  r.status,
+      notes:                   r.notes ?? null,
+      reminderStatus:          reminderMap.get(r.id) ?? emptyReminderStatus(),
+      reschedule_requested_at: null,
+      stored_previous_date:    null,
+      stored_previous_time:    null,
     }
   })
 }
