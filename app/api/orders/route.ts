@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getActiveOrders, markOrderCompletedImmediately } from '@/lib/services/orders'
+import { capture } from '@/lib/posthog/server'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest) {
     if (completed_immediately && data) {
       await markOrderCompletedImmediately(data.id, DEFAULT_BUSINESS_ID, client_id, orderAmount)
     }
+
+    capture('order_created', { completed_immediately: !!completed_immediately })
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (err) {

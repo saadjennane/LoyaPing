@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { markOrderPickedUp, downgradeReadyToPending, downgradeCompletedToReady } from '@/lib/services/orders'
 import { createServerClient } from '@/lib/supabase/server'
+import { capture } from '@/lib/posthog/server'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -43,6 +44,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // 'picked_up' kept for compat — both route to markOrderPickedUp which sets status='completed'
     if (status === 'picked_up' || status === 'completed') {
       const result = await markOrderPickedUp(id)
+      capture('order_picked_up')
       return NextResponse.json({ data: result })
     }
 
