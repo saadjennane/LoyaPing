@@ -56,10 +56,11 @@ function searchItems(query: string, items: CustomerIndexItem[]): CustomerIndexIt
 type Status = 'idle' | 'loading' | 'ready' | 'error'
 
 type CustomerIndexContextValue = {
-  status:       Status
-  search:       (query: string) => CustomerIndexItem[]
-  refreshIndex: () => void
-  addOrUpdate:  (item: CustomerIndexItem) => void
+  status:          Status
+  search:          (query: string) => CustomerIndexItem[]
+  refreshIndex:    () => void
+  addOrUpdate:     (item: CustomerIndexItem) => void
+  removeFromIndex: (id: string) => void
 }
 
 const CustomerIndexContext = createContext<CustomerIndexContextValue | null>(null)
@@ -156,13 +157,26 @@ export function CustomerIndexProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const removeFromIndex = useCallback((id: string) => {
+    setItems((prev) => {
+      const next = prev.filter((i) => i.id !== id)
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ items: next, loadedAt: Date.now(), etag: etagRef.current }),
+        )
+      } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+
   const search = useCallback(
     (query: string) => searchItems(query, items),
     [items],
   )
 
   return (
-    <CustomerIndexContext.Provider value={{ status, search, refreshIndex, addOrUpdate }}>
+    <CustomerIndexContext.Provider value={{ status, search, refreshIndex, addOrUpdate, removeFromIndex }}>
       {children}
     </CustomerIndexContext.Provider>
   )

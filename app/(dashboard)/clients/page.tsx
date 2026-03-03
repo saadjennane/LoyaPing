@@ -106,7 +106,7 @@ export default function ClientsPage() {
   const loyaltyOn = modules.loyalty_enabled
   const statusOn  = modules.orders_enabled || modules.appointments_enabled
   const { config } = useClientFieldConfig()
-  const { addOrUpdate: addToIndex } = useCustomerIndex()
+  const { addOrUpdate: addToIndex, removeFromIndex } = useCustomerIndex()
   const [clients, setClients] = useState<Client[]>([])
   const [tiers, setTiers] = useState<LoyaltyTier[]>([])
   const [activeOrders, setActiveOrders] = useState<Order[]>([])
@@ -372,7 +372,7 @@ export default function ClientsPage() {
     const res = await fetch(`/api/clients/${detailClient.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (json.error) { toast.error(json.error) }
-    else { toast.success(t('clients.toast.deleted')); setDeleteLinks(null); closeDetail(); fetchAll() }
+    else { removeFromIndex(detailClient.id); toast.success(t('clients.toast.deleted')); setDeleteLinks(null); closeDetail(); fetchAll() }
     setDvSubmitting(false)
   }
 
@@ -575,7 +575,7 @@ export default function ClientsPage() {
     const res = await fetch(`/api/clients/${deleteClient.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (json.error) { toast.error(json.error) }
-    else { toast.success(t('clients.toast.deleted')); setDeleteClient(null); setDeleteLinks(null); fetchAll() }
+    else { removeFromIndex(deleteClient.id); toast.success(t('clients.toast.deleted')); setDeleteClient(null); setDeleteLinks(null); fetchAll() }
     setDeleteSubmitting(false)
   }
 
