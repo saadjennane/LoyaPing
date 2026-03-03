@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       .select('*, client:clients(phone_number)')
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .eq('status', 'ready')
-      .not('ready_sent_at', 'is', null) // only orders where ready notification was sent
+      .not('ready_at', 'is', null) // only orders where ready notification was sent
       .is('deleted_at', null)
 
     if (ordersError) throw ordersError
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
     let totalSent = 0
 
     for (const order of orders as Order[]) {
-      const readySentAt = order.ready_sent_at
+      const readySentAt = order.ready_at
       if (!readySentAt) continue
 
       const readyMs = new Date(readySentAt).getTime()
