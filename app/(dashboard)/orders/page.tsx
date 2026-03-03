@@ -855,13 +855,21 @@ export default function OrdersPage() {
 
             {/* Step 1 — Search (instant, local index) */}
             {step === 'search' && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-3">
                 <CustomerAutocomplete
                   autoFocus
                   onSelect={handleSelectItem}
                   onCreateNew={handleGoToNewClient}
                   placeholder={t('orders.form.searchPlaceholder')}
                 />
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">ou</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <Button type="button" variant="outline" className="w-full" onClick={() => handleGoToNewClient()}>
+                  <Plus className="h-4 w-4 mr-2" />Nouveau client
+                </Button>
               </div>
             )}
 
