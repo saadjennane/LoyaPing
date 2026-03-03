@@ -851,7 +851,9 @@ export default function OrdersPage() {
           <DialogContent
             aria-describedby={undefined}
             onInteractOutside={(e) => {
-              if ((e.target as Element)?.closest('[data-autocomplete-portal]')) e.preventDefault()
+              const original = (e as CustomEvent<{ originalEvent?: PointerEvent }>).detail?.originalEvent
+              const target = original?.target ?? (e.target as Element | null)
+              if ((target as Element | null)?.closest?.('[data-autocomplete-portal]')) e.preventDefault()
             }}
           >
             <DialogHeader>
