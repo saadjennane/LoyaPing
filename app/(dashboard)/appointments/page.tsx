@@ -538,6 +538,7 @@ export default function AppointmentsPage() {
   const [hoursConfigured,  setHoursConfigured]  = useState<boolean>(true)
   const [slotHoursLoading, setSlotHoursLoading] = useState(false)
   const [selectedSlotKey,  setSelectedSlotKey]  = useState<string | null>(null)
+  const [expandedDays,     setExpandedDays]     = useState<Set<string>>(new Set())
   // ── Inline hours editor ────────────────────────────────────────────────────
   const [hoursDialogOpen, setHoursDialogOpen] = useState(false)
   const [hoursForm,       setHoursForm]       = useState<BusinessHourRow[]>([])
@@ -1328,6 +1329,15 @@ export default function AppointmentsPage() {
     }).filter(({ result }) => result.kind !== 'fermé')
   }, [businessHours, defaultDuration, appointments, exceptions])
 
+  // Auto-expand the first day with available slots when slotDays loads
+  useEffect(() => {
+    if (slotDays.length === 0) return
+    const first = slotDays.find(({ result }) => result.kind !== 'complet')
+    if (first) {
+      setExpandedDays(new Set([first.date.toISOString()]))
+    }
+  }, [slotDays.length > 0 ? slotDays[0]?.date.toISOString() : null]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredListItems = (listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
     : listItems
@@ -2085,32 +2095,60 @@ export default function AppointmentsPage() {
                 </div>
               )}
 
-              {/* Slot list */}
+              {/* Slot list — collapsible days */}
               {!slotHoursLoading && businessHours && (
-                <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                <div className="flex-1 overflow-y-auto p-3 space-y-1">
                   {slotDays.map(({ date, result }) => {
+                    const key = date.toISOString()
+                    const isExpanded = expandedDays.has(key)
+                    const toggleDay = () => setExpandedDays((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(key)) next.delete(key); else next.add(key)
+                      return next
+                    })
+
                     const dayLabel = isSameDay(date, new Date())
                       ? `Aujourd'hui · ${format(date, 'd MMM', { locale: fr })}`
                       : isSameDay(date, addDays(new Date(), 1))
                         ? `Demain · ${format(date, 'd MMM', { locale: fr })}`
                         : format(date, 'EEE d MMM', { locale: fr })
 
-                    const headerCls =
+                    const slotCount = (result.kind === 'libre' || result.kind === 'partiel') ? result.slots.length : 0
+
+                    const headerColor =
                       result.kind === 'complet' ? 'text-red-600'
                       : result.kind === 'libre'   ? 'text-green-700'
                       : 'text-foreground'
 
+                    const badgeColor =
+                      result.kind === 'complet' ? 'bg-red-100 text-red-600'
+                      : result.kind === 'libre'   ? 'bg-green-100 text-green-700'
+                      : 'bg-muted text-muted-foreground'
+
                     return (
-                      <div key={date.toISOString()}>
-                        <p className={`text-xs font-semibold capitalize mb-2 ${headerCls}`}>{dayLabel}</p>
-                        {result.kind === 'complet' && (
-                          <p className="text-xs text-red-500">Complet</p>
-                        )}
-                        {(result.kind === 'libre' || result.kind === 'partiel') && (
-                          <div className="grid grid-cols-6 gap-1.5">
+                      <div key={key}>
+                        {/* Day header — always visible */}
+                        <button
+                          onClick={toggleDay}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-muted/60 transition-colors group ${headerColor}`}
+                        >
+                          <span className="text-xs font-semibold capitalize">{dayLabel}</span>
+                          <div className="flex items-center gap-1.5">
+                            {result.kind === 'complet' ? (
+                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeColor}`}>Complet</span>
+                            ) : (
+                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeColor}`}>{slotCount}</span>
+                            )}
+                            <span className={`text-[10px] text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                          </div>
+                        </button>
+
+                        {/* Slots — shown only when expanded */}
+                        {isExpanded && (result.kind === 'libre' || result.kind === 'partiel') && (
+                          <div className="grid grid-cols-4 gap-1 px-2 pb-2 pt-1">
                             {result.slots.map((m) => {
-                              const key = `${date.toISOString()}_${m}`
-                              const isSelected = selectedSlotKey === key
+                              const slotKey = `${key}_${m}`
+                              const isSelected = selectedSlotKey === slotKey
                               return (
                                 <button
                                   key={m}

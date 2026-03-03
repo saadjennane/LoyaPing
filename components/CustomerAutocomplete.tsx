@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { Search, UserPlus, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
@@ -24,11 +23,10 @@ export default function CustomerAutocomplete({
 }: Props) {
   const { status, search } = useCustomerIndex()
 
-  const [query, setQuery]       = useState('')
-  const [results, setResults]   = useState<CustomerIndexItem[]>([])
-  const [open, setOpen]         = useState(false)
+  const [query, setQuery]         = useState('')
+  const [results, setResults]     = useState<CustomerIndexItem[]>([])
+  const [open, setOpen]           = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
-  const [portalStyle, setPortalStyle] = useState<{ top: number; left: number; width: number } | null>(null)
 
   const wrapperRef  = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -45,7 +43,6 @@ export default function CustomerAutocomplete({
     setQuery(q)
     setOpen(true)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    // Tiny debounce (80 ms) only to batch rapid keystrokes — search itself is local/instant
     debounceRef.current = setTimeout(() => runSearch(q), 80)
   }
 
@@ -54,7 +51,6 @@ export default function CustomerAutocomplete({
     if (status === 'ready' && query.trim()) runSearch(query)
   }
 
-  // Re-run search when index finishes loading (only if user already typed something)
   useEffect(() => {
     if (status === 'ready' && query.trim()) runSearch(query)
   }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -115,20 +111,26 @@ export default function CustomerAutocomplete({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Portal position ───────────────────────────────────────────────────────
+  // ── Dropdown position — computed synchronously from ref (no portal) ───────
+  // position:fixed lets the dropdown escape any overflow:hidden/auto ancestor
+  // without needing createPortal (which caused Radix Dialog to dismiss on click).
 
   const isLoading    = status === 'loading'
-  const isError      = status === 'error'
   const isEmpty      = query.trim() === ''
-  const hasDropdownContent = isLoading || results.length > 0 || (!isEmpty && !!onCreateNew)
-  const showDropdown = open && hasDropdownContent
+  const hasContent   = isLoading || results.length > 0 || (!isEmpty && !!onCreateNew)
+  const showDropdown = open && hasContent
 
-  useEffect(() => {
-    if (showDropdown && wrapperRef.current) {
-      const rect = wrapperRef.current.getBoundingClientRect()
-      setPortalStyle({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+  let dropdownStyle: React.CSSProperties | null = null
+  if (showDropdown && wrapperRef.current) {
+    const rect = wrapperRef.current.getBoundingClientRect()
+    dropdownStyle = {
+      position: 'fixed',
+      zIndex: 9999,
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
     }
-  }, [showDropdown])
+  }
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -153,19 +155,13 @@ export default function CustomerAutocomplete({
         />
       </div>
 
-      {/* Dropdown — rendered in a portal to escape overflow:hidden parents */}
-      {showDropdown && portalStyle && createPortal(
+      {/* Dropdown — position:fixed, no portal (avoids Radix Dialog dismiss on click) */}
+      {showDropdown && dropdownStyle && (
         <div
           className="bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
-          style={{
-            position: 'fixed',
-            zIndex: 9999,
-            top: portalStyle.top,
-            left: portalStyle.left,
-            width: portalStyle.width,
-          }}
+          style={dropdownStyle}
         >
-          {/* Loading skeleton */}
+          {/* Loading */}
           {isLoading && (
             <div className="px-3 py-3 text-sm text-gray-400 flex items-center gap-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -189,12 +185,12 @@ export default function CustomerAutocomplete({
             </div>
           ))}
 
-          {/* No results (only when query is non-empty) */}
+          {/* No results */}
           {!isLoading && !isEmpty && results.length === 0 && (
             <div className="px-3 py-2 text-sm text-gray-400">Aucun client trouvé</div>
           )}
 
-          {/* Create new — only shown when there's a typed query */}
+          {/* Create new */}
           {onCreateNew && !isEmpty && (
             <div
               onMouseDown={(e) => { e.preventDefault(); handleCreateNew() }}
@@ -208,8 +204,7 @@ export default function CustomerAutocomplete({
               </span>
             </div>
           )}
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   )
