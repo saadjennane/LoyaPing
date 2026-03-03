@@ -195,9 +195,10 @@ async function sendViaVonage(msg: WhatsAppMessage) {
   }
 
   const credentials = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64')
-  // Vonage expects numbers without the leading + (both to and from)
-  const to   = msg.to.replace(/^\+/, '').replace(/\s+/g, '')
-  const from_ = from.replace(/^\+/, '').replace(/\s+/g, '')
+  // Vonage expects plain digits — strip whatsapp: prefix and leading +
+  const stripVonage = (n: string) => n.replace(/^whatsapp:/i, '').replace(/^\+/, '').replace(/\s+/g, '')
+  const to   = stripVonage(msg.to)
+  const from_ = stripVonage(from)
 
   const res = await fetch('https://api.nexmo.com/v1/messages', {
     method: 'POST',
