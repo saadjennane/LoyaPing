@@ -17,6 +17,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/jobs/order-reminders",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/jobs/dispatch-scheduled-messages",
       "schedule": "* * * * *"
     },
