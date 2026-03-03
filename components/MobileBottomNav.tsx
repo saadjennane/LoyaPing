@@ -136,8 +136,44 @@ export default function MobileBottomNav() {
   const moreIsActive = pathname.startsWith('/reviews') || pathname.startsWith('/settings') || pathname === '/onboarding'
   const moreBadge    = pendingCount
 
+  // Activity switcher — shown when both modules enabled AND on an activity page
+  const onActivity = pathname.startsWith('/orders') || pathname.startsWith('/appointments')
+  const showActivitySwitcher = onActivity && modules.orders_enabled && modules.appointments_enabled
+
   return (
     <>
+      {/* ── Activity switcher pill (floats above nav) ────────────────────── */}
+      <div
+        className={`lg:hidden fixed left-1/2 -translate-x-1/2 z-50 transition-all duration-200 ${
+          showActivitySwitcher
+            ? 'bottom-[68px] opacity-100 pointer-events-auto'
+            : 'bottom-[56px] opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="flex items-center gap-0.5 bg-background border border-border rounded-full shadow-md px-1 py-1">
+          <Link
+            href="/orders"
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 ${
+              pathname.startsWith('/orders')
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Commandes
+          </Link>
+          <Link
+            href="/appointments"
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 ${
+              pathname.startsWith('/appointments')
+                ? 'bg-violet-500 text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            RDV
+          </Link>
+        </div>
+      </div>
+
       {/* ── Bottom bar ───────────────────────────────────────────────────── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border">
         <div className="flex pb-safe">
