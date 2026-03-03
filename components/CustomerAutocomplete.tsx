@@ -167,6 +167,11 @@ export default function CustomerAutocomplete({
   // Solution: attach a native pointerdown listener directly to the portal div.
   // stopPropagation() prevents the event from reaching document, so Radix's
   // DismissableLayer never detects an "outside click" → dialog stays open.
+  //
+  // IMPORTANT: the portal only renders when BOTH showDropdown AND dropdownPos
+  // are truthy (dropdownPos is computed in useLayoutEffect after showDropdown
+  // becomes true). The effect must depend on dropdownPos so it re-runs once
+  // the portal is actually in the DOM and portalRef.current is set.
 
   useEffect(() => {
     const el = portalRef.current
@@ -196,9 +201,10 @@ export default function CustomerAutocomplete({
 
     el.addEventListener('pointerdown', handler)
     return () => el.removeEventListener('pointerdown', handler)
-  // Re-attach whenever the portal mounts (showDropdown toggles)
+  // dropdownPos (not showDropdown) is the right dep: the portal is only in the
+  // DOM after dropdownPos is set, so portalRef.current is only valid then.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDropdown])
+  }, [dropdownPos])
 
   // ── Render ───────────────────────────────────────────────────────────────
 
