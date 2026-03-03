@@ -19,7 +19,11 @@ function interpolate(template: string, reference: string): string {
 // GET /api/jobs/order-reminders?secret=CRON_SECRET
 // Run every minute via cron
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret')
+  const auth = req.headers.get('authorization')
+  const secret =
+    (auth?.startsWith('Bearer ') ? auth.slice(7) : null) ??
+    req.headers.get('x-cron-secret') ??
+    req.nextUrl.searchParams.get('secret')
   const expected = process.env.CRON_SECRET
   if (expected && secret !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

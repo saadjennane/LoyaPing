@@ -12,7 +12,11 @@ const COOLDOWN_DAYS = 30
 // GET /api/jobs/reviews — run hourly via cron
 // Sends review request to eligible clients + handles reminders
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret') ?? req.nextUrl.searchParams.get('secret')
+  const auth = req.headers.get('authorization')
+  const secret =
+    (auth?.startsWith('Bearer ') ? auth.slice(7) : null) ??
+    req.headers.get('x-cron-secret') ??
+    req.nextUrl.searchParams.get('secret')
   const expected = process.env.CRON_SECRET
   if (expected && secret !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
