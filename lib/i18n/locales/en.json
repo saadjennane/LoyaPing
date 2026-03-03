@@ -47,7 +47,7 @@
     "error": "Erreur : {{message}}"
   },
   "orders": {
-    "title": "Gestion des Commandes",
+    "title": "Commandes",
     "subtitle": "Pingez les clients en un clic pour les commandes en cours.",
     "newBtn": "Nouvelle commande",
     "noOrders": "Aucune commande",

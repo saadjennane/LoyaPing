@@ -842,7 +842,12 @@ export default function OrdersPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-foreground">{t('orders.title')}</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">{t('orders.subtitle')}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {pendingOrders.length > 0
+              ? <><span className="font-semibold text-foreground">{pendingOrders.length}</span> en cours</>
+              : 'Aucune commande en cours'
+            }
+          </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
