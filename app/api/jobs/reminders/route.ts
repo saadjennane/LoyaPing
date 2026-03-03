@@ -1,9 +1,25 @@
+/**
+ * PARTIALLY DEPRECATED — /api/jobs/reminders
+ *
+ * processDueReminders() has been REMOVED from this handler.
+ *
+ * Root cause of the removal:
+ *   - It read from the legacy reminder_configs table (deprecated since migration 024).
+ *   - Migration 032 added write-blocking triggers on reminder_sends.
+ *   - This caused deduplication to fail silently: sendWhatsAppMessage() fired,
+ *     the reminder_sends INSERT raised an exception, the catch swallowed the error,
+ *     and the next cron run re-sent the same message — every minute, indefinitely.
+ *
+ * Appointment reminders are now handled exclusively by the outbox pattern:
+ *   - Scheduled into scheduled_messages at appointment creation / reschedule.
+ *   - Dispatched by GET /api/jobs/dispatch-scheduled-messages (runs every minute).
+ *
+ * expireStaleRedemptionCodes() is retained here to avoid adding a new cron entry.
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
-import { processDueReminders } from '@/lib/services/reminders'
 import { expireStaleRedemptionCodes } from '@/lib/services/loyalty'
 
-// Called by cron (Vercel Cron, GitHub Actions, etc.) every minute
-// Protect with a shared secret
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   const secret =
@@ -17,18 +33,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [remindersResult] = await Promise.all([
-      processDueReminders(),
-      expireStaleRedemptionCodes(),
-    ])
+    await expireStaleRedemptionCodes()
 
     return NextResponse.json({
       ok: true,
-      reminders: remindersResult,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
-    console.error('[cron] error:', err)
+    console.error('[cron/reminders] error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
