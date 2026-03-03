@@ -47,6 +47,13 @@ function buildPrimaryItems(modules: {
       gradient: 'from-red-400 to-orange-400',
       isActive: (p) => p === '/',
     },
+    {
+      href: '/clients',
+      icon: Users,
+      label: 'Clients',
+      gradient: 'from-emerald-400 to-teal-500',
+      isActive: (p) => p.startsWith('/clients'),
+    },
   ]
 
   if (modules.orders_enabled || modules.appointments_enabled) {
@@ -59,14 +66,6 @@ function buildPrimaryItems(modules: {
       isActive: (p) => p.startsWith('/orders') || p.startsWith('/appointments'),
     })
   }
-
-  items.push({
-    href: '/clients',
-    icon: Users,
-    label: 'Clients',
-    gradient: 'from-emerald-400 to-teal-500',
-    isActive: (p) => p.startsWith('/clients'),
-  })
 
   if (modules.loyalty_enabled) {
     items.push({
@@ -185,18 +184,13 @@ export default function MobileBottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-w-0"
+                className="flex-1 flex items-center justify-center py-3 min-w-0"
               >
-                <div className={`w-9 h-9 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center transition-opacity duration-150 ${
+                <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center transition-opacity duration-150 ${
                   isActive ? 'opacity-100' : 'opacity-35'
                 }`}>
-                  <Icon className="h-[18px] w-[18px] text-white" strokeWidth={2} />
+                  <Icon className="h-5 w-5 text-white" strokeWidth={2} />
                 </div>
-                <span className={`text-[10px] leading-none font-medium truncate transition-colors ${
-                  isActive ? 'text-foreground' : 'text-muted-foreground'
-                }`}>
-                  {item.label}
-                </span>
               </Link>
             )
           })}
@@ -204,23 +198,18 @@ export default function MobileBottomNav() {
           {/* ── Plus ── */}
           <button
             onClick={() => setMoreOpen(true)}
-            className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-w-0"
+            className="flex-1 flex items-center justify-center py-3 min-w-0"
           >
-            <div className={`w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center transition-opacity duration-150 relative ${
+            <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center transition-opacity duration-150 relative ${
               moreIsActive ? 'opacity-100' : 'opacity-35'
             }`}>
-              <MoreHorizontal className="h-[18px] w-[18px] text-white" strokeWidth={2} />
+              <MoreHorizontal className="h-5 w-5 text-white" strokeWidth={2} />
               {moreBadge > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-red-500 text-white text-[9px] font-bold px-1 leading-none">
                   {moreBadge > 9 ? '9+' : moreBadge}
                 </span>
               )}
             </div>
-            <span className={`text-[10px] leading-none font-medium transition-colors ${
-              moreIsActive ? 'text-foreground' : 'text-muted-foreground'
-            }`}>
-              Plus
-            </span>
           </button>
 
         </div>
