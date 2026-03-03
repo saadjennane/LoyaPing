@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     if (msg) {
       // Non-blocking — don't await so we return 200 fast to Meta
-      handleIncomingMessage(msg.from).catch((err) =>
+      handleIncomingMessage(msg.from, msg.body, msg.buttonId).catch((err) =>
         console.error('[webhook] handleIncomingMessage error:', err)
       )
     }

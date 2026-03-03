@@ -855,6 +855,7 @@ export default function OrdersPage() {
           </DialogTrigger>
           <DialogContent
             aria-describedby={undefined}
+            className="max-h-[85dvh] overflow-y-auto"
             onInteractOutside={(e) => {
               if (document.querySelector('[data-autocomplete-portal]')) e.preventDefault()
             }}

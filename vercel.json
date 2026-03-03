@@ -19,6 +19,10 @@
     {
       "path": "/api/jobs/dispatch-scheduled-messages",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/jobs/reviews",
+      "schedule": "0 * * * *"
     }
   ]
 }

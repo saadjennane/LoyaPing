@@ -1,8 +1,18 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
+import { Reviews } from '@/lib/posthog/reviews'
 import type { Client, ClientPageData, LoyaltyProgram, LoyaltyTier, Coupon, Appointment, Order, PortalGlobalData, PortalBusinessData } from '@/lib/types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
+
+// Window in which a button reply is considered a review response
+const REVIEW_RESPONSE_WINDOW_DAYS = 7
+
+// Button IDs used in the review request interactive message
+export const REVIEW_BTN_POSITIVE = 'review_positive'
+export const REVIEW_BTN_NEGATIVE = 'review_negative'
 
 // =========================================
 // GET CLIENT PAGE DATA (magic link)
@@ -61,16 +71,14 @@ export async function updateClientPhone(clientId: string, newPhone: string): Pro
 
 // =========================================
 // HANDLE INCOMING WHATSAPP MESSAGE
-// Auto-reply with magic link if program active
+// 1. If client has a pending review request → handle review response
+// 2. Otherwise → auto-reply with magic link if loyalty program active
 // =========================================
-export async function handleIncomingMessage(fromPhone: string): Promise<void> {
+export async function handleIncomingMessage(fromPhone: string, messageBody = '', buttonId?: string): Promise<void> {
   const db = createServerClient()
 
-  // Normalize phone (strip spaces)
   const phone = fromPhone.replace(/\s+/g, '')
 
-  // Find client by phone across all businesses
-  // For Phase 1: single universal number — find which business they belong to
   const { data: clients } = await db
     .from('clients')
     .select('*, business:businesses(*)')
@@ -78,8 +86,110 @@ export async function handleIncomingMessage(fromPhone: string): Promise<void> {
 
   if (!clients || clients.length === 0) return
 
-  for (const client of clients as (Client & { business: { id: string; name: string } })[]) {
-    // Check if business has active loyalty program
+  for (const client of clients as (Client & {
+    business: { id: string; name: string }
+    last_review_request_at?: string | null
+    review_intent?: boolean | null
+  })[]) {
+
+    // ── Review response handling ───────────────────────────────────────
+    const responseWindowMs = REVIEW_RESPONSE_WINDOW_DAYS * 86_400_000
+    const requestedAt = client.last_review_request_at
+      ? new Date(client.last_review_request_at).getTime()
+      : null
+
+    // Only handle button replies for reviews (not free text)
+    const sentiment: 'positive' | 'negative' | null =
+      buttonId === REVIEW_BTN_POSITIVE ? 'positive' :
+      buttonId === REVIEW_BTN_NEGATIVE ? 'negative' :
+      null
+
+    const hasPendingRequest =
+      requestedAt !== null &&
+      !client.review_intent &&
+      Date.now() - requestedAt <= responseWindowMs
+
+    if (hasPendingRequest && sentiment) {
+
+      if (sentiment === 'positive') {
+        // Fetch review settings for the business
+        const { data: reviewSettings } = await db
+          .from('review_settings')
+          .select('positive_message, google_review_link, is_active')
+          .eq('business_id', client.business_id)
+          .maybeSingle()
+
+        if (reviewSettings?.is_active) {
+          let replyText = reviewSettings.positive_message ??
+            'Super ! Vous pouvez nous laisser un avis ici 🙏'
+          if (reviewSettings.google_review_link) {
+            replyText += `\n${reviewSettings.google_review_link}`
+          }
+
+          await sendWhatsAppMessage({ to: phone, text: replyText }).catch((err) =>
+            console.error('[clients] review positive reply error:', err)
+          )
+
+          // Mark client as satisfied
+          await db.from('clients').update({ review_intent: true }).eq('id', client.id)
+
+          // Record events
+          const { data: posEvent } = await db.from('reviews_events').insert({
+            business_id: client.business_id,
+            client_id: client.id,
+            type: 'positive_response',
+            message_content: messageBody,
+          }).select().single()
+
+          if (reviewSettings.google_review_link && posEvent) {
+            await db.from('reviews_events').insert({
+              business_id: client.business_id,
+              client_id: client.id,
+              type: 'google_intent',
+            })
+            Reviews.redirectToGoogle({ client_id: client.id })
+          }
+
+          Reviews.positiveClicked({ client_id: client.id })
+          continue // handled — don't send magic link
+        }
+      }
+
+      if (sentiment === 'negative') {
+        const { data: reviewSettings } = await db
+          .from('review_settings')
+          .select('negative_message, is_active')
+          .eq('business_id', client.business_id)
+          .maybeSingle()
+
+        if (reviewSettings?.is_active) {
+          const replyText = reviewSettings.negative_message ??
+            'Merci pour votre retour. Nous allons y remédier rapidement !'
+
+          await sendWhatsAppMessage({ to: phone, text: replyText }).catch((err) =>
+            console.error('[clients] review negative reply error:', err)
+          )
+
+          const { data: negEvent } = await db.from('reviews_events').insert({
+            business_id: client.business_id,
+            client_id: client.id,
+            type: 'negative_response',
+            message_content: messageBody,
+          }).select().single()
+
+          if (negEvent) {
+            createAndNotifyUrgentEvent('negative_review', negEvent.id, client.business_id).catch(
+              (e) => console.error('[clients] urgent notification error:', e)
+            )
+          }
+
+          Reviews.negativeClicked({ client_id: client.id })
+          continue // handled — don't send magic link
+        }
+      }
+    }
+
+    // ── Fallback: magic link (loyalty portal) ─────────────────────────
     const { data: program } = await db
       .from('loyalty_programs')
       .select('id')
@@ -87,7 +197,7 @@ export async function handleIncomingMessage(fromPhone: string): Promise<void> {
       .eq('is_active', true)
       .maybeSingle()
 
-    if (!program) continue // No active program → no reply
+    if (!program) continue
 
     const magicLink = `${BASE_URL}/u/${client.magic_token}`
     const message =
