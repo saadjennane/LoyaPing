@@ -29,6 +29,7 @@ type PrimaryItem = {
   href: string
   icon: React.ElementType
   label: string
+  gradient: string
   isActive: (p: string) => boolean
 }
 
@@ -43,6 +44,7 @@ function buildPrimaryItems(modules: {
       href: '/',
       icon: Home,
       label: 'Accueil',
+      gradient: 'from-red-400 to-orange-400',
       isActive: (p) => p === '/',
     },
   ]
@@ -53,6 +55,7 @@ function buildPrimaryItems(modules: {
       href: activityHref,
       icon: Activity,
       label: 'Activité',
+      gradient: 'from-blue-400 to-cyan-500',
       isActive: (p) => p.startsWith('/orders') || p.startsWith('/appointments'),
     })
   }
@@ -61,6 +64,7 @@ function buildPrimaryItems(modules: {
     href: '/clients',
     icon: Users,
     label: 'Clients',
+    gradient: 'from-emerald-400 to-teal-500',
     isActive: (p) => p.startsWith('/clients'),
   })
 
@@ -69,6 +73,7 @@ function buildPrimaryItems(modules: {
       href: '/coupons',
       icon: Gift,
       label: 'Fidélité',
+      gradient: 'from-fuchsia-400 to-pink-500',
       isActive: (p) => p.startsWith('/coupons'),
     })
   }
@@ -82,6 +87,7 @@ type MoreItem = {
   href: string
   icon: React.ElementType
   label: string
+  gradient: string
   badge?: number
 }
 
@@ -91,11 +97,27 @@ function buildMoreItems(modules: {
   const items: MoreItem[] = []
 
   if (modules.reviews_enabled) {
-    items.push({ href: '/reviews', icon: Star, label: 'Avis clients', badge: pendingCount })
+    items.push({
+      href: '/reviews',
+      icon: Star,
+      label: 'Avis clients',
+      gradient: 'from-amber-400 to-yellow-500',
+      badge: pendingCount,
+    })
   }
 
-  items.push({ href: '/settings', icon: Settings2, label: 'Paramètres' })
-  items.push({ href: '/onboarding', icon: BookOpen, label: 'Tutoriel' })
+  items.push({
+    href: '/settings',
+    icon: Settings2,
+    label: 'Paramètres',
+    gradient: 'from-slate-400 to-slate-600',
+  })
+  items.push({
+    href: '/onboarding',
+    icon: BookOpen,
+    label: 'Tutoriel',
+    gradient: 'from-violet-400 to-purple-500',
+  })
 
   return items
 }
@@ -103,9 +125,9 @@ function buildMoreItems(modules: {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MobileBottomNav() {
-  const { modules }     = useModules()
+  const { modules }      = useModules()
   const { pendingCount } = useUrgentCount()
-  const pathname        = usePathname()
+  const pathname         = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
 
   const primaryItems = buildPrimaryItems(modules)
@@ -129,16 +151,13 @@ export default function MobileBottomNav() {
                 href={item.href}
                 className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-w-0"
               >
-                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all duration-150 ${
-                  isActive ? 'bg-[#3B5BDB]/10' : ''
+                <div className={`w-9 h-9 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center transition-opacity duration-150 ${
+                  isActive ? 'opacity-100' : 'opacity-35'
                 }`}>
-                  <Icon
-                    className={`h-5 w-5 transition-colors ${isActive ? 'text-[#3B5BDB]' : 'text-muted-foreground'}`}
-                    strokeWidth={isActive ? 2.5 : 2}
-                  />
+                  <Icon className="h-[18px] w-[18px] text-white" strokeWidth={2} />
                 </div>
                 <span className={`text-[10px] leading-none font-medium truncate transition-colors ${
-                  isActive ? 'text-[#3B5BDB]' : 'text-muted-foreground'
+                  isActive ? 'text-foreground' : 'text-muted-foreground'
                 }`}>
                   {item.label}
                 </span>
@@ -151,21 +170,18 @@ export default function MobileBottomNav() {
             onClick={() => setMoreOpen(true)}
             className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 min-w-0"
           >
-            <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all duration-150 relative ${
-              moreIsActive ? 'bg-[#3B5BDB]/10' : ''
+            <div className={`w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center transition-opacity duration-150 relative ${
+              moreIsActive ? 'opacity-100' : 'opacity-35'
             }`}>
-              <MoreHorizontal
-                className={`h-5 w-5 ${moreIsActive ? 'text-[#3B5BDB]' : 'text-muted-foreground'}`}
-                strokeWidth={moreIsActive ? 2.5 : 2}
-              />
+              <MoreHorizontal className="h-[18px] w-[18px] text-white" strokeWidth={2} />
               {moreBadge > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-red-500 text-white text-[9px] font-bold px-1 leading-none">
                   {moreBadge > 9 ? '9+' : moreBadge}
                 </span>
               )}
             </div>
-            <span className={`text-[10px] leading-none font-medium ${
-              moreIsActive ? 'text-[#3B5BDB]' : 'text-muted-foreground'
+            <span className={`text-[10px] leading-none font-medium transition-colors ${
+              moreIsActive ? 'text-foreground' : 'text-muted-foreground'
             }`}>
               Plus
             </span>
@@ -195,18 +211,15 @@ export default function MobileBottomNav() {
                   href={item.href}
                   onClick={() => setMoreOpen(false)}
                   className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
-                    isActive ? 'bg-[#3B5BDB]/8 text-[#3B5BDB]' : 'text-foreground hover:bg-muted/60'
+                    isActive ? 'bg-muted' : 'hover:bg-muted/60'
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    isActive ? 'bg-[#3B5BDB]/12' : 'bg-muted'
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center shrink-0 transition-opacity ${
+                    isActive ? 'opacity-100' : 'opacity-70'
                   }`}>
-                    <Icon
-                      className={`h-[18px] w-[18px] ${isActive ? 'text-[#3B5BDB]' : 'text-muted-foreground'}`}
-                      strokeWidth={2}
-                    />
+                    <Icon className="h-[18px] w-[18px] text-white" strokeWidth={2} />
                   </div>
-                  <span className="flex-1 text-sm font-medium">{item.label}</span>
+                  <span className="flex-1 text-sm font-medium text-foreground">{item.label}</span>
                   {item.badge != null && item.badge > 0 && (
                     <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-red-500 text-white text-[11px] font-bold px-1.5">
                       {item.badge > 9 ? '9+' : item.badge}
