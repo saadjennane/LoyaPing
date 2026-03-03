@@ -239,6 +239,7 @@ export default function CustomerAutocomplete({
           style={{
             position: 'fixed',
             zIndex: 9999,
+            pointerEvents: 'auto',
             top: dropdownPos.top,
             left: dropdownPos.left,
             width: dropdownPos.width,
