@@ -31,7 +31,13 @@ export default function CustomerAutocomplete({
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
   const wrapperRef  = useRef<HTMLDivElement>(null)
+  const portalRef   = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Keep latest handlers in refs so the native listener always sees fresh values
+  const resultsRef      = useRef(results)
+  const handleSelectRef = useRef<(item: CustomerIndexItem) => void>(() => {})
+  const handleCreateRef = useRef<() => void>(() => {})
 
   // ── Search ───────────────────────────────────────────────────────────────
 
@@ -59,18 +65,23 @@ export default function CustomerAutocomplete({
 
   // ── Selection ────────────────────────────────────────────────────────────
 
-  const handleSelect = (item: CustomerIndexItem) => {
+  const handleSelect = useCallback((item: CustomerIndexItem) => {
     setQuery('')
     setOpen(false)
     onSelect(item.id, item)
-  }
+  }, [onSelect])
 
-  const handleCreateNew = () => {
+  const handleCreateNew = useCallback(() => {
     const trimmed = query.trim()
     const isPhone = /^\+?[\d\s().-]+$/.test(trimmed) && trimmed.replace(/\D/g, '').length >= 5
     setOpen(false)
     onCreateNew?.(isPhone ? trimmed : undefined)
-  }
+  }, [query, onCreateNew])
+
+  // Keep refs in sync so the native pointerdown listener below always sees latest values
+  useEffect(() => { resultsRef.current      = results      }, [results])
+  useEffect(() => { handleSelectRef.current = handleSelect }, [handleSelect])
+  useEffect(() => { handleCreateRef.current = handleCreateNew }, [handleCreateNew])
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
 
@@ -105,7 +116,10 @@ export default function CustomerAutocomplete({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      if (
+        wrapperRef.current && !wrapperRef.current.contains(e.target as Node) &&
+        portalRef.current  && !portalRef.current.contains(e.target as Node)
+      ) {
         setOpen(false)
       }
     }
@@ -114,13 +128,6 @@ export default function CustomerAutocomplete({
   }, [])
 
   // ── Dropdown position ─────────────────────────────────────────────────────
-  // Portal to document.body so position:fixed is always relative to the viewport
-  // (position:fixed inside a CSS-transformed ancestor — like Radix Dialog — would
-  //  be positioned relative to that ancestor instead of the viewport).
-  // useLayoutEffect reads the rect AFTER DOM commit → correct coordinates.
-  // To prevent Radix's DismissableLayer from closing the dialog when clicking the
-  // portal dropdown, add onInteractOutside to DialogContent and call e.preventDefault()
-  // when e.target is inside [data-autocomplete-portal].
 
   const isLoading    = status === 'loading'
   const isEmpty      = query.trim() === ''
@@ -136,9 +143,6 @@ export default function CustomerAutocomplete({
     const update = () => {
       if (!wrapperRef.current) return
       const rect = wrapperRef.current.getBoundingClientRect()
-      // On iOS Safari, position:fixed is relative to the layout viewport while
-      // getBoundingClientRect() is relative to the visual viewport (above the keyboard).
-      // visualViewport.offsetTop bridges the gap when the soft keyboard is open.
       const vvTop  = window.visualViewport?.offsetTop  ?? 0
       const vvLeft = window.visualViewport?.offsetLeft ?? 0
       setDropdownPos({
@@ -155,6 +159,45 @@ export default function CustomerAutocomplete({
       window.visualViewport?.removeEventListener('resize', update)
       window.visualViewport?.removeEventListener('scroll', update)
     }
+  }, [showDropdown])
+
+  // ── Native pointerdown on portal ─────────────────────────────────────────
+  // React 18 synthetic events (onMouseDown etc.) don't fire on elements
+  // portaled to document.body (outside the React root container).
+  // Solution: attach a native pointerdown listener directly to the portal div.
+  // stopPropagation() prevents the event from reaching document, so Radix's
+  // DismissableLayer never detects an "outside click" → dialog stays open.
+
+  useEffect(() => {
+    const el = portalRef.current
+    if (!el) return
+
+    const handler = (e: PointerEvent) => {
+      // Prevent bubbling to document (where Radix listens for outside clicks)
+      e.stopPropagation()
+      e.preventDefault()
+
+      const target = e.target as Element | null
+
+      // Result item click
+      const itemEl = target?.closest('[data-item-id]')
+      if (itemEl) {
+        const id   = itemEl.getAttribute('data-item-id')
+        const item = resultsRef.current.find((r) => r.id === id)
+        if (item) handleSelectRef.current(item)
+        return
+      }
+
+      // Create-new button click
+      if (target?.closest('[data-create-btn]')) {
+        handleCreateRef.current()
+      }
+    }
+
+    el.addEventListener('pointerdown', handler)
+    return () => el.removeEventListener('pointerdown', handler)
+  // Re-attach whenever the portal mounts (showDropdown toggles)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showDropdown])
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -180,9 +223,11 @@ export default function CustomerAutocomplete({
         />
       </div>
 
-      {/* Dropdown — portaled to document.body (no transform ancestor) */}
+      {/* Dropdown — portaled to document.body (escapes Radix transform ancestor).
+          Interaction handled via native pointerdown listener (see above). */}
       {showDropdown && dropdownPos && createPortal(
         <div
+          ref={portalRef}
           data-autocomplete-portal="true"
           className="bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
           style={{
@@ -205,7 +250,7 @@ export default function CustomerAutocomplete({
           {results.map((item, i) => (
             <div
               key={item.id}
-              onMouseDown={(e) => { e.preventDefault(); handleSelect(item) }}
+              data-item-id={item.id}
               className={`px-3 py-2.5 cursor-pointer flex flex-col gap-0.5 transition-colors ${
                 i === activeIdx ? 'bg-indigo-50' : 'hover:bg-gray-50'
               }`}
@@ -225,7 +270,7 @@ export default function CustomerAutocomplete({
           {/* Create new */}
           {onCreateNew && !isEmpty && (
             <div
-              onMouseDown={(e) => { e.preventDefault(); handleCreateNew() }}
+              data-create-btn="true"
               className={`px-3 py-2.5 cursor-pointer flex items-center gap-2 border-t transition-colors ${
                 activeIdx === results.length ? 'bg-blue-50' : 'hover:bg-blue-50'
               }`}
