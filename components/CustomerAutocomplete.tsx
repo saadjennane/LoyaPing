@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, UserPlus, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
@@ -27,9 +28,11 @@ export default function CustomerAutocomplete({
   const [results, setResults]     = useState<CustomerIndexItem[]>([])
   const [open, setOpen]           = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
-  const wrapperRef  = useRef<HTMLDivElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapperRef      = useRef<HTMLDivElement>(null)
+  const portalTargetRef = useRef<HTMLDivElement>(null)
+  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Search ───────────────────────────────────────────────────────────────
 
@@ -111,31 +114,38 @@ export default function CustomerAutocomplete({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Dropdown position — computed synchronously from ref (no portal) ───────
-  // position:fixed lets the dropdown escape any overflow:hidden/auto ancestor
-  // without needing createPortal (which caused Radix Dialog to dismiss on click).
+  // ── Dropdown visibility ───────────────────────────────────────────────────
 
   const isLoading    = status === 'loading'
   const isEmpty      = query.trim() === ''
   const hasContent   = isLoading || results.length > 0 || (!isEmpty && !!onCreateNew)
   const showDropdown = open && hasContent
 
-  let dropdownStyle: React.CSSProperties | null = null
-  if (showDropdown && wrapperRef.current) {
-    const rect = wrapperRef.current.getBoundingClientRect()
-    dropdownStyle = {
-      position: 'fixed',
-      zIndex: 9999,
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
+  // Compute position AFTER DOM paint so getBoundingClientRect() is accurate.
+  // useLayoutEffect fires synchronously after DOM mutations, before browser paint.
+  // We portal into portalTargetRef (inside the Dialog's DOM subtree) so Radix
+  // does NOT interpret clicks as "outside" — which previously caused the dialog
+  // to dismiss and reset the step before the selection was processed.
+  useLayoutEffect(() => {
+    if (showDropdown && wrapperRef.current) {
+      const rect = wrapperRef.current.getBoundingClientRect()
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    } else {
+      setDropdownPos(null)
     }
-  }
+  }, [showDropdown])
 
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div ref={wrapperRef} className="relative">
+      {/*
+        Hidden portal mount point — rendered inside the Dialog's DOM subtree.
+        The dropdown is portaled here so Radix's DismissableLayer sees it as
+        "inside" the dialog (contains() → true) and won't fire onInteractOutside.
+      */}
+      <div ref={portalTargetRef} />
+
       {/* Input */}
       <div className="relative">
         {isLoading ? (
@@ -155,11 +165,17 @@ export default function CustomerAutocomplete({
         />
       </div>
 
-      {/* Dropdown — position:fixed, no portal (avoids Radix Dialog dismiss on click) */}
-      {showDropdown && dropdownStyle && (
+      {/* Dropdown — portaled into the mount point, position:fixed for overflow escape */}
+      {showDropdown && dropdownPos && portalTargetRef.current && createPortal(
         <div
           className="bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
-          style={dropdownStyle}
+          style={{
+            position: 'fixed',
+            zIndex: 9999,
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+          }}
         >
           {/* Loading */}
           {isLoading && (
@@ -204,7 +220,8 @@ export default function CustomerAutocomplete({
               </span>
             </div>
           )}
-        </div>
+        </div>,
+        portalTargetRef.current,
       )}
     </div>
   )
