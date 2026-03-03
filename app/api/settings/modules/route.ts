@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { Analytics, type ModuleName } from '@/lib/posthog/analytics'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -42,6 +43,14 @@ export async function PATCH(req: NextRequest) {
     }
 
     const db = createServerClient()
+
+    // Fetch current state to detect newly enabled modules
+    const { data: current } = await db
+      .from('business_modules')
+      .select('orders_enabled, appointments_enabled, loyalty_enabled, reviews_enabled')
+      .eq('business_id', DEFAULT_BUSINESS_ID)
+      .maybeSingle()
+
     const { data, error } = await db
       .from('business_modules')
       .upsert({
@@ -56,6 +65,19 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error) throw error
+
+    // Fire module_enabled for each module that was just switched on
+    type ModuleKey = 'orders_enabled' | 'appointments_enabled' | 'loyalty_enabled' | 'reviews_enabled'
+    const checks: Array<{ key: ModuleKey; name: ModuleName; next: unknown }> = [
+      { key: 'orders_enabled',       name: 'orders',       next: orders_enabled },
+      { key: 'appointments_enabled', name: 'appointments', next: appointments_enabled },
+      { key: 'loyalty_enabled',      name: 'loyalty',      next: loyalty_enabled },
+      { key: 'reviews_enabled',      name: 'reviews',      next: reviews_enabled },
+    ]
+    for (const { key, name, next } of checks) {
+      if (next && !current?.[key]) Analytics.moduleEnabled(name)
+    }
+
     return NextResponse.json({ data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

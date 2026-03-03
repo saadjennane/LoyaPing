@@ -18,6 +18,8 @@ export async function sendWhatsAppMessage(msg: WhatsAppMessage): Promise<{ succe
       return sendViaCloudApi(msg)
     case 'twilio':
       return sendViaTwilio(msg)
+    case 'vonage':
+      return sendViaVonage(msg)
     case 'mock':
       return sendViaMock(msg)
     default:
@@ -105,6 +107,50 @@ async function sendViaTwilio(msg: WhatsAppMessage) {
   }
 
   return { success: true, messageId: data?.sid as string | undefined }
+}
+
+// =========================================
+// VONAGE MESSAGES API
+// Env vars: VONAGE_API_KEY, VONAGE_API_SECRET, VONAGE_WHATSAPP_FROM (number without +)
+// =========================================
+async function sendViaVonage(msg: WhatsAppMessage) {
+  const apiKey    = process.env.VONAGE_API_KEY
+  const apiSecret = process.env.VONAGE_API_SECRET
+  const from      = process.env.VONAGE_WHATSAPP_FROM
+
+  if (!apiKey || !apiSecret || !from) {
+    throw new Error('Missing VONAGE_API_KEY, VONAGE_API_SECRET or VONAGE_WHATSAPP_FROM')
+  }
+
+  const credentials = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64')
+  // Vonage expects numbers without the leading +
+  const to = msg.to.replace(/^\+/, '').replace(/\s+/g, '')
+
+  const res = await fetch('https://api.nexmo.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      Authorization:  `Basic ${credentials}`,
+      'Content-Type': 'application/json',
+      Accept:         'application/json',
+    },
+    body: JSON.stringify({
+      channel:      'whatsapp',
+      message_type: 'text',
+      to,
+      from,
+      text: msg.text,
+    }),
+  })
+
+  const data = await res.json()
+
+  if (!res.ok) {
+    const errMsg = data?.title ?? data?.detail ?? `HTTP ${res.status}`
+    console.error('[WhatsApp] Vonage error:', data)
+    throw new Error(`Vonage error: ${errMsg}`)
+  }
+
+  return { success: true, messageId: data?.message_uuid as string | undefined }
 }
 
 // =========================================

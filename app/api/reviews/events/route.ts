@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
+import { Reviews } from '@/lib/posthog/reviews'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -66,6 +67,22 @@ export async function POST(req: NextRequest) {
       createAndNotifyUrgentEvent('negative_review', data.id, DEFAULT_BUSINESS_ID).catch((e) => {
         console.error('[reviews] Urgent notification failed:', e)
       })
+    }
+
+    // Analytics
+    const clientPayload = { client_id: client_id ?? 'unknown' }
+    if (type === 'request_sent') {
+      Reviews.requestSent({
+        client_id:                       client_id ?? 'unknown',
+        related_order_or_appointment_id: body.related_id ?? null,
+        estimated_message_cost:          null,
+      })
+    } else if (type === 'positive_response') {
+      Reviews.positiveClicked(clientPayload)
+    } else if (type === 'negative_response') {
+      Reviews.negativeClicked(clientPayload)
+    } else if (type === 'google_intent') {
+      Reviews.redirectToGoogle(clientPayload)
     }
 
     return NextResponse.json({ data })

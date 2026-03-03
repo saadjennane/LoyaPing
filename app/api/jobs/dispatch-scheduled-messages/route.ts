@@ -25,6 +25,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
 import { claimDueMessages, markSent, markFailed } from '@/lib/services/outbox'
+import { Appointments } from '@/lib/posthog/appointments'
 
 // Messages per cron invocation. Keep small to stay within Vercel's
 // 10-second function timeout on the Hobby plan.
@@ -68,6 +69,20 @@ export async function GET(req: NextRequest) {
         })
 
         await markSent(msg.id, claimToken)
+
+        // Analytics — appointment reminder sent
+        if (msg.entity_type === 'appointment') {
+          const match = msg.message_type.match(/appointment_reminder_(\d+)/)
+          const num = match ? parseInt(match[1], 10) : null
+          if (num === 1 || num === 2 || num === 3) {
+            Appointments.reminderSent({
+              appointment_id:                msg.entity_id,
+              reminder_number:               num,
+              time_before_appointment_hours: null,
+              estimated_message_cost:        null,
+            })
+          }
+        }
 
         console.log(
           `[dispatch] SENT ${msg.id} (${msg.entity_type}/${msg.message_type})`,

@@ -14,6 +14,7 @@ import { useI18n } from '@/lib/i18n/provider'
 import { WORLD_CURRENCIES, WORLD_CURRENCY_CODES } from '@/lib/currencies'
 import TimezoneSelect from '@/components/TimezoneSelect'
 import { DEFAULT_TIMEZONE } from '@/lib/data/timezones'
+import { INDUSTRIES } from '@/lib/constants/industries'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const DAY_NAMES = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -126,6 +127,7 @@ export default function OrganizationPage() {
     timezone: DEFAULT_TIMEZONE,
     urgent_notify_reschedule: false, urgent_notify_negative_review: false,
     urgent_whatsapp_number_1: null, urgent_whatsapp_number_2: null,
+    industry: null,
   })
   const [phonePrefix, setPhonePrefix]   = useState('+33')
   const [phoneNumber, setPhoneNumber]   = useState('')
@@ -174,6 +176,7 @@ export default function OrganizationPage() {
         urgent_notify_negative_review: p.urgent_notify_negative_review ?? false,
         urgent_whatsapp_number_1:      p.urgent_whatsapp_number_1      ?? null,
         urgent_whatsapp_number_2:      p.urgent_whatsapp_number_2      ?? null,
+        industry:                      p.industry                      ?? null,
       })
       if (!isPreset) setCurrencyCustom(p.currency)
       const split = splitPhonePrefix(p.phone)
@@ -274,6 +277,7 @@ export default function OrganizationPage() {
           instagram_url: profile.instagram_url, tiktok_url: profile.tiktok_url,
           facebook_url: profile.facebook_url, youtube_url: profile.youtube_url,
           timezone: profile.timezone,
+          industry: profile.industry,
         }),
       }).then((r) => r.json()),
       fetch('/api/settings/hours', {
@@ -384,6 +388,24 @@ export default function OrganizationPage() {
                 value={profile.timezone}
                 onChange={(tz) => setProfile((p) => ({ ...p, timezone: tz }))}
               />
+            </div>
+
+            {/* Secteur d'activité */}
+            <div className="space-y-2">
+              <Label>Secteur d&apos;activité</Label>
+              <Select
+                value={profile.industry ?? ''}
+                onValueChange={(v) => setProfile((p) => ({ ...p, industry: v || null }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sélectionnez votre secteur…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDUSTRIES.map(({ value, label, emoji }) => (
+                    <SelectItem key={value} value={value}>{emoji} {label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
           </CardContent>

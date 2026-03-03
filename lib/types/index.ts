@@ -306,6 +306,8 @@ export type BusinessProfile = {
   urgent_notify_negative_review: boolean
   urgent_whatsapp_number_1:      string | null
   urgent_whatsapp_number_2:      string | null
+  // Analytics
+  industry:                      string | null
 }
 
 export type UrgentEventType = 'reschedule' | 'negative_review'

@@ -3,6 +3,7 @@ import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
 import type { Client, LoyaltyProgram, LoyaltyTier, Coupon, PointsLog } from '@/lib/types'
 import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { Loyalty } from '@/lib/posthog/loyalty'
 
 // =========================================
 // CREDIT POINTS TO CLIENT
@@ -107,6 +108,24 @@ export async function creditPoints({
     cycle_points_before: cycleBefore,
     cycle_points_after: cyclePoints,
   })
+
+  // Analytics — points credited
+  Loyalty.pointsAdded({
+    client_id:    clientId,
+    mode:         program.type,
+    points_added: points,
+    order_amount: null,
+    source_type:  sourceType,
+  })
+
+  // Analytics — reward unlocked (one event per tier crossed)
+  for (const coupon of generatedCoupons) {
+    Loyalty.rewardUnlocked({
+      client_id:        clientId,
+      reward_id:        coupon.id,
+      points_at_unlock: cycleBefore + points,
+    })
+  }
 
   // Send tier-reached WhatsApp notifications (best-effort)
   // TODO: fetch client phone once from clientRes when notify_on_tier is wired to send at coupon creation time

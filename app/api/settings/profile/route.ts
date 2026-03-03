@@ -55,7 +55,7 @@ export async function PATCH(req: NextRequest) {
       address, primary_color, secondary_color, default_phone_prefix,
       google_maps_url, waze_url,
       instagram_url, tiktok_url, facebook_url, youtube_url,
-      timezone,
+      timezone, industry,
     } = body
 
     if (!name?.trim()) {
@@ -98,6 +98,7 @@ export async function PATCH(req: NextRequest) {
       facebook_url:    facebook_url?.trim()        || null,
       youtube_url:     youtube_url?.trim()         || null,
       timezone:        tz,
+      industry:        industry?.trim() || null,
       updated_at:   new Date().toISOString(),
     }
 

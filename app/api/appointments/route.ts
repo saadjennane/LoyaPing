@@ -4,6 +4,7 @@ import { getUpcomingAppointments, getAllAppointments } from '@/lib/services/appo
 import { scheduleRemindersForAppointment } from '@/lib/services/appointment-reminders'
 import { pushAppointmentToGoogle } from '@/lib/services/google-calendar-sync'
 import { pushAppointmentToMicrosoft } from '@/lib/services/microsoft-calendar-sync'
+import { Appointments } from '@/lib/posthog/appointments'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -58,6 +59,8 @@ export async function POST(req: NextRequest) {
     pushAppointmentToMicrosoft(data.id, DEFAULT_BUSINESS_ID).catch((e) => {
       console.error('[appointments] Microsoft push failed:', e)
     })
+
+    Appointments.created({ appointment_id: data.id, has_client: !!client_id })
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (err) {

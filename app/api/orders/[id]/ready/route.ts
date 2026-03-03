@@ -22,6 +22,7 @@ import {
   cancelExistingScheduledForEntity,
   createScheduledMessage,
 } from '@/lib/services/outbox'
+import { Orders } from '@/lib/posthog/orders'
 
 const DEFAULT_BUSINESS_ID =
   process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
@@ -109,6 +110,9 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       body,
       sendAt,
     })
+
+    Orders.orderReadyMarked({ order_id: orderId })
+    Orders.notificationSent({ order_id: orderId, reminder_number: 0, message_type: 'ready' })
 
     return NextResponse.json({
       data: {

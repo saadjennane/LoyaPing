@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { markOrderPickedUp, downgradeReadyToPending, downgradeCompletedToReady } from '@/lib/services/orders'
 import { createServerClient } from '@/lib/supabase/server'
-import { capture } from '@/lib/posthog/server'
+import { Orders } from '@/lib/posthog/orders'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -44,7 +44,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // 'picked_up' kept for compat — both route to markOrderPickedUp which sets status='completed'
     if (status === 'picked_up' || status === 'completed') {
       const result = await markOrderPickedUp(id)
-      capture('order_picked_up')
+      const readyAt = (result as unknown as Record<string, unknown>).ready_at as string | null
+      const timeToCollect = readyAt
+        ? Math.round((Date.now() - new Date(readyAt).getTime()) / 60_000)
+        : null
+      const remindersCount = (result as unknown as Record<string, unknown>).reminders_count as number ?? 0
+      Orders.orderCollected({
+        order_id:                 id,
+        time_to_collect_minutes:  timeToCollect,
+        total_messages_sent:      remindersCount + (readyAt ? 1 : 0),
+        collected_after_reminder: remindersCount > 0,
+      })
       return NextResponse.json({ data: result })
     }
 

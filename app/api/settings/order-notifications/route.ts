@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { Analytics } from '@/lib/posthog/analytics'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -67,6 +68,13 @@ export async function PATCH(req: NextRequest) {
       .single()
 
     if (error) throw error
+
+    const reminders_configured =
+      (Boolean(body.reminder1_enabled) ? 1 : 0) +
+      (Boolean(body.reminder2_enabled) ? 1 : 0) +
+      (Boolean(body.reminder3_enabled) ? 1 : 0)
+    Analytics.ordersReminderSettingsUpdated({ reminders_configured })
+
     return NextResponse.json({ data })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })

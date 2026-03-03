@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { markAppointmentShow, markNoShow } from '@/lib/services/appointments'
 import { createServerClient } from '@/lib/supabase/server'
+import { Appointments } from '@/lib/posthog/appointments'
 import { cancelPendingReminders, scheduleRemindersForAppointment } from '@/lib/services/appointment-reminders'
 import { pushAppointmentToGoogle, deleteGoogleEvent } from '@/lib/services/google-calendar-sync'
 import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services/microsoft-calendar-sync'
@@ -77,11 +78,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     if (status === 'show') {
       const result = await markAppointmentShow(id, amount ?? undefined)
+      const appt = result as unknown as Record<string, unknown>
+      const scheduledAt = appt.scheduled_at as string | null
+      const timeToCompletion = scheduledAt
+        ? Math.round((Date.now() - new Date(scheduledAt).getTime()) / 60_000)
+        : null
+      const remindersCount = (appt.reminders_count as number | null) ?? 0
+      Appointments.markedCompleted({
+        appointment_id:             id,
+        completed_after_reminder:   remindersCount,
+        time_to_completion_minutes: timeToCompletion,
+      })
       return NextResponse.json({ data: result })
     }
 
     if (status === 'no_show') {
       await markNoShow(id)
+      Appointments.markedNoShow({ appointment_id: id, completed_after_reminder: 0 })
       return NextResponse.json({ data: { id, status: 'no_show' } })
     }
 

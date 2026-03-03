@@ -13,6 +13,7 @@ import PhoneInput from '@/components/PhoneInput'
 import { WORLD_CURRENCIES } from '@/lib/currencies'
 import { PHONE_PREFIXES } from '@/lib/constants/phone-prefixes'
 import { detectBrowserTimezone, DEFAULT_TIMEZONE } from '@/lib/data/timezones'
+import { INDUSTRIES } from '@/lib/constants/industries'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -240,6 +241,7 @@ export default function OnboardingStep1() {
   const router = useRouter()
 
   const [name,          setName]          = useState('')
+  const [industry,      setIndustry]      = useState('')
   const [currency,      setCurrency]      = useState('EUR')
   const [email,         setEmail]         = useState('')
   const [website,       setWebsite]       = useState('')
@@ -326,6 +328,7 @@ export default function OnboardingStep1() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name:          name.trim(),
+            industry:      industry             || null,
             currency,
             email:         email.trim()        || null,
             website:       website.trim()       || null,
@@ -417,6 +420,23 @@ export default function OnboardingStep1() {
                   {name.trim().length > 0 && name.trim().length < 2 && (
                     <p className="text-xs text-destructive">Veuillez entrer le nom de votre commerce.</p>
                   )}
+                </div>
+
+                {/* Secteur d'activité */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="industry">
+                    Secteur d&apos;activité <span className="text-muted-foreground font-normal">(facultatif)</span>
+                  </Label>
+                  <Select value={industry} onValueChange={setIndustry}>
+                    <SelectTrigger id="industry" className="w-full">
+                      <SelectValue placeholder="Sélectionnez votre secteur…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INDUSTRIES.map(({ value, label, emoji }) => (
+                        <SelectItem key={value} value={value}>{emoji} {label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Logo */}
