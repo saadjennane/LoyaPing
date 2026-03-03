@@ -2031,9 +2031,7 @@ export default function AppointmentsPage() {
           className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
           aria-describedby={undefined}
           onInteractOutside={(e) => {
-            const original = (e as CustomEvent<{ originalEvent?: PointerEvent }>).detail?.originalEvent
-            const target = original?.target ?? (e.target as Element | null)
-            if ((target as Element | null)?.closest?.('[data-autocomplete-portal]')) e.preventDefault()
+            if (document.querySelector('[data-autocomplete-portal]')) e.preventDefault()
           }}
         >
           <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
