@@ -184,6 +184,8 @@ async function sendViaTwilio(msg: WhatsAppMessage) {
 // =========================================
 // VONAGE MESSAGES API
 // Env vars: VONAGE_API_KEY, VONAGE_API_SECRET, VONAGE_WHATSAPP_FROM (number without +)
+// Set VONAGE_SANDBOX=true to use the sandbox endpoint (messages-sandbox.nexmo.com)
+// Note: sandbox requires the recipient to have sent the passphrase to +14157386102 first
 // =========================================
 async function sendViaVonage(msg: WhatsAppMessage) {
   const apiKey    = process.env.VONAGE_API_KEY
@@ -200,7 +202,12 @@ async function sendViaVonage(msg: WhatsAppMessage) {
   const to   = stripVonage(msg.to)
   const from_ = stripVonage(from)
 
-  const res = await fetch('https://api.nexmo.com/v1/messages', {
+  const isSandbox = process.env.VONAGE_SANDBOX === 'true'
+  const endpoint = isSandbox
+    ? 'https://messages-sandbox.nexmo.com/v1/messages'
+    : 'https://api.nexmo.com/v1/messages'
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       Authorization:  `Basic ${credentials}`,
