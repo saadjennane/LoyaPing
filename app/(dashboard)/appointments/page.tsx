@@ -2021,7 +2021,13 @@ export default function AppointmentsPage() {
         if (!o) resetCreate()
         setCreateOpen(o)
       }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0" aria-describedby={undefined}>
+        <DialogContent
+          className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
+          aria-describedby={undefined}
+          onInteractOutside={(e) => {
+            if ((e.target as Element)?.closest('[data-autocomplete-portal]')) e.preventDefault()
+          }}
+        >
           <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
             <DialogTitle>
               {createStep === 'new_client' ? t('appointments.form.newClientTitle') : t('appointments.form.newApptTitle')}

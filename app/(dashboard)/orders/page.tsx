@@ -848,7 +848,12 @@ export default function OrdersPage() {
           <DialogTrigger asChild>
             <Button className="bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shadow-sm"><Plus className="h-4 w-4 mr-2" />{t('orders.newBtn')}</Button>
           </DialogTrigger>
-          <DialogContent aria-describedby={undefined}>
+          <DialogContent
+            aria-describedby={undefined}
+            onInteractOutside={(e) => {
+              if ((e.target as Element)?.closest('[data-autocomplete-portal]')) e.preventDefault()
+            }}
+          >
             <DialogHeader>
               <DialogTitle>{step === 'new_client' ? 'Nouveau client' : t('orders.newBtn')}</DialogTitle>
             </DialogHeader>

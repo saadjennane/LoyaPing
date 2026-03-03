@@ -30,9 +30,8 @@ export default function CustomerAutocomplete({
   const [activeIdx, setActiveIdx] = useState(-1)
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
-  const wrapperRef      = useRef<HTMLDivElement>(null)
-  const portalTargetRef = useRef<HTMLDivElement>(null)
-  const debounceRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapperRef  = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Search ───────────────────────────────────────────────────────────────
 
@@ -114,18 +113,20 @@ export default function CustomerAutocomplete({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Dropdown visibility ───────────────────────────────────────────────────
+  // ── Dropdown position ─────────────────────────────────────────────────────
+  // Portal to document.body so position:fixed is always relative to the viewport
+  // (position:fixed inside a CSS-transformed ancestor — like Radix Dialog — would
+  //  be positioned relative to that ancestor instead of the viewport).
+  // useLayoutEffect reads the rect AFTER DOM commit → correct coordinates.
+  // To prevent Radix's DismissableLayer from closing the dialog when clicking the
+  // portal dropdown, add onInteractOutside to DialogContent and call e.preventDefault()
+  // when e.target is inside [data-autocomplete-portal].
 
   const isLoading    = status === 'loading'
   const isEmpty      = query.trim() === ''
   const hasContent   = isLoading || results.length > 0 || (!isEmpty && !!onCreateNew)
   const showDropdown = open && hasContent
 
-  // Compute position AFTER DOM paint so getBoundingClientRect() is accurate.
-  // useLayoutEffect fires synchronously after DOM mutations, before browser paint.
-  // We portal into portalTargetRef (inside the Dialog's DOM subtree) so Radix
-  // does NOT interpret clicks as "outside" — which previously caused the dialog
-  // to dismiss and reset the step before the selection was processed.
   useLayoutEffect(() => {
     if (showDropdown && wrapperRef.current) {
       const rect = wrapperRef.current.getBoundingClientRect()
@@ -139,13 +140,6 @@ export default function CustomerAutocomplete({
 
   return (
     <div ref={wrapperRef} className="relative">
-      {/*
-        Hidden portal mount point — rendered inside the Dialog's DOM subtree.
-        The dropdown is portaled here so Radix's DismissableLayer sees it as
-        "inside" the dialog (contains() → true) and won't fire onInteractOutside.
-      */}
-      <div ref={portalTargetRef} />
-
       {/* Input */}
       <div className="relative">
         {isLoading ? (
@@ -165,9 +159,10 @@ export default function CustomerAutocomplete({
         />
       </div>
 
-      {/* Dropdown — portaled into the mount point, position:fixed for overflow escape */}
-      {showDropdown && dropdownPos && portalTargetRef.current && createPortal(
+      {/* Dropdown — portaled to document.body (no transform ancestor) */}
+      {showDropdown && dropdownPos && createPortal(
         <div
+          data-autocomplete-portal="true"
           className="bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto"
           style={{
             position: 'fixed',
@@ -221,7 +216,7 @@ export default function CustomerAutocomplete({
             </div>
           )}
         </div>,
-        portalTargetRef.current,
+        document.body,
       )}
     </div>
   )
