@@ -128,11 +128,32 @@ export default function CustomerAutocomplete({
   const showDropdown = open && hasContent
 
   useLayoutEffect(() => {
-    if (showDropdown && wrapperRef.current) {
-      const rect = wrapperRef.current.getBoundingClientRect()
-      setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
-    } else {
+    if (!showDropdown || !wrapperRef.current) {
       setDropdownPos(null)
+      return
+    }
+
+    const update = () => {
+      if (!wrapperRef.current) return
+      const rect = wrapperRef.current.getBoundingClientRect()
+      // On iOS Safari, position:fixed is relative to the layout viewport while
+      // getBoundingClientRect() is relative to the visual viewport (above the keyboard).
+      // visualViewport.offsetTop bridges the gap when the soft keyboard is open.
+      const vvTop  = window.visualViewport?.offsetTop  ?? 0
+      const vvLeft = window.visualViewport?.offsetLeft ?? 0
+      setDropdownPos({
+        top:   rect.bottom + 4 + vvTop,
+        left:  rect.left       + vvLeft,
+        width: rect.width,
+      })
+    }
+
+    update()
+    window.visualViewport?.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('scroll', update)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', update)
+      window.visualViewport?.removeEventListener('scroll', update)
     }
   }, [showDropdown])
 
