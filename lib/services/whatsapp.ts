@@ -42,6 +42,8 @@ export async function sendWhatsAppButtons(msg: WhatsAppButtonMessage): Promise<{
   switch (provider) {
     case 'cloud_api':
       return sendButtonsViaCloudApi(msg)
+    case 'vonage':
+      return sendButtonsViaVonage(msg)
     case 'mock':
       console.log(`[WhatsApp MOCK Buttons] → ${msg.to}: ${msg.body} [${msg.buttons.map((b) => b.title).join(' | ')}]`)
       return { success: true, messageId: `mock_${Date.now()}` }
@@ -229,6 +231,71 @@ async function sendViaVonage(msg: WhatsAppMessage) {
   if (!res.ok) {
     const errMsg = data?.title ?? data?.detail ?? data?.error_title ?? `HTTP ${res.status}`
     console.error('[WhatsApp] Vonage error:', JSON.stringify(data))
+    throw new Error(`Vonage error ${res.status}: ${errMsg}`)
+  }
+
+  return { success: true, messageId: data?.message_uuid as string | undefined }
+}
+
+// =========================================
+// VONAGE — interactive buttons
+// Uses message_type: "custom" to pass the raw WhatsApp interactive payload.
+// Note: sandbox does NOT support interactive messages — falls back to text.
+// =========================================
+async function sendButtonsViaVonage(msg: WhatsAppButtonMessage) {
+  const apiKey    = process.env.VONAGE_API_KEY
+  const apiSecret = process.env.VONAGE_API_SECRET
+  const from      = process.env.VONAGE_WHATSAPP_FROM
+
+  if (!apiKey || !apiSecret || !from) {
+    throw new Error('Missing VONAGE_API_KEY, VONAGE_API_SECRET or VONAGE_WHATSAPP_FROM')
+  }
+
+  // Sandbox doesn't support interactive messages → plain text fallback
+  if (process.env.VONAGE_SANDBOX === 'true') {
+    const btnList = msg.buttons.map((b) => b.title).join(' / ')
+    return sendWhatsAppMessage({ to: msg.to, text: `${msg.body}\n\n${btnList}` })
+  }
+
+  const credentials = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64')
+  const stripVonage = (n: string) => n.replace(/^whatsapp:/i, '').replace(/^\+/, '').replace(/\s+/g, '')
+  const to   = stripVonage(msg.to)
+  const from_ = stripVonage(from)
+
+  const res = await fetch('https://api.nexmo.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      Authorization:  `Basic ${credentials}`,
+      'Content-Type': 'application/json',
+      Accept:         'application/json',
+    },
+    body: JSON.stringify({
+      channel:      'whatsapp',
+      message_type: 'custom',
+      to,
+      from: from_,
+      custom: {
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: msg.body },
+          action: {
+            buttons: msg.buttons.map((b) => ({
+              type:  'reply',
+              reply: { id: b.id, title: b.title },
+            })),
+          },
+        },
+      },
+    }),
+  })
+
+  let data: Record<string, unknown> = {}
+  try { data = await res.json() } catch { /* empty body */ }
+
+  if (!res.ok) {
+    const errMsg = data?.title ?? data?.detail ?? data?.error_title ?? `HTTP ${res.status}`
+    console.error('[WhatsApp] Vonage buttons error:', JSON.stringify(data))
     throw new Error(`Vonage error ${res.status}: ${errMsg}`)
   }
 
