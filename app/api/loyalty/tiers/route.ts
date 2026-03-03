@@ -3,6 +3,12 @@ import { createServerClient } from '@/lib/supabase/server'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
+function extractMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message)
+  return String(err)
+}
+
 export async function GET() {
   try {
     const db = createServerClient()
@@ -15,7 +21,7 @@ export async function GET() {
     if (error) throw error
     return NextResponse.json({ data: data ?? [] })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: extractMessage(err) }, { status: 500 })
   }
 }
 
@@ -54,7 +60,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error
     return NextResponse.json({ data })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: extractMessage(err) }, { status: 500 })
   }
 }
 
@@ -78,7 +84,8 @@ export async function PUT(req: NextRequest) {
     }
 
     const db = createServerClient()
-    await db.from('loyalty_tiers').delete().eq('business_id', DEFAULT_BUSINESS_ID)
+    const { error: deleteError } = await db.from('loyalty_tiers').delete().eq('business_id', DEFAULT_BUSINESS_ID)
+    if (deleteError) throw deleteError
 
     if (tiers.length > 0) {
       const rows = tiers.map((t) => ({
@@ -97,7 +104,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ data: { success: true } })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: extractMessage(err) }, { status: 500 })
   }
 }
 
@@ -112,6 +119,6 @@ export async function DELETE(req: NextRequest) {
     if (error) throw error
     return NextResponse.json({ data: { success: true } })
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+    return NextResponse.json({ error: extractMessage(err) }, { status: 500 })
   }
 }
