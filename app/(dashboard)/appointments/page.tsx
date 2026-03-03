@@ -650,9 +650,19 @@ export default function AppointmentsPage() {
     if (!createItem || !apptDate || !apptHour) return
     setCreateSubmitting(true)
     const scheduled_at = new Date(`${apptDate}T${apptHour}:${apptMinute}:00`).toISOString()
-    const ended_at = apptEndHour
-      ? new Date(`${apptDate}T${apptEndHour}:${apptEndMinute}:00`).toISOString()
-      : null
+    let ended_at: string | null = null
+    if (apptEndHour) {
+      const startTotalMins = parseInt(apptHour) * 60 + parseInt(apptMinute)
+      const endTotalMinsRaw = parseInt(apptEndHour) * 60 + parseInt(apptEndMinute)
+      const endTotalMinsNorm = endTotalMinsRaw % (24 * 60)
+      // Next day if raw end ≥ 24 h (e.g. "24:15" from slot picker) OR
+      // normalized end is before start (e.g. "00:15" when start is "23:45")
+      const overMidnight = endTotalMinsRaw >= 24 * 60 || endTotalMinsNorm < startTotalMins
+      const endH = String(Math.floor(endTotalMinsNorm / 60)).padStart(2, '0')
+      const endM = String(endTotalMinsNorm % 60).padStart(2, '0')
+      const endDate = overMidnight ? format(addDays(parseISO(apptDate), 1), 'yyyy-MM-dd') : apptDate
+      ended_at = new Date(`${endDate}T${endH}:${endM}:00`).toISOString()
+    }
     const res = await fetch('/api/appointments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
