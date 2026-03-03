@@ -996,8 +996,14 @@ export default function AppointmentsPage() {
             const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top
             container.scrollTop += offset
           }
+        } else {
+          // On initial load: scroll to today's section
+          const today = todayRef.current
+          if (today) {
+            const offset = today.getBoundingClientRect().top - container.getBoundingClientRect().top
+            container.scrollTop += offset
+          }
         }
-        // No auto-scroll on normal load — show past 3 days + Voir plus at top naturally
         initialScrollDone.current = true
       }, 50)
       return () => clearTimeout(t)
