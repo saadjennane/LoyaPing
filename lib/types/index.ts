@@ -185,21 +185,61 @@ export type AppointmentNotificationSettings = {
   reminder1_delay_unit: 'minutes' | 'hours' | 'days'
   reminder1_fixed_send_time: string | null
   reminder1_message: string
+  reminder1_with_buttons: boolean
   reminder2_enabled: boolean
   reminder2_delay_value: number
   reminder2_delay_unit: 'minutes' | 'hours' | 'days'
   reminder2_fixed_send_time: string | null
   reminder2_message: string
+  reminder2_with_buttons: boolean
   reminder3_enabled: boolean
   reminder3_delay_value: number
   reminder3_delay_unit: 'minutes' | 'hours' | 'days'
   reminder3_fixed_send_time: string | null
   reminder3_message: string
+  reminder3_with_buttons: boolean
   post_messages_enabled: boolean
   post_show_message: string
   post_no_show_message: string
   updated_at: string
 }
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+export type ConversationStatus = 'TO_TREAT' | 'OPEN' | 'IN_PROGRESS' | 'RESOLVED'
+
+export type Conversation = {
+  id:              string
+  business_id:     string
+  client_id:       string | null
+  phone:           string
+  entity_type:     'order' | 'appointment' | null
+  entity_id:       string | null
+  status:          ConversationStatus
+  last_inbound_at: string
+  created_at:      string
+  client?: {
+    first_name:   string | null
+    last_name:    string | null
+    civility:     string | null
+    phone_number: string
+  } | null
+  last_message?: string | null
+}
+
+export type ConversationMessage = {
+  id:              string
+  conversation_id: string
+  direction:       'inbound' | 'outbound'
+  body:            string
+  created_at:      string
+}
+
+export type ConversationWithMessages = Conversation & {
+  messages: ConversationMessage[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type AppointmentNotification = {
   id:             string

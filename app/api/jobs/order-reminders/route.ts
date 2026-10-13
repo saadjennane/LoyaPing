@@ -12,8 +12,18 @@ function delayMs(value: number, unit: string): number {
   return value * 86_400_000 // days
 }
 
-function interpolate(template: string, reference: string): string {
-  return template.replace(/#{reference}/g, reference)
+function interpolate(
+  template:  string,
+  reference: string,
+  civility:  string,
+  firstName: string,
+  lastName:  string,
+): string {
+  return template
+    .replace(/#{reference}/g,     reference)
+    .replace(/\{\{civilite\}\}/gi, civility)
+    .replace(/\{\{prenom\}\}/gi,   firstName)
+    .replace(/\{\{nom\}\}/gi,      lastName)
 }
 
 // GET /api/jobs/order-reminders?secret=CRON_SECRET
@@ -36,7 +46,7 @@ export async function GET(req: NextRequest) {
     // Fetch all ready orders with clients
     const { data: orders, error: ordersError } = await db
       .from('orders')
-      .select('*, client:clients(phone_number)')
+      .select('*, client:clients(phone_number, first_name, last_name, civility)')
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .eq('status', 'ready')
       .not('ready_at', 'is', null) // only orders where ready notification was sent
@@ -94,7 +104,7 @@ export async function GET(req: NextRequest) {
       if (!readySentAt) continue
 
       const readyMs = new Date(readySentAt).getTime()
-      const client = order.client as { phone_number: string } | undefined
+      const client = order.client as { phone_number: string; first_name?: string | null; last_name?: string | null; civility?: string | null } | undefined
       if (!client?.phone_number) continue
 
       for (const reminder of reminders) {
@@ -114,7 +124,13 @@ export async function GET(req: NextRequest) {
         if (now.getTime() < threshold) continue
 
         // Send
-        const text = interpolate(reminder.message, order.reference ?? '')
+        const text = interpolate(
+          reminder.message,
+          order.reference ?? '',
+          client.civility   ?? '',
+          client.first_name ?? '',
+          client.last_name  ?? '',
+        )
         const reminderNum = reminder.num as 1 | 2 | 3
         let success = false
         let sendError = ''

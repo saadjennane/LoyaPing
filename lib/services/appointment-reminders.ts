@@ -102,6 +102,64 @@ function computeSendAt(
   return new Date(apptDate.getTime() - offsetMs)
 }
 
+// ── Template interpolation ────────────────────────────────────────────────────
+
+const FR_DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+const FR_MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+/**
+ * Replaces template variables in a reminder message body.
+ *
+ * Supported variables:
+ *   {{civilite}} — civility (e.g. "M.", "Mme")
+ *   {{prenom}}   — client's first name
+ *   {{nom}}      — client's last name
+ *   {{jour}}     — day of week in French  (e.g. "lundi")
+ *   {{date}}     — day + month in French  (e.g. "4 mars")
+ *   {{heure}}    — appointment time       (e.g. "14h30")
+ *
+ * All times are expressed in the business timezone.
+ */
+function interpolateMessage(
+  template:  string,
+  apptDate:  Date,
+  firstName: string,
+  lastName:  string,
+  civility:  string,
+  timezone:  string,
+): string {
+  // Get local date parts in business timezone
+  const parts = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: timezone,
+    weekday: 'long',
+    day:     'numeric',
+    month:   'long',
+    hour:    '2-digit',
+    minute:  '2-digit',
+    hour12:  false,
+  }).formatToParts(apptDate)
+
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? ''
+
+  const jour  = get('weekday')
+  const day   = get('day')
+  const month = get('month')
+  const hh    = get('hour')
+  const mm    = get('minute')
+  const heure = `${hh}h${mm}`
+
+  return template
+    .replace(/\{\{civilite\}\}/gi, civility)
+    .replace(/\{\{prenom\}\}/gi,   firstName)
+    .replace(/\{\{nom\}\}/gi,      lastName)
+    .replace(/\{\{jour\}\}/gi,     jour)
+    .replace(/\{\{date\}\}/gi,     `${day} ${month}`)
+    .replace(/\{\{heure\}\}/gi,    heure)
+}
+
+void FR_DAYS    // suppress unused warning
+void FR_MONTHS  // suppress unused warning
+
 // ── cancelAppointmentReminders ────────────────────────────────────────────────
 
 /**
@@ -146,10 +204,10 @@ export async function scheduleAppointmentReminders(
 ): Promise<string[]> {
   const db = createServerClient()
 
-  // ── 1. Fetch appointment + client phone ─────────────────────────────────
+  // ── 1. Fetch appointment + client phone + name ──────────────────────────
   const { data: appt, error: apptErr } = await db
     .from('appointments')
-    .select('id, scheduled_at, status, deleted_at, client:clients(phone_number)')
+    .select('id, scheduled_at, status, deleted_at, client:clients(phone_number, first_name, last_name, civility)')
     .eq('id', appointmentId)
     .single()
 
@@ -160,12 +218,14 @@ export async function scheduleAppointmentReminders(
 
   // Supabase may return the joined row as an object or a single-element array.
   const clientRaw = appt.client as
-    | { phone_number: string }
-    | Array<{ phone_number: string }>
+    | { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null }
+    | Array<{ phone_number: string; first_name: string | null; last_name: string | null; civility: string | null }>
     | null
-  const phone = Array.isArray(clientRaw)
-    ? clientRaw[0]?.phone_number
-    : clientRaw?.phone_number
+  const clientObj = Array.isArray(clientRaw) ? clientRaw[0] : clientRaw
+  const phone     = clientObj?.phone_number
+  const firstName = clientObj?.first_name ?? ''
+  const lastName  = clientObj?.last_name  ?? ''
+  const civility  = clientObj?.civility   ?? ''
 
   if (!phone) return []
 
@@ -180,17 +240,17 @@ export async function scheduleAppointmentReminders(
     (profileRow as { timezone?: string } | null)?.timezone ?? 'Africa/Casablanca'
 
   type RawSettings = {
-    reminder1_enabled: boolean; reminder1_delay_value: number; reminder1_delay_unit: string; reminder1_fixed_send_time: string | null; reminder1_message: string
-    reminder2_enabled: boolean; reminder2_delay_value: number; reminder2_delay_unit: string; reminder2_fixed_send_time: string | null; reminder2_message: string
-    reminder3_enabled: boolean; reminder3_delay_value: number; reminder3_delay_unit: string; reminder3_fixed_send_time: string | null; reminder3_message: string
+    reminder1_enabled: boolean; reminder1_delay_value: number; reminder1_delay_unit: string; reminder1_fixed_send_time: string | null; reminder1_message: string; reminder1_with_buttons: boolean
+    reminder2_enabled: boolean; reminder2_delay_value: number; reminder2_delay_unit: string; reminder2_fixed_send_time: string | null; reminder2_message: string; reminder2_with_buttons: boolean
+    reminder3_enabled: boolean; reminder3_delay_value: number; reminder3_delay_unit: string; reminder3_fixed_send_time: string | null; reminder3_message: string; reminder3_with_buttons: boolean
   }
 
   const { data: rawSettings } = await db
     .from('appointment_notification_settings')
     .select(
-      'reminder1_enabled, reminder1_delay_value, reminder1_delay_unit, reminder1_fixed_send_time, reminder1_message,' +
-      'reminder2_enabled, reminder2_delay_value, reminder2_delay_unit, reminder2_fixed_send_time, reminder2_message,' +
-      'reminder3_enabled, reminder3_delay_value, reminder3_delay_unit, reminder3_fixed_send_time, reminder3_message',
+      'reminder1_enabled, reminder1_delay_value, reminder1_delay_unit, reminder1_fixed_send_time, reminder1_message, reminder1_with_buttons,' +
+      'reminder2_enabled, reminder2_delay_value, reminder2_delay_unit, reminder2_fixed_send_time, reminder2_message, reminder2_with_buttons,' +
+      'reminder3_enabled, reminder3_delay_value, reminder3_delay_unit, reminder3_fixed_send_time, reminder3_message, reminder3_with_buttons',
     )
     .eq('business_id', DEFAULT_BUSINESS_ID)
     .maybeSingle()
@@ -199,39 +259,49 @@ export async function scheduleAppointmentReminders(
   if (!settings) return []
 
   type ReminderCfg = {
-    messageType: ReminderMessageType
-    enabled:     boolean
-    amount:      number
-    unit:        'minutes' | 'hours' | 'days'
-    fixedTime:   string | null
-    message:     string
+    messageType:  ReminderMessageType
+    enabled:      boolean
+    amount:       number
+    unit:         'minutes' | 'hours' | 'days'
+    fixedTime:    string | null
+    message:      string
+    withButtons:  boolean
   }
 
+  // Standard confirmation buttons — IDs embed the appointmentId so the webhook
+  // handler can route them without a DB lookup.
+  const CONFIRM_BUTTONS = [
+    { id: `appt_confirm_${appointmentId}`,    title: '✅ Je confirme' },
+    { id: `appt_reschedule_${appointmentId}`, title: '🔁 Replanifier' },
+  ]
 
   const cfgs: ReminderCfg[] = [
     {
       messageType: 'appointment_reminder_1',
-      enabled:   Boolean(settings.reminder1_enabled),
-      amount:    Number(settings.reminder1_delay_value)  || 24,
-      unit:      (settings.reminder1_delay_unit  ?? 'hours')   as ReminderCfg['unit'],
-      fixedTime: settings.reminder1_fixed_send_time ?? null,
-      message:   String(settings.reminder1_message  ?? '').trim(),
+      enabled:     Boolean(settings.reminder1_enabled),
+      amount:      Number(settings.reminder1_delay_value)  || 24,
+      unit:        (settings.reminder1_delay_unit  ?? 'hours')   as ReminderCfg['unit'],
+      fixedTime:   settings.reminder1_fixed_send_time ?? null,
+      message:     String(settings.reminder1_message  ?? '').trim(),
+      withButtons: Boolean(settings.reminder1_with_buttons),
     },
     {
       messageType: 'appointment_reminder_2',
-      enabled:   Boolean(settings.reminder2_enabled),
-      amount:    Number(settings.reminder2_delay_value)  || 2,
-      unit:      (settings.reminder2_delay_unit  ?? 'hours')   as ReminderCfg['unit'],
-      fixedTime: settings.reminder2_fixed_send_time ?? null,
-      message:   String(settings.reminder2_message  ?? '').trim(),
+      enabled:     Boolean(settings.reminder2_enabled),
+      amount:      Number(settings.reminder2_delay_value)  || 2,
+      unit:        (settings.reminder2_delay_unit  ?? 'hours')   as ReminderCfg['unit'],
+      fixedTime:   settings.reminder2_fixed_send_time ?? null,
+      message:     String(settings.reminder2_message  ?? '').trim(),
+      withButtons: Boolean(settings.reminder2_with_buttons),
     },
     {
       messageType: 'appointment_reminder_3',
-      enabled:   Boolean(settings.reminder3_enabled),
-      amount:    Number(settings.reminder3_delay_value)  || 30,
-      unit:      (settings.reminder3_delay_unit  ?? 'minutes') as ReminderCfg['unit'],
-      fixedTime: settings.reminder3_fixed_send_time ?? null,
-      message:   String(settings.reminder3_message  ?? '').trim(),
+      enabled:     Boolean(settings.reminder3_enabled),
+      amount:      Number(settings.reminder3_delay_value)  || 30,
+      unit:        (settings.reminder3_delay_unit  ?? 'minutes') as ReminderCfg['unit'],
+      fixedTime:   settings.reminder3_fixed_send_time ?? null,
+      message:     String(settings.reminder3_message  ?? '').trim(),
+      withButtons: Boolean(settings.reminder3_with_buttons),
     },
   ]
 
@@ -250,7 +320,8 @@ export async function scheduleAppointmentReminders(
       entity_id:    appointmentId,
       message_type: c.messageType,
       to_whatsapp:  phone,
-      body:         c.message,
+      body:         interpolateMessage(c.message, apptDate, firstName, lastName, civility, businessTimezone),
+      buttons:      c.withButtons ? CONFIRM_BUTTONS : null,
       send_at:      computeSendAt(apptDate, c.amount, c.unit, c.fixedTime, businessTimezone).toISOString(),
     }))
     // Drop any reminders whose send time is already in the past.

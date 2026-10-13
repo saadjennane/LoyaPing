@@ -14,6 +14,10 @@ const REVIEW_RESPONSE_WINDOW_DAYS = 7
 export const REVIEW_BTN_POSITIVE = 'review_positive'
 export const REVIEW_BTN_NEGATIVE = 'review_negative'
 
+// Appointment button ID prefixes (format: appt_confirm_{id} / appt_reschedule_{id})
+const APPT_CONFIRM_PREFIX    = 'appt_confirm_'
+const APPT_RESCHEDULE_PREFIX = 'appt_reschedule_'
+
 // =========================================
 // GET CLIENT PAGE DATA (magic link)
 // =========================================
@@ -78,6 +82,89 @@ export async function handleIncomingMessage(fromPhone: string, messageBody = '',
   const db = createServerClient()
 
   const phone = fromPhone.replace(/\s+/g, '')
+
+  // ── Conversation thread routing ────────────────────────────────────────────
+  // If the sender has an active (OPEN or IN_PROGRESS) conversation, append the
+  // inbound message and skip all other processing (reviews, magic link, etc.).
+  // This handles the back-and-forth after a client clicked "Non".
+  const { data: activeConv } = await db
+    .from('conversations')
+    .select('id, status')
+    .eq('business_id', DEFAULT_BUSINESS_ID)
+    .eq('phone', phone)
+    .in('status', ['OPEN', 'IN_PROGRESS'])
+    .order('created_at', { ascending: false })
+    .maybeSingle()
+
+  if (activeConv) {
+    await db.from('conversation_messages').insert({
+      conversation_id: activeConv.id,
+      direction: 'inbound',
+      body: messageBody || '(bouton)',
+    })
+    await db.from('conversations')
+      .update({ last_inbound_at: new Date().toISOString() })
+      .eq('id', activeConv.id)
+    return
+  }
+
+  // ── Appointment button handling (confirm / reschedule_requested) ───────────
+  // These button IDs embed the appointment ID directly, so we can route them
+  // without knowing the client first.
+  if (buttonId) {
+    if (buttonId.startsWith(APPT_CONFIRM_PREFIX)) {
+      const appointmentId = buttonId.slice(APPT_CONFIRM_PREFIX.length)
+      const now = new Date().toISOString()
+      await db.from('appointments')
+        .update({ status: 'confirmed', confirmed_at: now })
+        .eq('id', appointmentId)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+      db.from('appointment_events')
+        .insert({ appointment_id: appointmentId, type: 'confirmed' })
+        .then(() => {})
+      return
+    }
+
+    if (buttonId.startsWith(APPT_RESCHEDULE_PREFIX)) {
+      const appointmentId = buttonId.slice(APPT_RESCHEDULE_PREFIX.length)
+      const now = new Date().toISOString()
+
+      const { data: current } = await db.from('appointments')
+        .select('scheduled_at')
+        .eq('id', appointmentId)
+        .maybeSingle()
+
+      const updates: Record<string, string | null> = {
+        status: 'reschedule_requested',
+        reschedule_requested_at: now,
+      }
+      if (current?.scheduled_at) {
+        const d = new Date(current.scheduled_at)
+        updates.stored_previous_date = d.toISOString().slice(0, 10)
+        updates.stored_previous_time = d.toISOString().slice(11, 19)
+      }
+
+      await db.from('appointments')
+        .update(updates)
+        .eq('id', appointmentId)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+
+      // Cancel pending reminders — slot is now free
+      const { cancelAppointmentReminders } = await import('@/lib/services/appointment-reminders')
+      cancelAppointmentReminders(appointmentId).catch((e) =>
+        console.error('[clients] cancel reminders on reschedule error:', e)
+      )
+
+      db.from('appointment_events')
+        .insert({ appointment_id: appointmentId, type: 'reschedule_requested' })
+        .then(() => {})
+
+      createAndNotifyUrgentEvent('reschedule', appointmentId, DEFAULT_BUSINESS_ID).catch((e) =>
+        console.error('[clients] urgent notification error:', e)
+      )
+      return
+    }
+  }
 
   const { data: clients } = await db
     .from('clients')
@@ -181,6 +268,26 @@ export async function handleIncomingMessage(fromPhone: string, messageBody = '',
             createAndNotifyUrgentEvent('negative_review', negEvent.id, client.business_id).catch(
               (e) => console.error('[clients] urgent notification error:', e)
             )
+          }
+
+          // ── Create conversation thread ──────────────────────────────────
+          // Idempotent: the unique partial index prevents duplicate active
+          // conversations for the same phone+business.
+          const convInsert = await db.from('conversations').insert({
+            business_id: client.business_id,
+            client_id:   client.id,
+            phone,
+            status:      'TO_TREAT',
+            last_inbound_at: new Date().toISOString(),
+          }).select('id').maybeSingle()
+
+          // Log the initial "Non" as the first inbound message
+          if (convInsert.data?.id) {
+            db.from('conversation_messages').insert({
+              conversation_id: convInsert.data.id,
+              direction: 'inbound',
+              body: messageBody || 'Non (bouton)',
+            }).then(() => {})
           }
 
           Reviews.negativeClicked({ client_id: client.id })

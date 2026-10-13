@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,6 +43,37 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   )
 }
 
+const SATISFACTION_VARS = [
+  { label: 'Civilité', variable: '{{civilite}}' },
+  { label: 'Prénom',   variable: '{{prenom}}'   },
+  { label: 'Nom',      variable: '{{nom}}'      },
+]
+const SATISFACTION_PREVIEW = { name: 'Yasmine', civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
+function renderSatisfactionPreview(msg: string): string {
+  return msg
+    .replace(/\{name\}/g,          SATISFACTION_PREVIEW.name)
+    .replace(/\{\{civilite\}\}/gi, SATISFACTION_PREVIEW.civilite)
+    .replace(/\{\{prenom\}\}/gi,   SATISFACTION_PREVIEW.prenom)
+    .replace(/\{\{nom\}\}/gi,      SATISFACTION_PREVIEW.nom)
+}
+
+function insertVar(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  variable: string,
+  current: string,
+  setter: (v: string) => void,
+) {
+  const el = ref.current
+  const start = el?.selectionStart ?? current.length
+  const end   = el?.selectionEnd   ?? current.length
+  const next  = current.slice(0, start) + variable + current.slice(end)
+  setter(next)
+  requestAnimationFrame(() => {
+    el?.focus()
+    el?.setSelectionRange(start + variable.length, start + variable.length)
+  })
+}
+
 const DEFAULTS: Omit<ReviewSettings, 'business_id' | 'updated_at'> = {
   is_active:                     false,
   min_interactions:              3,
@@ -61,6 +92,7 @@ export default function ReviewsSettingsPage() {
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
   const [togglingModule, setTogglingModule] = useState(false)
+  const satisfactionRef = useRef<HTMLTextAreaElement>(null)
 
   // Local delay display (value + unit) — converted to/from hours on load/save
   const [delayValue, setDelayValue] = useState(24)
@@ -228,14 +260,26 @@ export default function ReviewsSettingsPage() {
             <Label htmlFor="satisfaction_msg">Message de satisfaction</Label>
             <Textarea
               id="satisfaction_msg"
+              ref={satisfactionRef}
               rows={3}
               value={settings.satisfaction_message}
               onChange={(e) => setSettings((s) => ({ ...s, satisfaction_message: e.target.value }))}
               placeholder="Bonjour {name} ! Êtes-vous satisfait(e) ?"
             />
-            <p className="text-xs text-muted-foreground">
-              Utilisez <code className="text-xs bg-muted px-1 rounded">{'{name}'}</code> pour le prénom du client.
-            </p>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+              {SATISFACTION_VARS.map(({ label, variable }) => (
+                <button key={variable} type="button"
+                  onClick={() => insertVar(satisfactionRef, variable, settings.satisfaction_message, (v) => setSettings((s) => ({ ...s, satisfaction_message: v })))}
+                  className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                >{label}</button>
+              ))}
+            </div>
+            {settings.satisfaction_message && /\{name\}/.test(settings.satisfaction_message) && (
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                {renderSatisfactionPreview(settings.satisfaction_message)}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">

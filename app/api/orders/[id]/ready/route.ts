@@ -42,7 +42,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
     // ── 1. Fetch the order + client phone ─────────────────────────────────
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select('id, status, reference, business_id, client:clients(phone_number)')
+      .select('id, status, reference, business_id, client:clients(phone_number, first_name, last_name, civility)')
       .eq('id', orderId)
       .single()
 
@@ -50,7 +50,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    const client = order.client as unknown as { phone_number: string } | null
+    const client = order.client as unknown as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null } | null
     if (!client?.phone_number) {
       return NextResponse.json(
         { error: 'Order has no associated client phone number' },
@@ -94,7 +94,11 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
     const rawTemplate =
       notifSettings?.ready_message ??
       `Bonjour ! Votre commande${ref ? ` #${ref}` : ''} est prête. Vous pouvez venir la récupérer. Merci !`
-    const body = rawTemplate.replace(/#{reference}/g, ref)
+    const body = rawTemplate
+      .replace(/#{reference}/g,   ref)
+      .replace(/\{\{civilite\}\}/gi, client?.civility   ?? '')
+      .replace(/\{\{prenom\}\}/gi,   client?.first_name ?? '')
+      .replace(/\{\{nom\}\}/gi,      client?.last_name  ?? '')
 
     // ── 5. Cancel any existing SCHEDULED message for this order ───────────
     await cancelExistingScheduledForEntity('order', orderId, 'order_ready')

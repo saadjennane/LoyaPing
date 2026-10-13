@@ -32,6 +32,7 @@ export type ScheduledMessage = {
   message_type:  string
   to_whatsapp:   string
   body:          string
+  buttons:       Array<{ id: string; title: string }> | null
   send_at:       string
   status:        ScheduledStatus
   claim_token:   string | null

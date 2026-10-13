@@ -140,7 +140,11 @@ export async function creditPoints({
         const expiry = format(addDays(new Date(), tier.validity_days), 'd MMMM yyyy', { locale: fr })
         message = message.replace(/#{expiry_date}/g, expiry)
       }
-      message = message.replace(/#{reward_title}/g, tier.reward_title ?? tier.reward_description ?? '')
+      message = message
+        .replace(/#{reward_title}/g,     tier.reward_title ?? tier.reward_description ?? '')
+        .replace(/\{\{civilite\}\}/gi,   (client as {civility?: string | null}).civility   ?? '')
+        .replace(/\{\{prenom\}\}/gi,     (client as {first_name?: string | null}).first_name ?? '')
+        .replace(/\{\{nom\}\}/gi,        (client as {last_name?: string | null}).last_name   ?? '')
 
       try {
         await sendWhatsAppMessage({ to: client.phone_number, text: message })

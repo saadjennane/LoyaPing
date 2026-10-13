@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
     const { data: clients, error: clientsError } = await db
       .from('clients')
-      .select('id, first_name, phone_number, last_review_request_at, review_reminder_sent, review_intent')
+      .select('id, first_name, last_name, civility, phone_number, last_review_request_at, review_reminder_sent, review_intent')
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .not('phone_number', 'is', null)
       .or(`review_intent.is.null,review_intent.eq.false`)
@@ -87,7 +87,11 @@ export async function GET(req: NextRequest) {
 
           if (now.toISOString() >= reminderThreshold) {
             const name = client.first_name ?? ''
-            const body = satisfaction_message.replace(/\{name\}/g, name)
+            const body = satisfaction_message
+              .replace(/\{name\}/g,          name)
+              .replace(/\{\{civilite\}\}/gi,  (client as {civility?: string | null}).civility   ?? '')
+              .replace(/\{\{prenom\}\}/gi,    name)
+              .replace(/\{\{nom\}\}/gi,       (client as {last_name?: string | null}).last_name  ?? '')
 
             await sendWhatsAppButtons({
               to: client.phone_number,

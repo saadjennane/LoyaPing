@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,6 +18,38 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
       <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
   )
+}
+
+const ORDER_VARS = [
+  { label: 'Référence', variable: '#{reference}'  },
+  { label: 'Civilité',  variable: '{{civilite}}'  },
+  { label: 'Prénom',    variable: '{{prenom}}'    },
+  { label: 'Nom',       variable: '{{nom}}'       },
+]
+const ORDER_PREVIEW_SAMPLE = { reference: 'TEST-001', civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
+function renderOrderPreview(msg: string): string {
+  return msg
+    .replace(/#{reference}/g,      ORDER_PREVIEW_SAMPLE.reference)
+    .replace(/\{\{civilite\}\}/gi, ORDER_PREVIEW_SAMPLE.civilite)
+    .replace(/\{\{prenom\}\}/gi,   ORDER_PREVIEW_SAMPLE.prenom)
+    .replace(/\{\{nom\}\}/gi,      ORDER_PREVIEW_SAMPLE.nom)
+}
+
+function insertVar(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  variable: string,
+  current: string,
+  setter: (v: string) => void,
+) {
+  const el = ref.current
+  const start = el?.selectionStart ?? current.length
+  const end   = el?.selectionEnd   ?? current.length
+  const next  = current.slice(0, start) + variable + current.slice(end)
+  setter(next)
+  requestAnimationFrame(() => {
+    el?.focus()
+    el?.setSelectionRange(start + variable.length, start + variable.length)
+  })
 }
 
 const DEFAULT_ORDER_NOTIF: Omit<OrderNotificationSettings, 'business_id' | 'updated_at'> = {
@@ -72,20 +104,31 @@ export default function OrdersSettingsPage() {
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">{t('common.loading')}</div>
 
+  const readyMsgRef  = useRef<HTMLTextAreaElement>(null)
+  const corrMsgRef   = useRef<HTMLTextAreaElement>(null)
+  const reminderRefs = [
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+  ]
+
   const reminders = [
     { num: 1, enabled: orderNotif.reminder1_enabled, delayValue: orderNotif.reminder1_delay_value, delayUnit: orderNotif.reminder1_delay_unit, message: orderNotif.reminder1_message,
+      textareaRef: reminderRefs[0],
       setEnabled:    (v: boolean) => setOrderNotif({ ...orderNotif, reminder1_enabled: v }),
       setDelayValue: (v: number)  => setOrderNotif({ ...orderNotif, reminder1_delay_value: v }),
       setDelayUnit:  (v: string)  => setOrderNotif({ ...orderNotif, reminder1_delay_unit: v as OrderNotificationSettings['reminder1_delay_unit'] }),
       setMessage:    (v: string)  => setOrderNotif({ ...orderNotif, reminder1_message: v }),
     },
     { num: 2, enabled: orderNotif.reminder2_enabled, delayValue: orderNotif.reminder2_delay_value, delayUnit: orderNotif.reminder2_delay_unit, message: orderNotif.reminder2_message,
+      textareaRef: reminderRefs[1],
       setEnabled:    (v: boolean) => setOrderNotif({ ...orderNotif, reminder2_enabled: v }),
       setDelayValue: (v: number)  => setOrderNotif({ ...orderNotif, reminder2_delay_value: v }),
       setDelayUnit:  (v: string)  => setOrderNotif({ ...orderNotif, reminder2_delay_unit: v as OrderNotificationSettings['reminder2_delay_unit'] }),
       setMessage:    (v: string)  => setOrderNotif({ ...orderNotif, reminder2_message: v }),
     },
     { num: 3, enabled: orderNotif.reminder3_enabled, delayValue: orderNotif.reminder3_delay_value, delayUnit: orderNotif.reminder3_delay_unit, message: orderNotif.reminder3_message,
+      textareaRef: reminderRefs[2],
       setEnabled:    (v: boolean) => setOrderNotif({ ...orderNotif, reminder3_enabled: v }),
       setDelayValue: (v: number)  => setOrderNotif({ ...orderNotif, reminder3_delay_value: v }),
       setDelayUnit:  (v: string)  => setOrderNotif({ ...orderNotif, reminder3_delay_unit: v as OrderNotificationSettings['reminder3_delay_unit'] }),
@@ -105,13 +148,11 @@ export default function OrdersSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Message &quot;Commande prête&quot;</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Envoyé par WhatsApp quand vous marquez une commande comme prête.
-              Utilisez <code className="bg-muted px-1 py-0.5 rounded text-xs">#{'{reference}'}</code> pour insérer la référence.
-            </p>
+            <p className="text-sm text-muted-foreground">Envoyé par WhatsApp quand vous marquez une commande comme prête.</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <textarea
+              ref={readyMsgRef}
               className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
               placeholder="Bonjour ! Votre commande #{reference} est prête..."
               value={orderNotif.ready_message}
@@ -119,6 +160,20 @@ export default function OrdersSettingsPage() {
               required
               rows={3}
             />
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+              {ORDER_VARS.map(({ label, variable }) => (
+                <button key={variable} type="button"
+                  onClick={() => insertVar(readyMsgRef, variable, orderNotif.ready_message, (v) => setOrderNotif({ ...orderNotif, ready_message: v }))}
+                  className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                >{label}</button>
+              ))}
+            </div>
+            {orderNotif.ready_message && /#{/.test(orderNotif.ready_message) && (
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                {renderOrderPreview(orderNotif.ready_message)}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -150,12 +205,27 @@ export default function OrdersSettingsPage() {
                       </Select>
                     </div>
                     <textarea
+                      ref={r.textareaRef}
                       className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                       placeholder={`Message du rappel ${r.num}...`}
                       value={r.message}
                       onChange={(e) => r.setMessage(e.target.value)}
                       rows={2}
                     />
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+                      {ORDER_VARS.map(({ label, variable }) => (
+                        <button key={variable} type="button"
+                          onClick={() => insertVar(r.textareaRef, variable, r.message, r.setMessage)}
+                          className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                        >{label}</button>
+                      ))}
+                    </div>
+                    {r.message && /#{/.test(r.message) && (
+                      <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                        {renderOrderPreview(r.message)}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -171,14 +241,29 @@ export default function OrdersSettingsPage() {
               Envoyé si vous repassez une commande de &ldquo;Prête&rdquo; à &ldquo;En attente&rdquo; après que le message initial a déjà été envoyé.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <textarea
+              ref={corrMsgRef}
               className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
               value={orderNotif.order_ready_correction_template}
               onChange={(e) => setOrderNotif({ ...orderNotif, order_ready_correction_template: e.target.value })}
               required
               rows={3}
             />
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+              {ORDER_VARS.map(({ label, variable }) => (
+                <button key={variable} type="button"
+                  onClick={() => insertVar(corrMsgRef, variable, orderNotif.order_ready_correction_template, (v) => setOrderNotif({ ...orderNotif, order_ready_correction_template: v }))}
+                  className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                >{label}</button>
+              ))}
+            </div>
+            {orderNotif.order_ready_correction_template && /#{/.test(orderNotif.order_ready_correction_template) && (
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                {renderOrderPreview(orderNotif.order_ready_correction_template)}
+              </div>
+            )}
           </CardContent>
         </Card>
 

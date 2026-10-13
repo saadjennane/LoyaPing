@@ -23,7 +23,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import { sendWhatsAppMessage, sendWhatsAppButtons } from '@/lib/services/whatsapp'
 import { claimDueMessages, markSent, markFailed } from '@/lib/services/outbox'
 import { Appointments } from '@/lib/posthog/appointments'
 
@@ -63,10 +63,9 @@ export async function GET(req: NextRequest) {
     // For high-volume, switch to Promise.allSettled with a concurrency limit.
     for (const msg of messages) {
       try {
-        const result = await sendWhatsAppMessage({
-          to:   msg.to_whatsapp,
-          text: msg.body,
-        })
+        const result = msg.buttons && msg.buttons.length > 0
+          ? await sendWhatsAppButtons({ to: msg.to_whatsapp, body: msg.body, buttons: msg.buttons })
+          : await sendWhatsAppMessage({ to: msg.to_whatsapp, text: msg.body })
 
         await markSent(msg.id, claimToken)
 

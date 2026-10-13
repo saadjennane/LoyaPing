@@ -1,15 +1,16 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Star, ThumbsUp, ThumbsDown, Send, RefreshCw, AlertTriangle, Check, ExternalLink, Bell } from 'lucide-react'
+import { Star, ThumbsUp, ThumbsDown, Send, RefreshCw, AlertTriangle, Check, ExternalLink, Bell, MessageCircle, CheckCheck, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import Link from 'next/link'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { ReviewEvent, ReviewStats } from '@/lib/types'
+import type { ReviewEvent, ReviewStats, Conversation, ConversationMessage, ConversationStatus, ConversationWithMessages } from '@/lib/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,44 @@ function clientName(event: ReviewEvent): string {
   if (!c) return 'Client inconnu'
   const parts = [c.civility, c.first_name, c.last_name].filter(Boolean)
   return parts.length > 0 ? parts.join(' ') : c.phone_number
+}
+
+function convClientName(conv: Conversation): string {
+  const c = conv.client
+  if (!c) return conv.phone
+  const parts = [c.civility, c.first_name, c.last_name].filter(Boolean)
+  return parts.length > 0 ? parts.join(' ') : c.phone_number
+}
+
+function isWindowOpen(lastInbound: string): boolean {
+  return new Date(lastInbound).getTime() + 24 * 60 * 60 * 1000 > Date.now()
+}
+
+function convStatusLabel(status: ConversationStatus): string {
+  switch (status) {
+    case 'TO_TREAT':    return 'À traiter'
+    case 'OPEN':        return 'Ouverte'
+    case 'IN_PROGRESS': return 'En cours'
+    case 'RESOLVED':    return 'Résolue'
+  }
+}
+
+function convTabLabel(status: ConversationStatus): string {
+  switch (status) {
+    case 'TO_TREAT':    return 'À traiter'
+    case 'OPEN':        return 'Ouvertes'
+    case 'IN_PROGRESS': return 'En cours'
+    case 'RESOLVED':    return 'Résolues'
+  }
+}
+
+function convStatusClass(status: ConversationStatus): string {
+  switch (status) {
+    case 'TO_TREAT':    return 'bg-red-50 text-red-700 border-red-200'
+    case 'OPEN':        return 'bg-blue-50 text-blue-700 border-blue-200'
+    case 'IN_PROGRESS': return 'bg-amber-50 text-amber-700 border-amber-200'
+    case 'RESOLVED':    return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  }
 }
 
 function eventLabel(type: ReviewEvent['type']): string {
@@ -93,12 +132,25 @@ function KpiCard({ label, value, icon, highlight }: {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const CONV_TABS: ConversationStatus[] = ['TO_TREAT', 'OPEN', 'IN_PROGRESS', 'RESOLVED']
+
 export default function ReviewsPage() {
   const [stats,    setStats]    = useState<ReviewStats | null>(null)
   const [events,   setEvents]   = useState<ReviewEvent[]>([])
   const [isActive, setIsActive] = useState(false)
   const [loading,  setLoading]  = useState(true)
   const [treating, setTreating] = useState<string | null>(null)
+
+  // Conversations state
+  const [convTab,     setConvTab]     = useState<ConversationStatus>('TO_TREAT')
+  const [convs,       setConvs]       = useState<Conversation[]>([])
+  const [convLoading, setConvLoading] = useState(false)
+  const [activeConv,  setActiveConv]  = useState<ConversationWithMessages | null>(null)
+  const [chatOpen,    setChatOpen]    = useState(false)
+  const [replyBody,   setReplyBody]   = useState('')
+  const [sending,     setSending]     = useState(false)
+  const [resolving,   setResolving]   = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -114,6 +166,80 @@ export default function ReviewsPage() {
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  // ── Conversations ──────────────────────────────────────────────────────────
+
+  const fetchConversations = useCallback(async (status: ConversationStatus) => {
+    setConvLoading(true)
+    const res  = await fetch(`/api/conversations?status=${status}`)
+    const json = await res.json()
+    if (json.data) setConvs(json.data)
+    setConvLoading(false)
+  }, [])
+
+  useEffect(() => { fetchConversations(convTab) }, [fetchConversations, convTab])
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (chatOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [activeConv?.messages, chatOpen])
+
+  const openConversation = async (id: string) => {
+    const res  = await fetch(`/api/conversations/${id}`)
+    const json = await res.json()
+    if (json.error) { toast.error('Erreur lors du chargement'); return }
+    setActiveConv(json.data)
+    setChatOpen(true)
+    // Refresh list so TO_TREAT count updates if it transitioned to OPEN
+    fetchConversations(convTab)
+  }
+
+  const sendReply = async () => {
+    if (!activeConv || !replyBody.trim()) return
+    setSending(true)
+    const res  = await fetch(`/api/conversations/${activeConv.id}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: replyBody.trim() }),
+    })
+    const json = await res.json()
+    if (json.error) {
+      toast.error("Erreur lors de l'envoi")
+    } else {
+      const newMsg: ConversationMessage = {
+        id:              json.data.id,
+        conversation_id: activeConv.id,
+        direction:       'outbound',
+        body:            replyBody.trim(),
+        created_at:      new Date().toISOString(),
+      }
+      setActiveConv((prev) => prev ? { ...prev, messages: [...prev.messages, newMsg], status: 'IN_PROGRESS' } : prev)
+      setReplyBody('')
+    }
+    setSending(false)
+  }
+
+  const resolveConversation = async () => {
+    if (!activeConv) return
+    setResolving(true)
+    const res  = await fetch(`/api/conversations/${activeConv.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'RESOLVED' }),
+    })
+    const json = await res.json()
+    if (json.error) {
+      toast.error('Erreur lors de la résolution')
+    } else {
+      toast.success('Conversation résolue')
+      setChatOpen(false)
+      setActiveConv(null)
+      fetchConversations(convTab)
+    }
+    setResolving(false)
+  }
 
   const markTreated = async (id: string) => {
     setTreating(id)
@@ -135,6 +261,8 @@ export default function ReviewsPage() {
 
   const untreatedNegatives = events.filter((e) => e.type === 'negative_response' && !e.treated)
 
+  const windowOpen = activeConv ? isWindowOpen(activeConv.last_inbound_at) : false
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
 
@@ -146,7 +274,7 @@ export default function ReviewsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Reviews</h1>
-            <p className="text-sm text-muted-foreground">Demandes d'avis et retours clients</p>
+            <p className="text-sm text-muted-foreground">Demandes d&apos;avis et retours clients</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -344,8 +472,204 @@ export default function ReviewsPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── Conversations ─────────────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-blue-500" />
+                Conversations
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              {/* Tabs */}
+              <div className="flex gap-1 mb-4 border-b">
+                {CONV_TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setConvTab(tab)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-t-md -mb-px border-b-2 transition-colors ${
+                      convTab === tab
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {convTabLabel(tab)}
+                  </button>
+                ))}
+              </div>
+
+              {/* List */}
+              {convLoading ? (
+                <div className="text-sm text-muted-foreground text-center py-8">Chargement...</div>
+              ) : convs.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <MessageCircle className="h-8 w-8 mx-auto mb-3 opacity-20" />
+                  <p className="text-sm">Aucune conversation {convTabLabel(convTab).toLowerCase()}.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {convs.map((conv) => (
+                    <div
+                      key={conv.id}
+                      onClick={() => openConversation(conv.id)}
+                      className="flex items-start gap-3 rounded-lg border bg-card px-3 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
+                      {/* Avatar */}
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                        <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium truncate">{convClientName(conv)}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {formatDistanceToNow(parseISO(conv.last_inbound_at), { locale: fr, addSuffix: true })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{conv.phone}</p>
+                        {conv.last_message && (
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate italic">&ldquo;{conv.last_message}&rdquo;</p>
+                        )}
+                      </div>
+                      <span className={`inline-flex items-center text-xs font-medium rounded-full px-2 py-0.5 border shrink-0 ${convStatusClass(conv.status)}`}>
+                        {convStatusLabel(conv.status)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
+
+      {/* ── Chat Sheet ────────────────────────────────────────────────────── */}
+      <Sheet open={chatOpen} onOpenChange={(o) => { if (!o) { setChatOpen(false) } }}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col p-0 gap-0">
+          {activeConv && (
+            <>
+              {/* Header */}
+              <SheetHeader className="px-4 py-3 border-b shrink-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <SheetTitle className="text-base font-semibold leading-tight">
+                      {convClientName(activeConv)}
+                    </SheetTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">{activeConv.phone}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      disabled={resolving || activeConv.status === 'RESOLVED'}
+                      onClick={resolveConversation}
+                    >
+                      {resolving ? (
+                        <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                      ) : (
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                      )}
+                      Résoudre
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      asChild
+                    >
+                      <Link href={activeConv.client?.phone_number ? `/clients?q=${encodeURIComponent(activeConv.phone)}` : '#'}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className={`inline-flex items-center text-xs font-medium rounded-full px-2 py-0.5 border ${convStatusClass(activeConv.status)}`}>
+                    {convStatusLabel(activeConv.status)}
+                  </span>
+                  {!windowOpen && (
+                    <span className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      Fenêtre WhatsApp fermée
+                    </span>
+                  )}
+                </div>
+              </SheetHeader>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {activeConv.messages.length === 0 && (
+                  <div className="text-center text-sm text-muted-foreground py-8">
+                    Aucun message pour le moment.
+                  </div>
+                )}
+                {activeConv.messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                      msg.direction === 'outbound'
+                        ? 'bg-[#3B5BDB] text-white rounded-br-sm'
+                        : 'bg-muted text-foreground rounded-bl-sm'
+                    }`}>
+                      <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                      <p className={`text-[10px] mt-1 ${msg.direction === 'outbound' ? 'text-blue-200' : 'text-muted-foreground'}`}>
+                        {format(parseISO(msg.created_at), 'HH:mm', { locale: fr })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="border-t px-3 py-3 shrink-0">
+                {!windowOpen ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-700">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    La fenêtre de messagerie WhatsApp est expirée (24h). Vous ne pouvez plus envoyer de messages.
+                  </div>
+                ) : activeConv.status === 'RESOLVED' ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
+                    <X className="h-3.5 w-3.5 shrink-0" />
+                    Cette conversation est résolue.
+                  </div>
+                ) : (
+                  <div className="flex gap-2 items-end">
+                    <textarea
+                      value={replyBody}
+                      onChange={(e) => setReplyBody(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          sendReply()
+                        }
+                      }}
+                      placeholder="Écrivez un message..."
+                      rows={2}
+                      className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-9 px-3 bg-[#3B5BDB] hover:bg-[#2F4BC7] text-white shrink-0"
+                      disabled={sending || !replyBody.trim()}
+                      onClick={sendReply}
+                    >
+                      {sending ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Send className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

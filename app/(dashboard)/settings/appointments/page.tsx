@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,11 +43,39 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   )
 }
 
+// ── Reminder message variables ────────────────────────────────────────────────
+
+const REMINDER_VARS = [
+  { label: 'Civilité', variable: '{{civilite}}' },
+  { label: 'Prénom',   variable: '{{prenom}}'   },
+  { label: 'Nom',      variable: '{{nom}}'      },
+  { label: 'Jour',     variable: '{{jour}}'     },
+  { label: 'Date',     variable: '{{date}}'     },
+  { label: 'Heure',    variable: '{{heure}}'    },
+]
+
+const PREVIEW_SAMPLE = {
+  civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali',
+  jour: 'lundi', date: '10 mars', heure: '14h30',
+}
+
+function renderReminderPreview(msg: string): string {
+  return msg
+    .replace(/\{\{civilite\}\}/gi, PREVIEW_SAMPLE.civilite)
+    .replace(/\{\{prenom\}\}/gi,   PREVIEW_SAMPLE.prenom)
+    .replace(/\{\{nom\}\}/gi,      PREVIEW_SAMPLE.nom)
+    .replace(/\{\{jour\}\}/gi,     PREVIEW_SAMPLE.jour)
+    .replace(/\{\{date\}\}/gi,     PREVIEW_SAMPLE.date)
+    .replace(/\{\{heure\}\}/gi,    PREVIEW_SAMPLE.heure)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const DEFAULT_APPT_NOTIF: Omit<AppointmentNotificationSettings, 'business_id' | 'updated_at'> = {
   default_duration_minutes: null,
-  reminder1_enabled: true,  reminder1_delay_value: 24, reminder1_delay_unit: 'hours', reminder1_fixed_send_time: null, reminder1_message: 'Bonjour ! Rappel de votre rendez-vous demain. À bientôt !',
-  reminder2_enabled: false, reminder2_delay_value: 2,  reminder2_delay_unit: 'hours', reminder2_fixed_send_time: null, reminder2_message: '',
-  reminder3_enabled: false, reminder3_delay_value: 30, reminder3_delay_unit: 'minutes', reminder3_fixed_send_time: null, reminder3_message: '',
+  reminder1_enabled: true,  reminder1_delay_value: 24, reminder1_delay_unit: 'hours', reminder1_fixed_send_time: null, reminder1_message: 'Bonjour ! Rappel de votre rendez-vous demain. À bientôt !', reminder1_with_buttons: false,
+  reminder2_enabled: false, reminder2_delay_value: 2,  reminder2_delay_unit: 'hours', reminder2_fixed_send_time: null, reminder2_message: '', reminder2_with_buttons: false,
+  reminder3_enabled: false, reminder3_delay_value: 30, reminder3_delay_unit: 'minutes', reminder3_fixed_send_time: null, reminder3_message: '', reminder3_with_buttons: false,
   post_messages_enabled: true,
   post_show_message:    'Merci pour votre visite ! À bientôt.',
   post_no_show_message: 'Vous avez manqué votre rendez-vous. Contactez-nous pour en planifier un nouveau.',
@@ -79,6 +107,30 @@ export default function AppointmentsSettingsPage() {
   const [selectedMsCalId, setSelectedMsCalId]     = useState('primary')
   const [msCalSaving, setMsCalSaving]             = useState(false)
 
+  // Refs for reminder message textareas (fixed-length array — hooks rule respected)
+  const reminderRefs = [
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+    useRef<HTMLTextAreaElement>(null),
+  ]
+
+  function insertReminderVar(
+    ref: React.RefObject<HTMLTextAreaElement | null>,
+    variable: string,
+    current: string,
+    setter: (v: string) => void,
+  ) {
+    const el = ref.current
+    const start = el?.selectionStart ?? current.length
+    const end   = el?.selectionEnd   ?? current.length
+    const next  = current.slice(0, start) + variable + current.slice(end)
+    setter(next)
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + variable.length, start + variable.length)
+    })
+  }
+
   const fetchApptNotif = useCallback(async () => {
     setApptLoading(true)
     const res  = await fetch('/api/settings/appointment-notifications')
@@ -87,9 +139,9 @@ export default function AppointmentsSettingsPage() {
       const d = json.data as AppointmentNotificationSettings
       setApptNotif({
         default_duration_minutes: d.default_duration_minutes ?? null,
-        reminder1_enabled: d.reminder1_enabled, reminder1_delay_value: d.reminder1_delay_value, reminder1_delay_unit: d.reminder1_delay_unit, reminder1_fixed_send_time: d.reminder1_fixed_send_time ?? null, reminder1_message: d.reminder1_message,
-        reminder2_enabled: d.reminder2_enabled, reminder2_delay_value: d.reminder2_delay_value, reminder2_delay_unit: d.reminder2_delay_unit, reminder2_fixed_send_time: d.reminder2_fixed_send_time ?? null, reminder2_message: d.reminder2_message,
-        reminder3_enabled: d.reminder3_enabled, reminder3_delay_value: d.reminder3_delay_value, reminder3_delay_unit: d.reminder3_delay_unit, reminder3_fixed_send_time: d.reminder3_fixed_send_time ?? null, reminder3_message: d.reminder3_message,
+        reminder1_enabled: d.reminder1_enabled, reminder1_delay_value: d.reminder1_delay_value, reminder1_delay_unit: d.reminder1_delay_unit, reminder1_fixed_send_time: d.reminder1_fixed_send_time ?? null, reminder1_message: d.reminder1_message, reminder1_with_buttons: d.reminder1_with_buttons ?? false,
+        reminder2_enabled: d.reminder2_enabled, reminder2_delay_value: d.reminder2_delay_value, reminder2_delay_unit: d.reminder2_delay_unit, reminder2_fixed_send_time: d.reminder2_fixed_send_time ?? null, reminder2_message: d.reminder2_message, reminder2_with_buttons: d.reminder2_with_buttons ?? false,
+        reminder3_enabled: d.reminder3_enabled, reminder3_delay_value: d.reminder3_delay_value, reminder3_delay_unit: d.reminder3_delay_unit, reminder3_fixed_send_time: d.reminder3_fixed_send_time ?? null, reminder3_message: d.reminder3_message, reminder3_with_buttons: d.reminder3_with_buttons ?? false,
         post_messages_enabled: d.post_messages_enabled,
         post_show_message:     d.post_show_message,
         post_no_show_message:  d.post_no_show_message,
@@ -199,26 +251,32 @@ export default function AppointmentsSettingsPage() {
   }
 
   const apptReminders = [
-    { num: 1, enabled: apptNotif.reminder1_enabled, delayValue: apptNotif.reminder1_delay_value, delayUnit: apptNotif.reminder1_delay_unit, fixedSendTime: apptNotif.reminder1_fixed_send_time, message: apptNotif.reminder1_message,
+    { num: 1, enabled: apptNotif.reminder1_enabled, delayValue: apptNotif.reminder1_delay_value, delayUnit: apptNotif.reminder1_delay_unit, fixedSendTime: apptNotif.reminder1_fixed_send_time, message: apptNotif.reminder1_message, withButtons: apptNotif.reminder1_with_buttons,
+      textareaRef: reminderRefs[0],
       setEnabled: (v: boolean) => setApptNotif({ ...apptNotif, reminder1_enabled: v }),
       setDelayValue: (v: number) => setApptNotif({ ...apptNotif, reminder1_delay_value: v }),
       setDelayUnit: (v: string) => setApptNotif({ ...apptNotif, reminder1_delay_unit: v as AppointmentNotificationSettings['reminder1_delay_unit'], reminder1_fixed_send_time: null }),
       setFixedSendTime: (v: string | null) => setApptNotif({ ...apptNotif, reminder1_fixed_send_time: v }),
       setMessage: (v: string) => setApptNotif({ ...apptNotif, reminder1_message: v }),
+      setWithButtons: (v: boolean) => setApptNotif({ ...apptNotif, reminder1_with_buttons: v }),
     },
-    { num: 2, enabled: apptNotif.reminder2_enabled, delayValue: apptNotif.reminder2_delay_value, delayUnit: apptNotif.reminder2_delay_unit, fixedSendTime: apptNotif.reminder2_fixed_send_time, message: apptNotif.reminder2_message,
+    { num: 2, enabled: apptNotif.reminder2_enabled, delayValue: apptNotif.reminder2_delay_value, delayUnit: apptNotif.reminder2_delay_unit, fixedSendTime: apptNotif.reminder2_fixed_send_time, message: apptNotif.reminder2_message, withButtons: apptNotif.reminder2_with_buttons,
+      textareaRef: reminderRefs[1],
       setEnabled: (v: boolean) => setApptNotif({ ...apptNotif, reminder2_enabled: v }),
       setDelayValue: (v: number) => setApptNotif({ ...apptNotif, reminder2_delay_value: v }),
       setDelayUnit: (v: string) => setApptNotif({ ...apptNotif, reminder2_delay_unit: v as AppointmentNotificationSettings['reminder2_delay_unit'], reminder2_fixed_send_time: null }),
       setFixedSendTime: (v: string | null) => setApptNotif({ ...apptNotif, reminder2_fixed_send_time: v }),
       setMessage: (v: string) => setApptNotif({ ...apptNotif, reminder2_message: v }),
+      setWithButtons: (v: boolean) => setApptNotif({ ...apptNotif, reminder2_with_buttons: v }),
     },
-    { num: 3, enabled: apptNotif.reminder3_enabled, delayValue: apptNotif.reminder3_delay_value, delayUnit: apptNotif.reminder3_delay_unit, fixedSendTime: apptNotif.reminder3_fixed_send_time, message: apptNotif.reminder3_message,
+    { num: 3, enabled: apptNotif.reminder3_enabled, delayValue: apptNotif.reminder3_delay_value, delayUnit: apptNotif.reminder3_delay_unit, fixedSendTime: apptNotif.reminder3_fixed_send_time, message: apptNotif.reminder3_message, withButtons: apptNotif.reminder3_with_buttons,
+      textareaRef: reminderRefs[2],
       setEnabled: (v: boolean) => setApptNotif({ ...apptNotif, reminder3_enabled: v }),
       setDelayValue: (v: number) => setApptNotif({ ...apptNotif, reminder3_delay_value: v }),
       setDelayUnit: (v: string) => setApptNotif({ ...apptNotif, reminder3_delay_unit: v as AppointmentNotificationSettings['reminder3_delay_unit'], reminder3_fixed_send_time: null }),
       setFixedSendTime: (v: string | null) => setApptNotif({ ...apptNotif, reminder3_fixed_send_time: v }),
       setMessage: (v: string) => setApptNotif({ ...apptNotif, reminder3_message: v }),
+      setWithButtons: (v: boolean) => setApptNotif({ ...apptNotif, reminder3_with_buttons: v }),
     },
   ]
 
@@ -398,12 +456,38 @@ export default function AppointmentsSettingsPage() {
                         </div>
                       )}
                       <textarea
+                        ref={r.textareaRef}
                         className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                         placeholder={`Message du rappel ${r.num}...`}
                         value={r.message}
                         onChange={(e) => r.setMessage(e.target.value)}
                         rows={2}
                       />
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+                        {REMINDER_VARS.map(({ label, variable }) => (
+                          <button
+                            key={variable}
+                            type="button"
+                            onClick={() => insertReminderVar(r.textareaRef, variable, r.message, r.setMessage)}
+                            className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {r.message && /\{\{/.test(r.message) && (
+                        <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                          {renderReminderPreview(r.message)}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between rounded-lg border border-dashed border-muted-foreground/30 px-3 py-2">
+                        <div>
+                          <p className="text-xs font-medium">Boutons de confirmation</p>
+                          <p className="text-xs text-muted-foreground">Ajoute ✅ Je confirme · 🔁 Replanifier au message</p>
+                        </div>
+                        <Toggle checked={r.withButtons} onChange={r.setWithButtons} />
+                      </div>
                     </>
                   )}
                 </div>

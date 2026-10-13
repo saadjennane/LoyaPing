@@ -133,7 +133,7 @@ export async function processBirthdayRewards(): Promise<{
   // makes this a single index scan regardless of total client count.
   const { data: todayBirthdays, error: clientsErr } = await db
     .from('clients')
-    .select('id, phone_number')
+    .select('id, phone_number, first_name, last_name, civility')
     .eq('business_id',   DEFAULT_BUSINESS_ID)
     .eq('birthday_mmdd', localMMDD)          // 'MM-DD', e.g. '02-23'
 
@@ -257,8 +257,11 @@ export async function processBirthdayRewards(): Promise<{
       if (birthday_message_enabled && birthday_message_template) {
         const rewardTitle = (birthday_reward_title as string | null) ?? 'un cadeau'
         const messageBody = (birthday_message_template as string)
-          .replace(/#{cadeau}/g, rewardTitle)
-          .replace(/#{reward}/g, rewardTitle)
+          .replace(/#{cadeau}/g,       rewardTitle)
+          .replace(/#{reward}/g,       rewardTitle)
+          .replace(/\{\{civilite\}\}/gi, (client as {civility?: string | null}).civility   ?? '')
+          .replace(/\{\{prenom\}\}/gi,   (client as {first_name?: string | null}).first_name ?? '')
+          .replace(/\{\{nom\}\}/gi,      (client as {last_name?: string | null}).last_name   ?? '')
 
         // Cancel any lingering SCHEDULED row (safe if cron re-runs today)
         await cancelExistingScheduledForEntity('client', client.id, 'birthday')

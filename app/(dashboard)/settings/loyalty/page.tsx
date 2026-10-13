@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { Plus, Minus, AlertCircle, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,56 @@ import type { LoyaltyProgram, LoyaltyTier } from '@/lib/types'
 import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 import { WORLD_CURRENCIES } from '@/lib/currencies'
+
+const TIER_VARS = [
+  { label: "Date d'expiration", variable: '#{expiry_date}'  },
+  { label: 'Récompense',        variable: '#{reward_title}' },
+  { label: 'Civilité',          variable: '{{civilite}}'    },
+  { label: 'Prénom',            variable: '{{prenom}}'      },
+  { label: 'Nom',               variable: '{{nom}}'         },
+]
+const TIER_PREVIEW = { expiry_date: '15 avril 2026', reward_title: 'Café offert', civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
+function renderTierPreview(msg: string): string {
+  return msg
+    .replace(/#{expiry_date}/g,    TIER_PREVIEW.expiry_date)
+    .replace(/#{reward_title}/g,   TIER_PREVIEW.reward_title)
+    .replace(/\{\{civilite\}\}/gi, TIER_PREVIEW.civilite)
+    .replace(/\{\{prenom\}\}/gi,   TIER_PREVIEW.prenom)
+    .replace(/\{\{nom\}\}/gi,      TIER_PREVIEW.nom)
+}
+
+const BIRTHDAY_VARS = [
+  { label: 'Cadeau',   variable: '#{cadeau}'     },
+  { label: 'Civilité', variable: '{{civilite}}'  },
+  { label: 'Prénom',   variable: '{{prenom}}'    },
+  { label: 'Nom',      variable: '{{nom}}'       },
+]
+const BIRTHDAY_PREVIEW = { cadeau: 'un café offert', civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
+function renderBirthdayPreview(msg: string): string {
+  return msg
+    .replace(/#{cadeau}/g,         BIRTHDAY_PREVIEW.cadeau)
+    .replace(/#{reward}/g,         BIRTHDAY_PREVIEW.cadeau)
+    .replace(/\{\{civilite\}\}/gi, BIRTHDAY_PREVIEW.civilite)
+    .replace(/\{\{prenom\}\}/gi,   BIRTHDAY_PREVIEW.prenom)
+    .replace(/\{\{nom\}\}/gi,      BIRTHDAY_PREVIEW.nom)
+}
+
+function insertVar(
+  ref: React.RefObject<HTMLTextAreaElement | null>,
+  variable: string,
+  current: string,
+  setter: (v: string) => void,
+) {
+  const el = ref.current
+  const start = el?.selectionStart ?? current.length
+  const end   = el?.selectionEnd   ?? current.length
+  const next  = current.slice(0, start) + variable + current.slice(end)
+  setter(next)
+  requestAnimationFrame(() => {
+    el?.focus()
+    el?.setSelectionRange(start + variable.length, start + variable.length)
+  })
+}
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
@@ -56,6 +106,10 @@ export default function LoyaltySettingsPage() {
   })
 
   const [businessTimezone, setBusinessTimezone] = useState('Africa/Casablanca')
+
+  // Refs for tier notification message textareas (mutable array — no hooks in loop)
+  const tierMsgRefs = useRef<(HTMLTextAreaElement | null)[]>([])
+  const birthdayMsgRef = useRef<HTMLTextAreaElement>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -286,13 +340,32 @@ export default function LoyaltySettingsPage() {
                       <div className="space-y-1">
                         <Label className="text-xs">Message WhatsApp (palier atteint)</Label>
                         <textarea
+                          ref={(el) => { tierMsgRefs.current[idx] = el }}
                           className="flex min-h-[56px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                           placeholder={`Félicitations ! Vous avez atteint le palier "${tier.reward_title || 'Récompense'}".`}
                           value={tier.notification_message_template}
                           rows={2}
                           onChange={(e) => { const next = [...loyaltyTiers]; next[idx] = { ...next[idx], notification_message_template: e.target.value }; setLoyaltyTiers(next) }}
                         />
-                        <p className="text-xs text-muted-foreground">Variables : <code className="bg-muted px-1 rounded">#{'{expiry_date}'}</code>, <code className="bg-muted px-1 rounded">#{'{reward_title}'}</code></p>
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+                          {TIER_VARS.map(({ label, variable }) => (
+                            <button key={variable} type="button"
+                              onClick={() => {
+                                const ref = { current: tierMsgRefs.current[idx] }
+                                insertVar(ref, variable, tier.notification_message_template, (v) => {
+                                  const next = [...loyaltyTiers]; next[idx] = { ...next[idx], notification_message_template: v }; setLoyaltyTiers(next)
+                                })
+                              }}
+                              className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                            >{label}</button>
+                          ))}
+                        </div>
+                        {tier.notification_message_template && /#{/.test(tier.notification_message_template) && (
+                          <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                            {renderTierPreview(tier.notification_message_template)}
+                          </div>
+                        )}
                       </div>
                     )}
                   </CardContent>
@@ -409,15 +482,27 @@ export default function LoyaltySettingsPage() {
                       <div className="space-y-1">
                       <Label className="text-xs">Message</Label>
                       <textarea
+                        ref={birthdayMsgRef}
                         className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                         placeholder={`Joyeux anniversaire ! 🎂 Nous avons le plaisir de vous offrir ${birthdayForm.birthday_reward_title || 'un cadeau'} pour célébrer votre journée.`}
                         rows={3}
                         value={birthdayForm.birthday_message_template}
                         onChange={(e) => setBirthdayForm((f) => ({ ...f, birthday_message_template: e.target.value }))}
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Variable disponible : <code className="bg-muted px-1 rounded">#{'{cadeau}'}</code> — remplacée par la description du cadeau.
-                      </p>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <span className="text-xs text-muted-foreground shrink-0">Insérer :</span>
+                        {BIRTHDAY_VARS.map(({ label, variable }) => (
+                          <button key={variable} type="button"
+                            onClick={() => insertVar(birthdayMsgRef, variable, birthdayForm.birthday_message_template, (v) => setBirthdayForm((f) => ({ ...f, birthday_message_template: v })))}
+                            className="text-xs px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/40 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                          >{label}</button>
+                        ))}
+                      </div>
+                      {birthdayForm.birthday_message_template && /#{/.test(birthdayForm.birthday_message_template) && (
+                        <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
+                          {renderBirthdayPreview(birthdayForm.birthday_message_template)}
+                        </div>
+                      )}
                       </div>
                     </div>
                   )}
