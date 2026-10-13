@@ -35,7 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         .eq('client_id', id)
         .order('created_at', { ascending: false }),
       db.from('appointments')
-        .select('*')
+        .select('*, services:appointment_services(name, position)')
         .eq('client_id', id)
         .order('scheduled_at', { ascending: false }),
       db.from('points_log')

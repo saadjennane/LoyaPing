@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
+import { ChevronRight, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { MICROSOFT_ENABLED } from '@/lib/constants/features'
@@ -287,6 +289,19 @@ export default function AppointmentsSettingsPage() {
         <h2 className="text-lg font-semibold">Rendez-vous</h2>
         <p className="text-sm text-muted-foreground">Rappels WhatsApp, messages post-RDV et synchronisation calendrier.</p>
       </div>
+
+      {/* Shortcut to the service catalog */}
+      <Link
+        href="/settings/services"
+        className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm hover:bg-muted/40 transition-colors"
+      >
+        <Sparkles className="h-4 w-4 text-[#3B5BDB] shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-medium">Soins & cabines</div>
+          <div className="text-xs text-muted-foreground">Catalogue des soins (prix, durée) et cabines utilisés pour proposer les créneaux.</div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+      </Link>
 
       {/* Calendar sync — compact */}
       {!calendarLoading && (

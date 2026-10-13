@@ -2033,10 +2033,13 @@ export default function AppointmentsPage() {
             {/* ── Colonne gauche : soins + créneaux de la semaine ─── */}
             <div className="flex flex-col md:w-96 shrink-0 border-b md:border-b-0 md:border-r bg-muted/20 md:overflow-y-auto">
               <div className="px-3 pt-3 pb-3 border-b border-border/60 space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
-                  Soins
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
+                    Soins
+                  </p>
+                  <a href="/settings/services" className="text-[11px] text-[#3B5BDB] hover:underline">Gérer</a>
+                </div>
                 <ServiceSelector
                   cabins={cabins}
                   services={services}

@@ -84,6 +84,12 @@ const SOURCE_LABEL_KEYS: Record<string, string> = {
   undo:        'clients.pointsLog.undo',
 }
 
+// Names of the services consumed during an appointment, in booking order
+function apptServicesLabel(appt: Appointment | undefined): string | null {
+  const services = [...(appt?.services ?? [])].sort((a, b) => a.position - b.position)
+  return services.length > 0 ? services.map((sv) => sv.name).join(' + ') : null
+}
+
 type InfoForm = { civility: string; first_name: string; last_name: string; phone_number: string; email: string; birthday: string; notes: string }
 const EMPTY_INFO: InfoForm = { civility: '', first_name: '', last_name: '', phone_number: '', email: '', birthday: '', notes: '' }
 
@@ -1275,7 +1281,11 @@ export default function ClientsPage() {
                           {(detailData.pointsLog as PointsLog[]).map((log) => (
                             <div key={log.id} className="flex items-center justify-between text-sm py-2 border-b last:border-b-0">
                               <div>
-                                <span className="font-medium">{t(SOURCE_LABEL_KEYS[log.source_type] ?? log.source_type)}</span>
+                                <span className="font-medium">
+                                  {(log.source_type === 'appointment'
+                                    && apptServicesLabel((detailData.appointments as Appointment[]).find((a) => a.id === log.source_id)))
+                                    || t(SOURCE_LABEL_KEYS[log.source_type] ?? log.source_type)}
+                                </span>
                                 <div className="text-xs text-muted-foreground">
                                   {format(parseISO(log.created_at), 'd MMM yyyy à HH:mm', { locale: fr })}
                                 </div>
@@ -1290,7 +1300,14 @@ export default function ClientsPage() {
                             .map((appt) => (
                               <div key={appt.id} className="flex items-center justify-between text-sm py-2 border-b last:border-b-0">
                                 <div>
-                                  <span className="font-medium">{t(APPT_LABEL_KEYS[appt.status] ?? appt.status)}</span>
+                                  <span className="font-medium">
+                                    {appt.status === 'show' && apptServicesLabel(appt)
+                                      ? apptServicesLabel(appt)
+                                      : t(APPT_LABEL_KEYS[appt.status] ?? appt.status)}
+                                  </span>
+                                  {appt.status !== 'show' && apptServicesLabel(appt) && (
+                                    <span className="text-muted-foreground ml-1.5 text-xs">· {apptServicesLabel(appt)}</span>
+                                  )}
                                   {appt.notes && <span className="text-muted-foreground ml-1.5 text-xs">· {appt.notes}</span>}
                                   <div className="text-xs text-muted-foreground">
                                     {format(parseISO(appt.scheduled_at), 'd MMM yyyy à HH:mm', { locale: fr })}
