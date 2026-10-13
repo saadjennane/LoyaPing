@@ -1,33 +1,18 @@
 import { NextResponse } from 'next/server'
 import { syncGoogleCalendar, pushAppointmentToGoogle } from '@/lib/services/google-calendar-sync'
 import { createServerClient } from '@/lib/supabase/server'
+import { GOOGLE_CALENDAR_IMPORT_ENABLED } from '@/lib/constants/features'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
-// POST /api/calendar/google/sync — bidirectional sync:
-//   1. Pull: Google → LoyaPing (new/changed/deleted events)
+// POST /api/calendar/google/sync:
+//   1. Pull: Google → LoyaPing (new/changed/deleted events) — only when import is enabled
 //   2. Push: LoyaPing → Google (upcoming appointments not yet in Google)
 export async function POST() {
   try {
     const db = createServerClient()
 
-    // 0. Cleanup: remove calendar_imports that are duplicates of existing appointments
-    const { data: linked } = await db
-      .from('appointments')
-      .select('google_event_id')
-      .eq('business_id', DEFAULT_BUSINESS_ID)
-      .not('google_event_id', 'is', null)
-    if (linked && linked.length > 0) {
-      const eventIds = linked.map((a) => a.google_event_id).filter(Boolean) as string[]
-      await db
-        .from('calendar_imports')
-        .delete()
-        .eq('business_id', DEFAULT_BUSINESS_ID)
-        .in('event_id', eventIds)
-    }
-
-    // 1. Pull: Google → LoyaPing
-    await syncGoogleCalendar(DEFAULT_BUSINESS_ID)
+    if (GOOGLE_CALENDAR_IMPORT_ENABLED) await pullFromGoogle(db)
 
     // 2. Push: LoyaPing → Google
     // Fetch ALL upcoming scheduled appointments (new + existing) to create or update Google events
@@ -50,4 +35,24 @@ export async function POST() {
     console.error('[calendar/google/sync]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
+}
+
+async function pullFromGoogle(db: ReturnType<typeof createServerClient>) {
+  // 0. Cleanup: remove calendar_imports that are duplicates of existing appointments
+  const { data: linked } = await db
+    .from('appointments')
+    .select('google_event_id')
+    .eq('business_id', DEFAULT_BUSINESS_ID)
+    .not('google_event_id', 'is', null)
+  if (linked && linked.length > 0) {
+    const eventIds = linked.map((a) => a.google_event_id).filter(Boolean) as string[]
+    await db
+      .from('calendar_imports')
+      .delete()
+      .eq('business_id', DEFAULT_BUSINESS_ID)
+      .in('event_id', eventIds)
+  }
+
+  // 1. Pull: Google → LoyaPing
+  await syncGoogleCalendar(DEFAULT_BUSINESS_ID)
 }

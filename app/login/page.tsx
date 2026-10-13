@@ -4,6 +4,7 @@ import { Suspense, useState, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { Button } from '@/components/ui/button'
+import { MICROSOFT_ENABLED } from '@/lib/constants/features'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -136,16 +137,18 @@ function LoginForm() {
               <GoogleLogo />
               {loading === 'google' ? 'Redirection…' : 'Continuer avec Google'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full gap-2"
-              disabled={loading !== null}
-              onClick={() => handleOAuth('azure')}
-            >
-              <MicrosoftLogo />
-              {loading === 'azure' ? 'Redirection…' : 'Continuer avec Microsoft'}
-            </Button>
+            {MICROSOFT_ENABLED && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2"
+                disabled={loading !== null}
+                onClick={() => handleOAuth('azure')}
+              >
+                <MicrosoftLogo />
+                {loading === 'azure' ? 'Redirection…' : 'Continuer avec Microsoft'}
+              </Button>
+            )}
           </div>
         </>
       )}

@@ -7,6 +7,8 @@ import { pushAppointmentToGoogle, deleteGoogleEvent } from '@/lib/services/googl
 import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services/microsoft-calendar-sync'
 import { reverseSourceCredit } from '@/lib/services/loyalty'
 import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
+import { assertCabinFree, BookingError } from '@/lib/services/catalog'
+import { appointmentEnd } from '@/lib/scheduling/slots'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -19,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const db = createServerClient()
     const { data, error } = await db
       .from('appointments')
-      .select('*, client:clients(first_name, last_name, phone_number)')
+      .select('*, client:clients(first_name, last_name, phone_number), services:appointment_services(*)')
       .eq('id', id)
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .is('deleted_at', null)
@@ -161,8 +163,44 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Reschedule: update scheduled_at (+ ended_at if provided), cancel old reminders, schedule new ones
     if (scheduled_at) {
       const db = createServerClient()
-      const updateFields: Record<string, string | null> = { scheduled_at }
-      if ('ended_at' in body) updateFields.ended_at = body.ended_at ?? null
+      const { data: current } = await db
+        .from('appointments')
+        .select('cabin_id, scheduled_at, ended_at, services:appointment_services(duration_minutes)')
+        .eq('id', id)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+        .maybeSingle()
+      if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+      // End time: services total > explicit ended_at > previous duration kept
+      const start = new Date(scheduled_at)
+      const servicesDuration = ((current.services ?? []) as Array<{ duration_minutes: number }>)
+        .reduce((sum, s) => sum + s.duration_minutes, 0)
+      let end: Date | null
+      if (servicesDuration > 0) {
+        end = new Date(start.getTime() + servicesDuration * 60_000)
+      } else if ('ended_at' in body) {
+        end = body.ended_at ? new Date(body.ended_at) : null
+      } else {
+        end = current.ended_at
+          ? new Date(start.getTime() + (new Date(current.ended_at).getTime() - new Date(current.scheduled_at).getTime()))
+          : null
+      }
+      if (end && !(end > start)) {
+        return NextResponse.json({ error: 'La fin doit être après le début' }, { status: 400 })
+      }
+
+      await assertCabinFree(db, {
+        businessId: DEFAULT_BUSINESS_ID,
+        cabinId:    current.cabin_id,
+        start,
+        end:        end ?? appointmentEnd(start.toISOString(), null),
+        excludeAppointmentId: id,
+      })
+
+      const updateFields: Record<string, string | null> = {
+        scheduled_at: start.toISOString(),
+        ended_at:     end ? end.toISOString() : null,
+      }
       // If rescheduling from reschedule_requested, reset to scheduled and clear previous
       updateFields.status = 'scheduled'
       updateFields.stored_previous_date = null
@@ -211,6 +249,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ error: 'Invalid payload. Use status "show"/"no_show", provide scheduled_at, or provide client_id.' }, { status: 400 })
   } catch (err) {
+    if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: err.status })
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

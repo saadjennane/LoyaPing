@@ -278,6 +278,11 @@ export async function markNoShow(appointmentId: string): Promise<void> {
   }
 }
 
+// Services snapshot in booking order
+function sortServices<T extends { position: number }>(services: T[] | null | undefined): T[] {
+  return [...(services ?? [])].sort((a, b) => a.position - b.position)
+}
+
 // =========================================
 // LIST UPCOMING APPOINTMENTS for a business
 // =========================================
@@ -305,7 +310,7 @@ export async function getAllAppointments(businessId: string): Promise<Appointmen
 
   const { data, error } = await db
     .from('appointments')
-    .select('*, client:clients!left(id, civility, first_name, last_name, phone_number, magic_token)')
+    .select('*, client:clients!left(id, civility, first_name, last_name, phone_number, magic_token), services:appointment_services(*)')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('scheduled_at', { ascending: true })
@@ -314,7 +319,11 @@ export async function getAllAppointments(businessId: string): Promise<Appointmen
 
   const rows = (data ?? []) as Appointment[]
   const reminderMap = await fetchReminderStatuses(db, rows.map((r) => r.id))
-  return rows.map((r) => ({ ...r, reminderStatus: reminderMap.get(r.id) ?? emptyReminderStatus() }))
+  return rows.map((r) => ({
+    ...r,
+    services: sortServices(r.services),
+    reminderStatus: reminderMap.get(r.id) ?? emptyReminderStatus(),
+  }))
 }
 
 // =========================================
@@ -339,7 +348,7 @@ export async function getAppointmentList(params: {
 
   let query = db
     .from('appointments')
-    .select('id, client_id, scheduled_at, ended_at, status, notes, client:clients(civility, first_name, last_name, phone_number)')
+    .select('id, client_id, scheduled_at, ended_at, status, notes, cabin_id, services:appointment_services(name, position, price, duration_minutes), client:clients(civility, first_name, last_name, phone_number)')
     .eq('business_id', params.businessId)
     .is('deleted_at', null)
     .gte('scheduled_at', fromDt.toISOString())
@@ -366,6 +375,8 @@ export async function getAppointmentList(params: {
     ended_at: string | null
     status: 'scheduled' | 'confirmed' | 'reschedule_requested' | 'show' | 'no_show'
     notes: string | null
+    cabin_id: string | null
+    services: Array<{ name: string; position: number; price: number; duration_minutes: number }> | null
     client: { civility: string | null; first_name: string | null; last_name: string | null; phone_number: string } | null
   }
 
@@ -393,6 +404,8 @@ export async function getAppointmentList(params: {
       ended_at:                r.ended_at ?? null,
       status:                  r.status,
       notes:                   r.notes ?? null,
+      cabin_id:                r.cabin_id ?? null,
+      services:                sortServices(r.services).map((sv) => ({ name: sv.name })),
       reminderStatus:          reminderMap.get(r.id) ?? emptyReminderStatus(),
       reschedule_requested_at: null,
       stored_previous_date:    null,

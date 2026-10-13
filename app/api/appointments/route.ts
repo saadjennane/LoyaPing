@@ -5,6 +5,10 @@ import { scheduleRemindersForAppointment } from '@/lib/services/appointment-remi
 import { pushAppointmentToGoogle } from '@/lib/services/google-calendar-sync'
 import { pushAppointmentToMicrosoft } from '@/lib/services/microsoft-calendar-sync'
 import { Appointments } from '@/lib/posthog/appointments'
+import {
+  assertCabinExists, assertCabinFree, BookingError, resolveServices, saveAppointmentServices,
+  type ResolvedBooking,
+} from '@/lib/services/catalog'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -23,20 +27,45 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { client_id, scheduled_at, ended_at, notes } = body
+    const { client_id, scheduled_at, notes } = body
+    const serviceIds: string[] = Array.isArray(body.service_ids) ? body.service_ids : []
 
     if (!client_id || !scheduled_at) {
       return NextResponse.json({ error: 'client_id and scheduled_at are required' }, { status: 400 })
     }
 
     const db = createServerClient()
+    const start = new Date(scheduled_at)
+
+    // With services: cabin + end are derived from the catalog.
+    // Without: the cabin and end time must be given explicitly.
+    let cabinId: string
+    let end: Date
+    let items: ResolvedBooking['items'] = []
+    if (serviceIds.length > 0) {
+      const booking = await resolveServices(DEFAULT_BUSINESS_ID, serviceIds)
+      cabinId = booking.cabinId
+      end     = new Date(start.getTime() + booking.duration * 60_000)
+      items   = booking.items
+    } else {
+      if (!body.cabin_id) return NextResponse.json({ error: 'Choisissez un soin ou une cabine' }, { status: 400 })
+      if (!body.ended_at) return NextResponse.json({ error: 'L\'heure de fin est requise pour un RDV sans soin' }, { status: 400 })
+      await assertCabinExists(db, DEFAULT_BUSINESS_ID, body.cabin_id)
+      cabinId = body.cabin_id
+      end     = new Date(body.ended_at)
+    }
+    if (!(end > start)) return NextResponse.json({ error: 'La fin doit être après le début' }, { status: 400 })
+
+    await assertCabinFree(db, { businessId: DEFAULT_BUSINESS_ID, cabinId, start, end })
+
     const { data, error } = await db
       .from('appointments')
       .insert({
         client_id,
         business_id: DEFAULT_BUSINESS_ID,
-        scheduled_at,
-        ended_at: ended_at ?? null,
+        scheduled_at: start.toISOString(),
+        ended_at: end.toISOString(),
+        cabin_id: cabinId,
         notes: notes ?? null,
         status: 'scheduled',
       })
@@ -44,6 +73,14 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) throw error
+
+    try {
+      await saveAppointmentServices(db, data.id, items)
+    } catch (e) {
+      // Roll back so we never keep an appointment without its services
+      await db.from('appointments').delete().eq('id', data.id)
+      throw e
+    }
 
     // Schedule reminders (best-effort — don't fail the whole request)
     try {
@@ -64,6 +101,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (err) {
+    if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: err.status })
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

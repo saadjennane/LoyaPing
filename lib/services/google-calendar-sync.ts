@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { GOOGLE_CALENDAR_IMPORT_ENABLED } from '@/lib/constants/features'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -349,6 +350,50 @@ export async function deleteGoogleEvent(
   // 204 = success, 404/410 = already deleted — both are acceptable
   if (!res.ok && res.status !== 404 && res.status !== 410) {
     throw new Error(`[calendar-sync] Event delete failed (${res.status}): ${await res.text()}`)
+  }
+}
+
+// ── Target calendar (push-only mode) ─────────────────────────────────────────
+
+/**
+ * Records the calendar LoyaPing appointments are pushed to, without
+ * registering a Google watch channel (no Google → LoyaPing import).
+ * Reuses calendar_watch_channels, which pushAppointmentToGoogle reads.
+ */
+export async function setGoogleTargetCalendar(
+  businessId: string,
+  db: SupabaseClient,
+  calendarId = 'primary',
+): Promise<void> {
+  const { error } = await db.from('calendar_watch_channels').upsert(
+    {
+      business_id: businessId,
+      provider:    'google',
+      channel_id:  `push-only-${businessId}`,
+      resource_id: null,
+      expiry_at:   null,   // never picked up by calendar-watch-renew
+      calendar_id: calendarId,
+      sync_token:  null,
+    },
+    { onConflict: 'business_id,provider' },
+  )
+  if (error) throw error
+}
+
+/**
+ * Sets the target calendar and, only when import is enabled, starts the
+ * Google watch channel (which also runs an initial import).
+ */
+export async function connectGoogleCalendarTarget(
+  businessId: string,
+  db: SupabaseClient,
+  accessToken: string,
+  calendarId = 'primary',
+): Promise<void> {
+  if (GOOGLE_CALENDAR_IMPORT_ENABLED) {
+    await startGoogleWatch(businessId, db, accessToken, calendarId)
+  } else {
+    await setGoogleTargetCalendar(businessId, db, calendarId)
   }
 }
 

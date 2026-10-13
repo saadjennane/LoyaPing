@@ -38,7 +38,7 @@ export default function ClientDashboard({ data }: { data: ClientPageData }) {
     const res = await fetch('/api/loyalty/coupons/generate-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ coupon_id: coupon.id }),
+      body: JSON.stringify({ token: client.magic_token, coupon_id: coupon.id }),
     })
     const json = await res.json()
     if (json.error) {

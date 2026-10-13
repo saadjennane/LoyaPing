@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { MICROSOFT_ENABLED } from '@/lib/constants/features'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 
@@ -467,12 +468,14 @@ export default function OnboardingStep4() {
                         Connecter Google Calendar
                       </Button>
                     </a>
-                    <a href="/api/calendar/microsoft/connect">
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <MicrosoftLogo />
-                        Connecter Outlook Calendar
-                      </Button>
-                    </a>
+                    {MICROSOFT_ENABLED && (
+                      <a href="/api/calendar/microsoft/connect">
+                        <Button variant="outline" size="sm" className="gap-2">
+                          <MicrosoftLogo />
+                          Connecter Outlook Calendar
+                        </Button>
+                      </a>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

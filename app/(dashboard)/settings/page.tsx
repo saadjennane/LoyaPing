@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Building2, LayoutGrid, Globe, Trash2, ShoppingBag,
-  CalendarDays, Gift, Users, ChevronRight,
+  CalendarDays, Gift, Users, ChevronRight, Sparkles,
 } from 'lucide-react'
 import { useModules } from '@/lib/context/modules'
 import { useConfigStatus } from '@/lib/context/config-status'
@@ -21,6 +21,7 @@ const ALWAYS_ITEMS = [
 const MODULE_ITEMS = [
   { href: '/settings/orders',       label: 'Commandes',   icon: ShoppingBag,  moduleKey: 'orders_enabled'       as const, statusKey: 'orders_configured'       as const },
   { href: '/settings/appointments', label: 'Rendez-vous', icon: CalendarDays, moduleKey: 'appointments_enabled' as const, statusKey: 'appointments_configured' as const },
+  { href: '/settings/services',     label: 'Soins & cabines', icon: Sparkles, moduleKey: 'appointments_enabled' as const, statusKey: null },
   { href: '/settings/loyalty',      label: 'Fidélité',    icon: Gift,         moduleKey: 'loyalty_enabled'      as const, statusKey: 'loyalty_configured'      as const },
 ]
 
@@ -63,7 +64,7 @@ export default function SettingsPage() {
           </p>
           <div className="bg-card border rounded-xl divide-y divide-border overflow-hidden">
             {moduleItems.map(({ href, label, icon: Icon, statusKey }) => {
-              const configured = status ? status[statusKey] : null
+              const configured = status && statusKey ? status[statusKey] : null
               return (
                 <Link
                   key={href}

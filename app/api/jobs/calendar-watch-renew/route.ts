@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getValidGoogleToken, startGoogleWatch } from '@/lib/services/google-calendar-sync'
 import { renewMicrosoftSubscription } from '@/lib/services/microsoft-calendar-sync'
+import { GOOGLE_CALENDAR_IMPORT_ENABLED } from '@/lib/constants/features'
 
 // GET /api/jobs/calendar-watch-renew
 // Cron: 0 6 * * * — runs daily at 6:00 UTC
@@ -26,6 +27,7 @@ export async function GET() {
     for (const ch of channels) {
       try {
         if (ch.provider === 'google') {
+          if (!GOOGLE_CALENDAR_IMPORT_ENABLED) continue  // push-only: no watch to renew
           const token = await getValidGoogleToken(ch.business_id, db)
           await startGoogleWatch(ch.business_id, db, token)
         } else if (ch.provider === 'microsoft') {

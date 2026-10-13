@@ -165,9 +165,45 @@ export type Appointment = {
   reschedule_requested_at: string | null
   stored_previous_date:    string | null  // DATE as ISO string (YYYY-MM-DD)
   stored_previous_time:    string | null  // TIME as string (HH:MM:SS)
+  cabin_id: string | null  // null = legacy appointment (blocks every cabin)
   // joined
   client?: Client
   reminderStatus?: ReminderStatus
+  services?: AppointmentService[]
+}
+
+// =========================================
+// SERVICE CATALOG (soins + cabines)
+// =========================================
+export type Cabin = {
+  id: string
+  business_id: string
+  name: string
+  sort_order: number
+  created_at: string
+}
+
+export type Service = {
+  id: string
+  business_id: string
+  cabin_id: string
+  name: string
+  price: number
+  duration_minutes: number
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+// Snapshot of a service at booking time
+export type AppointmentService = {
+  id: string
+  appointment_id: string
+  service_id: string | null
+  position: number
+  name: string
+  price: number
+  duration_minutes: number
 }
 
 export type AppointmentEvent = {
@@ -292,6 +328,8 @@ export type AppointmentListItem = {
   ended_at:       string | null
   status:         AppointmentStatus
   notes:          string | null
+  cabin_id:       string | null
+  services:       Array<{ name: string }>
   reminderStatus: ReminderStatus
   // V1.5 reschedule
   reschedule_requested_at: string | null

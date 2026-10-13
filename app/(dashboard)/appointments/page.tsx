@@ -19,7 +19,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, CustomerIndexItem } from '@/lib/types'
+import type { Appointment, AppointmentListItem, Cabin, Client, LoyaltyProgram, CustomerIndexItem, Service } from '@/lib/types'
+import { ServiceSelector, WeekSlotGrid, type SelectedSlot } from '@/components/appointments/ServiceSlotPicker'
+import { formatDuration, timeToMins, type BusinessHourRow } from '@/lib/scheduling/slots'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import PhoneInput from '@/components/PhoneInput'
 import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
@@ -50,81 +52,6 @@ type AvailabilityException = {
   created_at: string
   updated_at: string
 }
-
-// ─── Slot browser types ────────────────────────────────────────────────────────
-
-type BusinessHourRow = {
-  day_of_week: number       // 1=Lun … 7=Dim
-  is_closed: boolean
-  slot1_start: string | null  // 'HH:MM'
-  slot1_end: string | null
-  slot2_start: string | null
-  slot2_end: string | null
-}
-
-type SlotDayResult =
-  | { kind: 'fermé' }
-  | { kind: 'complet' }
-  | { kind: 'libre' | 'partiel'; slots: number[] }  // startMins libres
-
-function timeToMins(t: string): number {
-  const [h, m] = t.split(':').map(Number)
-  return h * 60 + m
-}
-
-function computeDaySlots(
-  _date: Date,
-  bh: BusinessHourRow,
-  duration: number,
-  dayAppts: Appointment[],
-  minMins = 0,  // ignore slots starting before this time (for "today, now")
-  partialExceptions: Array<{ start_time: string; end_time: string }> = [],
-): SlotDayResult {
-  if (bh.is_closed) return { kind: 'fermé' }
-
-  const windows: [number, number][] = []
-  if (bh.slot1_start && bh.slot1_end)
-    windows.push([timeToMins(bh.slot1_start), timeToMins(bh.slot1_end)])
-  if (bh.slot2_start && bh.slot2_end)
-    windows.push([timeToMins(bh.slot2_start), timeToMins(bh.slot2_end)])
-  if (windows.length === 0) return { kind: 'fermé' }
-
-  const allSlots: number[] = []
-  for (const [wS, wE] of windows)
-    for (let t = wS; t + duration <= wE; t += duration) allSlots.push(t)
-  if (allSlots.length === 0) return { kind: 'fermé' }
-
-  // For today: keep only future slots
-  const relevantSlots = minMins > 0 ? allSlots.filter((t) => t >= minMins) : allSlots
-  if (relevantSlots.length === 0) return { kind: 'fermé' }
-
-  const free = relevantSlots.filter((slotStart) => {
-    const slotEnd = slotStart + duration
-    // Appointment conflict
-    if (dayAppts.some((a) => {
-      const aS = differenceInMinutes(parseISO(a.scheduled_at), startOfDay(parseISO(a.scheduled_at)))
-      const aE = a.ended_at
-        ? differenceInMinutes(parseISO(a.ended_at), startOfDay(parseISO(a.ended_at)))
-        : aS + duration
-      return slotStart < aE && slotEnd > aS
-    })) return false
-    // Partial-exception conflict (e.g. 14h–18h unavailable)
-    if (partialExceptions.some((ex) => {
-      const exS = timeToMins(ex.start_time)
-      const exE = timeToMins(ex.end_time)
-      return slotStart < exE && slotEnd > exS
-    })) return false
-    return true
-  })
-
-  if (free.length === 0) return { kind: 'complet' }
-  return { kind: free.length === relevantSlots.length ? 'libre' : 'partiel', slots: free }
-}
-
-function minsToLabel(m: number) {
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}h${String(m % 60).padStart(2, '0')}`
-}
-
 
 const HOUR_START = 0
 const HOUR_END = 24
@@ -426,6 +353,9 @@ function TimeGrid({
                         <span className="font-semibold">{format(parseISO(appt.scheduled_at), 'HH:mm')}</span>{' '}
                         {clientFullName(appt.client as Client)}
                         {appt.reminderStatus?.hasFailed && ' ⚠'}
+                        {(appt.services?.length ?? 0) > 0 && (
+                          <span className="block truncate opacity-80">{appt.services!.map((sv) => sv.name).join(' + ')}</span>
+                        )}
                       </>
                     )}
                   </button>
@@ -537,8 +467,17 @@ export default function AppointmentsPage() {
   const [businessHours,    setBusinessHours]    = useState<BusinessHourRow[] | null>(null)
   const [hoursConfigured,  setHoursConfigured]  = useState<boolean>(true)
   const [slotHoursLoading, setSlotHoursLoading] = useState(false)
-  const [selectedSlotKey,  setSelectedSlotKey]  = useState<string | null>(null)
-  const [expandedDays,     setExpandedDays]     = useState<Set<string>>(new Set())
+  const [selectedSlot,     setSelectedSlot]     = useState<SelectedSlot | null>(null)
+  const [slotWeek,         setSlotWeek]         = useState<Date>(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
+
+  // ── Service catalog (soins + cabines) ─────────────────────────────────────
+  const [cabins,             setCabins]             = useState<Cabin[]>([])
+  const [services,           setServices]           = useState<Service[]>([])
+  const [currency,           setCurrency]           = useState('MAD')
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
+  const [apptCabinId,        setApptCabinId]        = useState('')   // RDV sans soin only
+  const [rescheduleSlot,     setRescheduleSlot]     = useState<SelectedSlot | null>(null)
+  const [rescheduleWeek,     setRescheduleWeek]     = useState<Date>(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
   // ── Inline hours editor ────────────────────────────────────────────────────
   const [hoursDialogOpen, setHoursDialogOpen] = useState(false)
   const [hoursForm,       setHoursForm]       = useState<BusinessHourRow[]>([])
@@ -587,7 +526,10 @@ export default function AppointmentsPage() {
     setApptEndMinute('00')
     setApptNotes('')
     setCreateSubmitting(false)
-    setSelectedSlotKey(null)
+    setSelectedSlot(null)
+    setSlotWeek(startOfWeek(new Date(), { weekStartsOn: 1 }))
+    setSelectedServiceIds([])
+    setApptCabinId('')
   }
 
   const handleSelectCreateItem = (_id: string, item: CustomerIndexItem) => {
@@ -650,8 +592,14 @@ export default function AppointmentsPage() {
     if (!createItem || !apptDate || !apptHour) return
     setCreateSubmitting(true)
     const scheduled_at = new Date(`${apptDate}T${apptHour}:${apptMinute}:00`).toISOString()
+    const hasServices = selectedServiceIds.length > 0
+    if (!hasServices && (!apptCabinId || !apptEndHour)) {
+      toast.error('Choisissez un soin, ou une cabine et une heure de fin')
+      setCreateSubmitting(false)
+      return
+    }
     let ended_at: string | null = null
-    if (apptEndHour) {
+    if (!hasServices && apptEndHour) {
       const startTotalMins = parseInt(apptHour) * 60 + parseInt(apptMinute)
       const endTotalMinsRaw = parseInt(apptEndHour) * 60 + parseInt(apptEndMinute)
       const endTotalMinsNorm = endTotalMinsRaw % (24 * 60)
@@ -666,7 +614,15 @@ export default function AppointmentsPage() {
     const res = await fetch('/api/appointments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: createItem.id, scheduled_at, ended_at, notes: apptNotes || null }),
+      body: JSON.stringify({
+        client_id: createItem.id,
+        scheduled_at,
+        // With services, the server derives cabin + end from the catalog
+        ...(hasServices
+          ? { service_ids: selectedServiceIds }
+          : { cabin_id: apptCabinId, ended_at }),
+        notes: apptNotes || null,
+      }),
     })
     const json = await res.json()
     if (json.error) { toast.error(json.error) }
@@ -846,15 +802,25 @@ export default function AppointmentsPage() {
         })
       }
     }).catch(() => {})
+    // Service catalog (active services only) + currency for prices
+    Promise.all([
+      fetch('/api/cabins').then((r) => r.json()),
+      fetch('/api/services?active=true').then((r) => r.json()),
+      fetch('/api/settings/profile').then((r) => r.json()),
+    ]).then(([cabinsJson, servicesJson, profileJson]) => {
+      setCabins(cabinsJson.data ?? [])
+      setServices(servicesJson.data ?? [])
+      if (profileJson.data?.currency) setCurrency(profileJson.data.currency)
+    }).catch(() => {})
     // Fetch default appointment duration
     fetch('/api/settings/appointment-notifications').then((r) => r.json()).then((j) => {
       if (j.data?.default_duration_minutes) setDefaultDuration(j.data.default_duration_minutes)
     }).catch(() => {})
   }, [fetchAppointments])
 
-  // Fetch business hours when create dialog opens (onOpenChange not triggered on programmatic open)
+  // Fetch business hours when create dialog or reschedule opens (onOpenChange not triggered on programmatic open)
   useEffect(() => {
-    if (!createOpen) return
+    if (!createOpen && detailApptMode !== 'reschedule') return
     if (businessHours && defaultDuration) return
     setSlotHoursLoading(true)
     Promise.all([
@@ -869,7 +835,7 @@ export default function AppointmentsPage() {
       setSlotHoursLoading(false)
     }).catch(() => setSlotHoursLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createOpen])
+  }, [createOpen, detailApptMode])
 
   // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
@@ -1057,14 +1023,22 @@ export default function AppointmentsPage() {
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
+  // Sum of the appointment's service prices (undefined when it has no services)
+  const servicesTotalFor = (id: string): number | undefined => {
+    const appt = appointments.find((a) => a.id === id)
+    if (!appt?.services?.length) return undefined
+    return appt.services.reduce((sum, sv) => sum + Number(sv.price), 0)
+  }
+
   // Call this when clicking SHOW — opens modal if loyalty type = 'montant'
+  // (amount pre-filled with the services total, editable)
   const markShow = (id: string) => {
     if (loyaltyProgram?.type === 'montant') {
       setPendingShowId(id)
-      setShowAmount('')
+      setShowAmount(servicesTotalFor(id)?.toString() ?? '')
       setAmountModalOpen(true)
     } else {
-      doMarkShow(id, undefined)
+      doMarkShow(id, servicesTotalFor(id))
     }
   }
 
@@ -1117,16 +1091,17 @@ export default function AppointmentsPage() {
   const markShowInline = (id: string) => {
     if (loyaltyProgram?.type === 'montant') {
       setPendingShowId(id)
-      setShowAmount('')
+      setShowAmount(servicesTotalFor(id)?.toString() ?? '')
       setAmountModalOpen(true)
       return
     }
+    const amount = servicesTotalFor(id)
     const prev = listItems.find((i) => i.id === id)?.status
     setListItems((items) => items.map((i) => i.id === id ? { ...i, status: 'show' as const } : i))
     fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'show' }),
+      body: JSON.stringify({ status: 'show', ...(amount !== undefined ? { amount } : {}) }),
     })
       .then((r) => r.json())
       .then((json) => {
@@ -1295,15 +1270,25 @@ export default function AppointmentsPage() {
     setCreateOpen(true)
   }
 
-  const handleSelectSlot = (date: Date, slotMins: number) => {
-    const endMins = slotMins + (defaultDuration ?? 60)
-    setApptDate(format(date, 'yyyy-MM-dd'))
-    setApptHour(String(Math.floor(slotMins / 60)).padStart(2, '0'))
-    setApptMinute(String(slotMins % 60).padStart(2, '0'))
+  const handleSelectSlot = (slot: SelectedSlot) => {
+    const endMins = slot.startMins + servicesDuration
+    setApptDate(format(slot.date, 'yyyy-MM-dd'))
+    setApptHour(String(Math.floor(slot.startMins / 60)).padStart(2, '0'))
+    setApptMinute(String(slot.startMins % 60).padStart(2, '0'))
     setApptEndHour(String(Math.floor(endMins / 60)).padStart(2, '0'))
     setApptEndMinute(String(endMins % 60).padStart(2, '0'))
-    setSelectedSlotKey(`${date.toISOString()}_${slotMins}`)
+    setSelectedSlot(slot)
     // Don't change step — user stays on current step (search or details)
+  }
+
+  const handleSelectRescheduleSlot = (slot: SelectedSlot) => {
+    const endMins = (slot.startMins + rescheduleDuration) % (24 * 60)
+    setRescheduleDate(format(slot.date, 'yyyy-MM-dd'))
+    setRescheduleHour(String(Math.floor(slot.startMins / 60)).padStart(2, '0'))
+    setRescheduleMinute(String(slot.startMins % 60).padStart(2, '0'))
+    setRescheduleEndHour(String(Math.floor(endMins / 60)).padStart(2, '0'))
+    setRescheduleEndMinute(String(endMins % 60).padStart(2, '0'))
+    setRescheduleSlot(slot)
   }
 
   // ── Future exceptions (useMemo) ─────────────────────────────────────────
@@ -1314,45 +1299,33 @@ export default function AppointmentsPage() {
       .sort((a, b) => a.start_date.localeCompare(b.start_date))
   }, [exceptions])
 
-  // ── Slot days (useMemo) ──────────────────────────────────────────────────
-  const slotDays = useMemo(() => {
-    if (!businessHours) return []
-    const duration = defaultDuration ?? 60
-    const now      = new Date()
-    const nowMins  = now.getHours() * 60 + now.getMinutes()
-    return Array.from({ length: 60 }, (_, i) => addDays(startOfToday(), i)).map((date) => {
-      const dow      = date.getDay() === 0 ? 7 : date.getDay()
-      const bh       = businessHours.find((h) => h.day_of_week === dow)
-      if (!bh) return { date, result: { kind: 'fermé' as const } }
+  // ── Selected services (create dialog) ─────────────────────────────────
+  const selectedServices = useMemo(() => {
+    const byId = new Map(services.map((sv) => [sv.id, sv]))
+    return selectedServiceIds.map((id) => byId.get(id)).filter((sv): sv is Service => !!sv)
+  }, [services, selectedServiceIds])
+  const servicesDuration = selectedServices.reduce((sum, sv) => sum + sv.duration_minutes, 0)
+  const servicesCabinId  = selectedServices[0]?.cabin_id ?? null
 
-      // Check availability exceptions for this date
-      const dateStr      = format(date, 'yyyy-MM-dd')
-      const dayExceptions = exceptions.filter((ex) => dateStr >= ex.start_date && dateStr <= ex.end_date)
-      // Full-day exception → treat as closed
-      if (dayExceptions.some((ex) => !ex.start_time)) return { date, result: { kind: 'fermé' as const } }
-      // Partial exceptions (time-bounded)
-      const partialEx = dayExceptions.filter((ex): ex is AvailabilityException & { start_time: string; end_time: string } =>
-        ex.start_time !== null && ex.end_time !== null
-      )
+  // End time shown when services are selected (derived, not editable)
+  const derivedEndLabel = (() => {
+    if (servicesDuration === 0 || !apptHour) return null
+    const endMins = (parseInt(apptHour) * 60 + parseInt(apptMinute) + servicesDuration) % (24 * 60)
+    return `${String(Math.floor(endMins / 60)).padStart(2, '0')}h${String(endMins % 60).padStart(2, '0')}`
+  })()
 
-      // Include all non-deleted appointments (show/no_show also block the slot)
-      const dayAppts = appointments.filter((a) =>
-        !a.deleted_at && isSameDay(parseISO(a.scheduled_at), date)
-      )
-      // For today: skip slots already in the past
-      const minMins = isSameDay(date, now) ? nowMins : 0
-      return { date, result: computeDaySlots(date, bh, duration, dayAppts, minMins, partialEx) }
-    }).filter(({ result }) => result.kind !== 'fermé')
-  }, [businessHours, defaultDuration, appointments, exceptions])
+  // ── Reschedule: duration + cabin of the selected appointment ───────────
+  const rescheduleDuration = (() => {
+    if (!selected) return 60
+    const fromServices = (selected.services ?? []).reduce((sum, sv) => sum + sv.duration_minutes, 0)
+    if (fromServices > 0) return fromServices
+    return selected.ended_at
+      ? Math.max(15, differenceInMinutes(parseISO(selected.ended_at), parseISO(selected.scheduled_at)))
+      : (defaultDuration ?? 60)
+  })()
 
-  // Auto-expand the first day with available slots when slotDays loads
-  useEffect(() => {
-    if (slotDays.length === 0) return
-    const first = slotDays.find(({ result }) => result.kind !== 'complet')
-    if (first) {
-      setExpandedDays(new Set([first.date.toISOString()]))
-    }
-  }, [slotDays.length > 0 ? slotDays[0]?.date.toISOString() : null]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cabinName = (id: string | null | undefined) =>
+    id ? cabins.find((c) => c.id === id)?.name ?? null : null
 
   const filteredListItems = (listSearch.trim()
     ? listItems.filter(item => item.client_name.toLowerCase().includes(listSearch.toLowerCase()))
@@ -1742,6 +1715,12 @@ export default function AppointmentsPage() {
                               <span className={`font-semibold${isUnassigned ? ' text-orange-700' : ''}`}>
                                 {isUnassigned ? (item.client_name === '—' ? 'Sans client' : item.client_name) : item.client_name}
                               </span>
+                              {item.services.length > 0 && (
+                                <span className="font-normal text-[#3B5BDB] ml-1.5">{item.services.map((sv) => sv.name).join(' + ')}</span>
+                              )}
+                              {cabinName(item.cabin_id) && (
+                                <span className="font-normal text-muted-foreground ml-1.5">· {cabinName(item.cabin_id)}</span>
+                              )}
                               {item.notes && (
                                 <span className="font-normal text-muted-foreground ml-1.5">{item.notes}</span>
                               )}
@@ -2038,7 +2017,7 @@ export default function AppointmentsPage() {
         setCreateOpen(o)
       }}>
         <DialogContent
-          className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
+          className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0"
           aria-describedby={undefined}
           onInteractOutside={(e) => {
             if (document.querySelector('[data-autocomplete-portal]')) e.preventDefault()
@@ -2050,45 +2029,26 @@ export default function AppointmentsPage() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            {/* ── Colonne gauche : Créneaux disponibles (desktop only) ─── */}
-            <div className="hidden md:flex flex-col w-80 shrink-0 border-r bg-muted/20">
-              <div className="px-3 pt-3 pb-2 border-b border-border/60 shrink-0">
+          <div className="flex flex-1 min-h-0 flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+            {/* ── Colonne gauche : soins + créneaux de la semaine ─── */}
+            <div className="flex flex-col md:w-96 shrink-0 border-b md:border-b-0 md:border-r bg-muted/20 md:overflow-y-auto">
+              <div className="px-3 pt-3 pb-3 border-b border-border/60 space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                   <Sparkles className="h-3 w-3 text-[#3B5BDB]" />
-                  Créneaux disponibles
+                  Soins
                 </p>
-                {/* Inline duration picker when not configured */}
-                {!slotHoursLoading && !defaultDuration && (
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <Clock className="h-3 w-3 text-amber-500 shrink-0" />
-                    <span className="text-[11px] text-amber-600">Durée :</span>
-                    <select
-                      className="text-[11px] border border-border rounded px-1 py-0.5 bg-background text-foreground focus:outline-none"
-                      defaultValue=""
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value)
-                        if (!v) return
-                        setDefaultDuration(v)
-                        fetch('/api/settings/appointment-notifications', {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ default_duration_minutes: v }),
-                        }).catch(() => {})
-                      }}
-                    >
-                      <option value="" disabled>— choisir</option>
-                      {[15, 20, 30, 45, 60, 90, 120].map(m => (
-                        <option key={m} value={m}>{m} min</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <ServiceSelector
+                  cabins={cabins}
+                  services={services}
+                  selectedIds={selectedServiceIds}
+                  onChange={(ids) => { setSelectedServiceIds(ids); setSelectedSlot(null) }}
+                  currency={currency}
+                />
               </div>
 
               {/* Hours not configured banner */}
               {!slotHoursLoading && businessHours && !hoursConfigured && (
-                <div className="px-3 py-2 border-b border-amber-200/60 bg-amber-50/20 shrink-0">
+                <div className="px-3 py-2 border-b border-amber-200/60 bg-amber-50/20">
                   <button
                     onClick={() => { setHoursForm([...businessHours]); setHoursDialogOpen(true) }}
                     className="text-[11px] text-amber-700 hover:text-amber-900 flex items-center gap-1.5 w-full"
@@ -2099,108 +2059,35 @@ export default function AppointmentsPage() {
                 </div>
               )}
 
-              {/* Loading */}
-              {slotHoursLoading && (
-                <div className="px-3 py-6 text-center text-xs text-muted-foreground">Chargement...</div>
-              )}
-
-              {/* Missing config */}
-              {!slotHoursLoading && !businessHours && (
-                <div className="px-3 py-6 text-center space-y-2">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Configurez la <strong>durée par défaut</strong> et les{' '}
-                    <strong>horaires d&apos;ouverture</strong> pour voir les créneaux.
+              <div className="p-3">
+                {slotHoursLoading ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">Chargement...</p>
+                ) : !businessHours ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Configurez vos <a href="/settings/appointments" className="text-[#3B5BDB] underline" onClick={() => setCreateOpen(false)}>horaires d&apos;ouverture</a> pour voir les créneaux.
                   </p>
-                  <a href="/settings/appointments" className="text-xs text-[#3B5BDB] underline" onClick={() => setCreateOpen(false)}>
-                    Configurer
-                  </a>
-                </div>
-              )}
-
-              {/* Slot list — collapsible days */}
-              {!slotHoursLoading && businessHours && (
-                <div className="flex-1 overflow-y-auto p-3 space-y-1">
-                  {slotDays.map(({ date, result }) => {
-                    const key = date.toISOString()
-                    const isExpanded = expandedDays.has(key)
-                    const toggleDay = () => setExpandedDays((prev) => {
-                      const next = new Set(prev)
-                      if (next.has(key)) next.delete(key); else next.add(key)
-                      return next
-                    })
-
-                    const dayLabel = isSameDay(date, new Date())
-                      ? `Aujourd'hui · ${format(date, 'd MMM', { locale: fr })}`
-                      : isSameDay(date, addDays(new Date(), 1))
-                        ? `Demain · ${format(date, 'd MMM', { locale: fr })}`
-                        : format(date, 'EEE d MMM', { locale: fr })
-
-                    const slotCount = (result.kind === 'libre' || result.kind === 'partiel') ? result.slots.length : 0
-
-                    const headerColor =
-                      result.kind === 'complet' ? 'text-red-600'
-                      : result.kind === 'libre'   ? 'text-green-700'
-                      : 'text-foreground'
-
-                    const badgeColor =
-                      result.kind === 'complet' ? 'bg-red-100 text-red-600'
-                      : result.kind === 'libre'   ? 'bg-green-100 text-green-700'
-                      : 'bg-muted text-muted-foreground'
-
-                    return (
-                      <div key={key}>
-                        {/* Day header — always visible */}
-                        <button
-                          onClick={toggleDay}
-                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-muted/60 transition-colors group ${headerColor}`}
-                        >
-                          <span className="text-xs font-semibold capitalize">{dayLabel}</span>
-                          <div className="flex items-center gap-1.5">
-                            {result.kind === 'complet' ? (
-                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeColor}`}>Complet</span>
-                            ) : (
-                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeColor}`}>{slotCount}</span>
-                            )}
-                            <span className={`text-[10px] text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}>›</span>
-                          </div>
-                        </button>
-
-                        {/* Slots — shown only when expanded */}
-                        {isExpanded && (result.kind === 'libre' || result.kind === 'partiel') && (
-                          <div className="grid grid-cols-4 gap-1 px-2 pb-2 pt-1">
-                            {result.slots.map((m) => {
-                              const slotKey = `${key}_${m}`
-                              const isSelected = selectedSlotKey === slotKey
-                              return (
-                                <button
-                                  key={m}
-                                  onClick={() => handleSelectSlot(date, m)}
-                                  className={`rounded py-1 text-xs font-medium border transition-colors text-center
-                                    ${isSelected
-                                      ? 'bg-[#3B5BDB] text-white border-[#3B5BDB]'
-                                      : result.kind === 'libre'
-                                        ? 'border-green-300 bg-green-50 text-green-700 hover:bg-[#3B5BDB] hover:text-white hover:border-[#3B5BDB]'
-                                        : 'border-border bg-background text-foreground hover:bg-[#3B5BDB] hover:text-white hover:border-[#3B5BDB]'
-                                    }`}
-                                >
-                                  {minsToLabel(m)}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  {slotDays.length === 0 && (
-                    <p className="text-xs text-muted-foreground text-center py-4">Aucun créneau trouvé.</p>
-                  )}
-                </div>
-              )}
+                ) : servicesDuration === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Choisissez un ou plusieurs soins pour voir les créneaux disponibles.
+                  </p>
+                ) : (
+                  <WeekSlotGrid
+                    weekStart={slotWeek}
+                    onWeekChange={setSlotWeek}
+                    businessHours={businessHours}
+                    exceptions={exceptions}
+                    appointments={appointments}
+                    cabinId={servicesCabinId}
+                    duration={servicesDuration}
+                    selected={selectedSlot}
+                    onSelect={handleSelectSlot}
+                  />
+                )}
+              </div>
             </div>
 
             {/* ── Colonne droite : formulaire ─────────────────────────── */}
-            <div className="flex-1 px-6 py-5 overflow-y-auto">
+            <div className="flex-1 px-6 py-5 md:overflow-y-auto">
 
               {/* Step 1 — select client */}
               {createStep === 'search' && (
@@ -2220,7 +2107,7 @@ export default function AppointmentsPage() {
                     Créer un nouveau client
                   </button>
                   {/* Show selected slot as hint */}
-                  {selectedSlotKey && apptDate && apptHour && (
+                  {selectedSlot && apptDate && apptHour && (
                     <div className="mt-3 flex items-center gap-1.5 text-xs text-[#3B5BDB] bg-[#EDF2FF] rounded-md px-2.5 py-1.5">
                       <Sparkles className="h-3 w-3 shrink-0" />
                       <span>
@@ -2279,7 +2166,7 @@ export default function AppointmentsPage() {
                     )}
                   </div>
                   {/* Pill — slot pre-selected from left panel */}
-                  {selectedSlotKey && apptDate && apptHour && (
+                  {selectedSlot && apptDate && apptHour && (
                     <div className="flex items-center gap-1.5 text-xs text-[#3B5BDB] bg-[#EDF2FF] rounded-md px-2.5 py-1.5">
                       <Sparkles className="h-3 w-3 shrink-0" />
                       <span>
@@ -2314,7 +2201,16 @@ export default function AppointmentsPage() {
                         </div>
                       </div>
                       <span className="text-muted-foreground pb-2 text-sm">→</span>
-                      {/* End time */}
+                      {/* End time — derived from services, manual otherwise */}
+                      {selectedServiceIds.length > 0 ? (
+                        <div className="space-y-1">
+                          <Label>Fin</Label>
+                          <div className="h-9 flex items-center text-sm">
+                            {derivedEndLabel ?? '—'}
+                            <span className="ml-1.5 text-xs text-muted-foreground">({formatDuration(servicesDuration)})</span>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="space-y-1">
                         <Label>Fin</Label>
                         <div className="flex items-center gap-1">
@@ -2333,7 +2229,20 @@ export default function AppointmentsPage() {
                           </Select>
                         </div>
                       </div>
+                      )}
                     </div>
+                    {/* RDV sans soin — cabin chosen manually */}
+                    {selectedServiceIds.length === 0 && (
+                      <div className="space-y-1">
+                        <Label>Cabine <span className="text-xs text-gray-400 font-normal">(RDV sans soin)</span></Label>
+                        <Select value={apptCabinId} onValueChange={setApptCabinId}>
+                          <SelectTrigger><SelectValue placeholder="Choisir une cabine" /></SelectTrigger>
+                          <SelectContent>
+                            {cabins.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="space-y-1">
                       <Label>{t('appointments.form.notesLabel')} <span className="text-xs text-gray-400 font-normal">{t('appointments.form.notesHint')}</span></Label>
                       <Input placeholder="Coupe + couleur…" value={apptNotes}
@@ -2435,7 +2344,7 @@ export default function AppointmentsPage() {
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={(o) => { setDetailOpen(o); if (!o) { setDetailApptMode('detail'); setAssignClientItem(null) } }}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent aria-describedby={undefined} className={detailApptMode === 'reschedule' ? 'sm:max-w-xl max-h-[90vh] overflow-y-auto' : undefined}>
           <DialogHeader>
             <DialogTitle>
               {detailApptMode === 'reschedule' ? 'Replanifier le RDV' : t('appointments.detail.title')}
@@ -2444,6 +2353,26 @@ export default function AppointmentsPage() {
           {selected && (
             detailApptMode === 'reschedule' ? (
               <form onSubmit={handleReschedule} className="space-y-4 mt-2">
+                {businessHours && (
+                  <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Créneaux libres pour {formatDuration(rescheduleDuration)}
+                      {cabinName(selected.cabin_id) ? ` · ${cabinName(selected.cabin_id)}` : ''}
+                    </p>
+                    <WeekSlotGrid
+                      weekStart={rescheduleWeek}
+                      onWeekChange={setRescheduleWeek}
+                      businessHours={businessHours}
+                      exceptions={exceptions}
+                      appointments={appointments}
+                      cabinId={selected.cabin_id ?? null}
+                      duration={rescheduleDuration}
+                      excludeAppointmentId={selected.id}
+                      selected={rescheduleSlot}
+                      onSelect={handleSelectRescheduleSlot}
+                    />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label>{t('appointments.form.dateLabel')}</Label>
                   <Input type="date" required value={rescheduleDate}
@@ -2469,6 +2398,14 @@ export default function AppointmentsPage() {
                     </div>
                   </div>
                   <span className="text-muted-foreground pb-2 text-sm">→</span>
+                  {(selected.services?.length ?? 0) > 0 ? (
+                    <div className="space-y-1">
+                      <Label>Fin</Label>
+                      <div className="h-9 flex items-center text-sm text-muted-foreground">
+                        Calculée ({formatDuration(rescheduleDuration)})
+                      </div>
+                    </div>
+                  ) : (
                   <div className="space-y-1">
                     <Label>Fin</Label>
                     <div className="flex items-center gap-1">
@@ -2487,6 +2424,7 @@ export default function AppointmentsPage() {
                       </Select>
                     </div>
                   </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Button type="button" variant="outline" onClick={() => setDetailApptMode('detail')}>
@@ -2519,6 +2457,25 @@ export default function AppointmentsPage() {
                       <span className="text-muted-foreground"> → {format(parseISO(selected.ended_at), 'HH:mm')}</span>
                     )}
                   </div>
+                  {(selected.services?.length ?? 0) > 0 && (
+                    <>
+                      <div className="text-muted-foreground">Soins</div>
+                      <div className="space-y-0.5">
+                        {selected.services!.map((sv) => (
+                          <div key={sv.id}>
+                            {sv.name}{' '}
+                            <span className="text-xs text-muted-foreground">· {formatDuration(sv.duration_minutes)} · {Number(sv.price)} {currency}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {cabinName(selected.cabin_id) && (
+                    <>
+                      <div className="text-muted-foreground">Cabine</div>
+                      <div>{cabinName(selected.cabin_id)}</div>
+                    </>
+                  )}
                   {selected.notes && (
                     <>
                       <div className="text-muted-foreground">{t('appointments.detail.notes')}</div>
@@ -2680,6 +2637,8 @@ export default function AppointmentsPage() {
                             setRescheduleEndHour('')
                             setRescheduleEndMinute('00')
                           }
+                          setRescheduleSlot(null)
+                          setRescheduleWeek(startOfWeek(new Date(), { weekStartsOn: 1 }))
                           setDetailApptMode('reschedule')
                         }}
                       >
@@ -2748,6 +2707,9 @@ export default function AppointmentsPage() {
                 value={showAmount}
                 onChange={(e) => setShowAmount(e.target.value)}
               />
+              {pendingShowId && servicesTotalFor(pendingShowId) !== undefined && (
+                <p className="text-xs text-muted-foreground">Pré-rempli avec le prix des soins, modifiable.</p>
+              )}
               {showAmount && loyaltyProgram?.conversion_amount_per_point && (
                 <p className="text-xs text-muted-foreground">
                   {t('appointments.amountModal.pointsPreview', { points: Math.floor(parseFloat(showAmount) / loyaltyProgram.conversion_amount_per_point) })}

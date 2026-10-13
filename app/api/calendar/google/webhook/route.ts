@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { syncGoogleCalendar } from '@/lib/services/google-calendar-sync'
+import { GOOGLE_CALENDAR_IMPORT_ENABLED } from '@/lib/constants/features'
 
 // POST /api/calendar/google/webhook — receives Google Calendar push notifications
 // Google sends this header on every event change:
@@ -11,8 +12,8 @@ export async function POST(req: NextRequest) {
     const channelId     = req.headers.get('x-goog-channel-id')
     const resourceState = req.headers.get('x-goog-resource-state')
 
-    // Initial handshake — just acknowledge, no sync needed
-    if (!channelId || resourceState === 'sync') {
+    // Initial handshake, or push-only mode (leftover channels until they expire)
+    if (!channelId || resourceState === 'sync' || !GOOGLE_CALENDAR_IMPORT_ENABLED) {
       return NextResponse.json({ status: 'ok' })
     }
 

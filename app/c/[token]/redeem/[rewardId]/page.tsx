@@ -89,7 +89,7 @@ export default function RedeemPage() {
       const res = await fetch('/api/loyalty/coupons/generate-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coupon_id: params.rewardId }),
+        body: JSON.stringify({ token: params.token, coupon_id: params.rewardId }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Erreur')
@@ -98,7 +98,7 @@ export default function RedeemPage() {
     } catch (err) {
       setCodeState({ kind: 'error', message: err instanceof Error ? err.message : 'Erreur inconnue' })
     }
-  }, [params.rewardId])
+  }, [params.token, params.rewardId])
 
   const primary = coupon?.primary_color ?? '#6366f1'
 

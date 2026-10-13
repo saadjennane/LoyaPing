@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { MICROSOFT_ENABLED } from '@/lib/constants/features'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -298,11 +299,13 @@ export default function AppointmentsSettingsPage() {
                     <GoogleLogo />Sync Google Calendar
                   </Button>
                 </a>
-                <a href="/api/calendar/microsoft/connect">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <MicrosoftLogo />Sync Outlook Calendar
-                  </Button>
-                </a>
+                {MICROSOFT_ENABLED && (
+                  <a href="/api/calendar/microsoft/connect">
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <MicrosoftLogo />Sync Outlook Calendar
+                    </Button>
+                  </a>
+                )}
               </>
             )}
             {calendarStatus.google && (
