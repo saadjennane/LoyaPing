@@ -3,6 +3,7 @@ import { creditPoints } from '@/lib/services/loyalty'
 import { cancelExistingScheduledForEntity } from '@/lib/services/outbox'
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
 import type { Order, LoyaltyProgram } from '@/lib/types'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 // Select fragment reused across queries
 const ORDER_SELECT = '*, client:clients(id, civility, first_name, last_name, phone_number, magic_token), messages:order_messages(*)'
@@ -44,7 +45,7 @@ export async function sendReadyCorrection(orderId: string): Promise<void> {
 
   const { data: order, error } = await db
     .from('orders')
-    .select('id, business_id, reference, client:clients(phone_number)')
+    .select('id, business_id, reference, client:clients(phone_number, first_name, last_name, civility)')
     .eq('id', orderId)
     .single()
 
@@ -52,7 +53,7 @@ export async function sendReadyCorrection(orderId: string): Promise<void> {
 
   const client = (
     Array.isArray(order.client) ? order.client[0] : order.client
-  ) as { phone_number: string }
+  ) as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null }
 
   const { data: settings } = await db
     .from('order_notification_settings')
@@ -68,7 +69,13 @@ export async function sendReadyCorrection(orderId: string): Promise<void> {
   let msgError: string | null = null
 
   try {
-    const result = await sendWhatsAppMessage({ to: client.phone_number, text: message })
+    const result = await sendWhatsAppMessage({
+      to: client.phone_number,
+      text: message,
+      template: waTemplate('order_ready_correction', [
+        greetingName(client), order.reference ?? '', await getBusinessName(order.business_id),
+      ]),
+    })
     if (result.success) {
       msgStatus = 'sent'
     } else {

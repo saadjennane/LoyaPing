@@ -31,6 +31,7 @@ import {
   createScheduledMessage,
   cancelExistingScheduledForEntity,
 } from './outbox'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 const DEFAULT_BUSINESS_ID =
   process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
@@ -273,6 +274,11 @@ export async function processBirthdayRewards(): Promise<{
           to:          client.phone_number,
           body:        messageBody,
           sendAt,
+          template:    waTemplate('birthday', [
+            greetingName(client as { first_name?: string | null; civility?: string | null; last_name?: string | null }),
+            await getBusinessName(DEFAULT_BUSINESS_ID),
+            rewardTitle,
+          ]),
         })
 
         // ── 5d. Link outbox entry to birthday_sends ────────────────────

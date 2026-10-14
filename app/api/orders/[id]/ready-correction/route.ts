@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { createScheduledMessage } from '@/lib/services/outbox'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 const DEFAULT_BUSINESS_ID =
   process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     // ── 1. Fetch order + client phone ─────────────────────────────────────
     const { data: order, error: orderErr } = await db
       .from('orders')
-      .select('id, reference, status, client:clients(phone_number)')
+      .select('id, reference, status, client:clients(phone_number, first_name, last_name, civility)')
       .eq('id', orderId)
       .single()
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    const client = order.client as unknown as { phone_number: string } | null
+    const client = order.client as unknown as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null } | null
     if (!client?.phone_number) {
       return NextResponse.json(
         { error: 'Order has no associated client phone number' },
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       to:          client.phone_number,
       body:        messageBody,
       sendAt:      new Date(),
+      template:    waTemplate('order_ready_correction', [greetingName(client), ref, await getBusinessName(DEFAULT_BUSINESS_ID)]),
     })
 
     return NextResponse.json({

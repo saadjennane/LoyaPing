@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 import type { Order, OrderNotificationSettings } from '@/lib/types'
 import { Orders } from '@/lib/posthog/orders'
 
@@ -98,6 +99,7 @@ export async function GET(req: NextRequest) {
     ]
 
     let totalSent = 0
+    const businessNames = new Map<string, string>()
 
     for (const order of orders as Order[]) {
       const readySentAt = order.ready_at
@@ -135,7 +137,16 @@ export async function GET(req: NextRequest) {
         let success = false
         let sendError = ''
         try {
-          const result = await sendWhatsAppMessage({ to: client.phone_number, text })
+          if (!businessNames.has(order.business_id)) {
+            businessNames.set(order.business_id, await getBusinessName(order.business_id))
+          }
+          const result = await sendWhatsAppMessage({
+            to: client.phone_number,
+            text,
+            template: waTemplate('order_reminder', [
+              greetingName(client), order.reference ?? '', businessNames.get(order.business_id),
+            ]),
+          })
           success = result.success
         } catch (err) {
           success = false

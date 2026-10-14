@@ -1,16 +1,57 @@
 // WhatsApp Service Layer
 // Abstraction over any WhatsApp provider (WhatsApp Cloud API, Twilio, etc.)
-// Phase 1: WhatsApp Cloud API (Meta) - swap provider by implementing sendMessage differently
+// Cloud API also covers Coexistence numbers (e.g. EasyCoexistence): same API,
+// the WhatsApp Business app keeps working on the number.
+
+import { createServerClient } from '@/lib/supabase/server'
+import type { TemplateSpec } from '@/lib/whatsapp/templates'
 
 export type WhatsAppMessage = {
   to: string    // phone in E.164 format e.g. +212612345678
   text: string
+  // Fallback used by the Cloud API outside the 24 h customer service window
+  template?: TemplateSpec | null
 }
 
 export type WhatsAppButtonMessage = {
   to: string
   body: string  // message text shown above the buttons
   buttons: Array<{ id: string; title: string }>  // max 3 buttons
+  template?: TemplateSpec | null
+}
+
+/** "212 612-345 678" / "212612345678" → "+212612345678" */
+export function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  return digits ? `+${digits}` : phone
+}
+
+// =========================================
+// 24 H CUSTOMER SERVICE WINDOW
+// =========================================
+
+// Margin so a message queued at 23h59 doesn't reach Meta after the window closed
+const SERVICE_WINDOW_MS = 24 * 60 * 60_000 - 10 * 60_000
+
+/** Records an inbound client message (opens the 24 h window). */
+export async function recordInboundMessage(phone: string, at = new Date()): Promise<void> {
+  const db = createServerClient()
+  const { error } = await db
+    .from('whatsapp_windows')
+    .upsert({ phone: normalizePhone(phone), last_inbound_at: at.toISOString() })
+  if (error) console.error('[WhatsApp] recordInboundMessage error:', error.message)
+}
+
+/** True when the client wrote to us within the last 24 h. */
+export async function isServiceWindowOpen(phone: string): Promise<boolean> {
+  const db = createServerClient()
+  const { data, error } = await db
+    .from('whatsapp_windows')
+    .select('last_inbound_at')
+    .eq('phone', normalizePhone(phone))
+    .maybeSingle()
+  if (error || !data) return false
+  return Date.now() - new Date(data.last_inbound_at).getTime() < SERVICE_WINDOW_MS
 }
 
 // =========================================
@@ -21,6 +62,9 @@ export async function sendWhatsAppMessage(msg: WhatsAppMessage): Promise<{ succe
 
   switch (provider) {
     case 'cloud_api':
+      if (msg.template && !(await isServiceWindowOpen(msg.to))) {
+        return sendTemplateViaCloudApi(msg.to, msg.template)
+      }
       return sendViaCloudApi(msg)
     case 'twilio':
       return sendViaTwilio(msg)
@@ -41,6 +85,9 @@ export async function sendWhatsAppButtons(msg: WhatsAppButtonMessage): Promise<{
 
   switch (provider) {
     case 'cloud_api':
+      if (msg.template && !(await isServiceWindowOpen(msg.to))) {
+        return sendTemplateViaCloudApi(msg.to, msg.template)
+      }
       return sendButtonsViaCloudApi(msg)
     case 'vonage':
       return sendButtonsViaVonage(msg)
@@ -49,11 +96,16 @@ export async function sendWhatsAppButtons(msg: WhatsAppButtonMessage): Promise<{
       return { success: true, messageId: `mock_${Date.now()}` }
     default:
       // Fallback to plain text for providers without button support
-      return sendWhatsAppMessage({ to: msg.to, text: msg.body })
+      return sendWhatsAppMessage({ to: msg.to, text: msg.body, template: msg.template })
   }
 }
 
-async function sendButtonsViaCloudApi(msg: WhatsAppButtonMessage) {
+// =========================================
+// META CLOUD API
+// Env: WHATSAPP_API_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
+//      WHATSAPP_API_VERSION (default v22.0), WHATSAPP_API_BASE_URL (default graph.facebook.com)
+// =========================================
+async function postToCloudApi(payload: Record<string, unknown>, label: string) {
   const token = process.env.WHATSAPP_API_TOKEN
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
 
@@ -61,11 +113,42 @@ async function sendButtonsViaCloudApi(msg: WhatsAppButtonMessage) {
     throw new Error('Missing WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID')
   }
 
+  const baseUrl = (process.env.WHATSAPP_API_BASE_URL ?? 'https://graph.facebook.com').replace(/\/+$/, '')
   const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v22.0'
 
-  const body = {
-    messaging_product: 'whatsapp',
-    to: msg.to.replace(/\s+/g, ''),
+  const res = await fetch(`${baseUrl}/${apiVersion}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ messaging_product: 'whatsapp', ...payload }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error(`[WhatsApp] Cloud API ${label} error:`, errText)
+    throw new Error(`WhatsApp Cloud API error ${res.status}: ${errText}`)
+  }
+
+  const data = await res.json()
+  return { success: true, messageId: data?.messages?.[0]?.id as string | undefined }
+}
+
+// Cloud API expects digits only (no "+")
+const cloudApiRecipient = (to: string) => normalizePhone(to).replace(/^\+/, '')
+
+async function sendViaCloudApi(msg: WhatsAppMessage) {
+  return postToCloudApi({
+    to: cloudApiRecipient(msg.to),
+    type: 'text',
+    text: { body: msg.text },
+  }, 'text')
+}
+
+async function sendButtonsViaCloudApi(msg: WhatsAppButtonMessage) {
+  return postToCloudApi({
+    to: cloudApiRecipient(msg.to),
     type: 'interactive',
     interactive: {
       type: 'button',
@@ -77,70 +160,35 @@ async function sendButtonsViaCloudApi(msg: WhatsAppButtonMessage) {
         })),
       },
     },
-  }
-
-  const res = await fetch(
-    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    }
-  )
-
-  if (!res.ok) {
-    const errText = await res.text()
-    console.error('[WhatsApp] Cloud API buttons error:', errText)
-    throw new Error(`WhatsApp Cloud API error ${res.status}: ${errText}`)
-  }
-
-  const data = await res.json()
-  return { success: true, messageId: data?.messages?.[0]?.id as string | undefined }
+  }, 'buttons')
 }
 
-// =========================================
-// META CLOUD API
-// =========================================
-async function sendViaCloudApi(msg: WhatsAppMessage) {
-  const token = process.env.WHATSAPP_API_TOKEN
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
-
-  if (!token || !phoneNumberId) {
-    throw new Error('Missing WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID')
+async function sendTemplateViaCloudApi(to: string, template: TemplateSpec) {
+  const components: Array<Record<string, unknown>> = []
+  if (template.params.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: template.params.map((text) => ({ type: 'text', text })),
+    })
   }
+  ;(template.buttonPayloads ?? []).forEach((payload, index) => {
+    components.push({
+      type: 'button',
+      sub_type: 'quick_reply',
+      index: String(index),
+      parameters: [{ type: 'payload', payload }],
+    })
+  })
 
-  const body = {
-    messaging_product: 'whatsapp',
-    to: msg.to.replace(/\s+/g, ''),
-    type: 'text',
-    text: { body: msg.text },
-  }
-
-  const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v22.0'
-
-  const res = await fetch(
-    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    }
-  )
-
-  if (!res.ok) {
-    const errText = await res.text()
-    console.error('[WhatsApp] Cloud API error:', errText)
-    throw new Error(`WhatsApp Cloud API error ${res.status}: ${errText}`)
-  }
-
-  const data = await res.json()
-  return { success: true, messageId: data?.messages?.[0]?.id as string | undefined }
+  return postToCloudApi({
+    to: cloudApiRecipient(to),
+    type: 'template',
+    template: {
+      name: template.name,
+      language: { code: template.language },
+      ...(components.length > 0 ? { components } : {}),
+    },
+  }, `template ${template.name}`)
 }
 
 // =========================================
@@ -326,54 +374,78 @@ export function verifyWebhook(
 }
 
 // =========================================
-// PARSE INCOMING MESSAGE
+// PARSE INCOMING WEBHOOK (Cloud API)
 // =========================================
-export type IncomingWhatsAppMessage = {
-  from: string      // E.164 phone
-  body: string
-  messageId: string
-  timestamp: number
-  buttonId?: string // set when the user tapped an interactive button reply
-}
-
-export function parseIncomingWebhook(payload: unknown): IncomingWhatsAppMessage | null {
-  try {
-    const p = payload as Record<string, unknown>
-    const entry = (p?.entry as unknown[])?.[0] as Record<string, unknown>
-    const changes = (entry?.changes as unknown[])?.[0] as Record<string, unknown>
-    const value = changes?.value as Record<string, unknown>
-    const messages = value?.messages as unknown[]
-    if (!messages || messages.length === 0) return null
-
-    const msg = messages[0] as Record<string, unknown>
-
-    // Plain text message
-    if (msg.type === 'text') {
-      return {
-        from: msg.from as string,
-        body: (msg.text as Record<string, unknown>)?.body as string ?? '',
-        messageId: msg.id as string,
-        timestamp: Number(msg.timestamp),
-      }
+export type WhatsAppWebhookEvent =
+  | {
+      kind: 'message'           // a client wrote to us
+      from: string              // E.164 phone
+      body: string
+      messageId: string
+      timestamp: number
+      buttonId?: string         // interactive button id or template quick-reply payload
+    }
+  | {
+      kind: 'echo'              // the merchant wrote from the WhatsApp Business app (Coexistence)
+      to: string                // E.164 phone of the client
+      body: string
+      messageId: string
     }
 
-    // Interactive button reply (user tapped a quick-reply button)
-    if (msg.type === 'interactive') {
-      const interactive = msg.interactive as Record<string, unknown>
-      if (interactive?.type === 'button_reply') {
-        const reply = interactive.button_reply as Record<string, unknown>
-        return {
-          from: msg.from as string,
-          body: (reply?.title as string) ?? '',
-          messageId: msg.id as string,
-          timestamp: Number(msg.timestamp),
-          buttonId: reply?.id as string,
+type Json = Record<string, unknown>
+
+function textOfMessage(msg: Json): { body: string; buttonId?: string } {
+  switch (msg.type) {
+    case 'text':
+      return { body: ((msg.text as Json)?.body as string) ?? '' }
+    case 'interactive': {
+      const interactive = msg.interactive as Json
+      const reply = (interactive?.button_reply ?? interactive?.list_reply) as Json | undefined
+      return { body: (reply?.title as string) ?? '', buttonId: reply?.id as string | undefined }
+    }
+    case 'button': {
+      // Quick-reply button of a template message
+      const button = msg.button as Json
+      return { body: (button?.text as string) ?? '', buttonId: button?.payload as string | undefined }
+    }
+    default:
+      return { body: `(${String(msg.type ?? 'message')})` }
+  }
+}
+
+/** Extracts client messages and merchant echoes from a Cloud API webhook payload. */
+export function parseWebhookEvents(payload: unknown): WhatsAppWebhookEvent[] {
+  const events: WhatsAppWebhookEvent[] = []
+  try {
+    for (const entry of ((payload as Json)?.entry as Json[]) ?? []) {
+      for (const change of (entry?.changes as Json[]) ?? []) {
+        const value = change?.value as Json
+
+        for (const msg of (value?.messages as Json[]) ?? []) {
+          const { body, buttonId } = textOfMessage(msg)
+          events.push({
+            kind: 'message',
+            from: normalizePhone(msg.from as string),
+            body,
+            messageId: msg.id as string,
+            timestamp: Number(msg.timestamp),
+            ...(buttonId ? { buttonId } : {}),
+          })
+        }
+
+        // smb_message_echoes: messages typed in the WhatsApp Business app
+        for (const echo of (value?.message_echoes as Json[]) ?? []) {
+          events.push({
+            kind: 'echo',
+            to: normalizePhone(echo.to as string),
+            body: textOfMessage(echo).body,
+            messageId: echo.id as string,
+          })
         }
       }
     }
-
-    return null
-  } catch {
-    return null
+  } catch (err) {
+    console.error('[WhatsApp] parseWebhookEvents error:', err)
   }
+  return events
 }

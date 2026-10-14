@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import { normalizePhone, sendWhatsAppMessage } from '@/lib/services/whatsapp'
 import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
 import { Reviews } from '@/lib/posthog/reviews'
 import type { Client, ClientPageData, LoyaltyProgram, LoyaltyTier, Coupon, Appointment, Order, PortalGlobalData, PortalBusinessData } from '@/lib/types'
@@ -15,8 +15,13 @@ export const REVIEW_BTN_POSITIVE = 'review_positive'
 export const REVIEW_BTN_NEGATIVE = 'review_negative'
 
 // Appointment button ID prefixes (format: appt_confirm_{id} / appt_reschedule_{id})
-const APPT_CONFIRM_PREFIX    = 'appt_confirm_'
-const APPT_RESCHEDULE_PREFIX = 'appt_reschedule_'
+export const APPT_CONFIRM_PREFIX    = 'appt_confirm_'
+export const APPT_RESCHEDULE_PREFIX = 'appt_reschedule_'
+
+// The portal link is only sent when the client asks for it. With Coexistence
+// the merchant chats from the WhatsApp Business app, so an automatic reply to
+// every message would interrupt real conversations.
+const MAGIC_LINK_KEYWORDS = /(^|[^\p{L}])(lien|link|espace|compte|points?|fid[eé]lit[eé]|r[eé]compenses?|carte|solde)(?=$|[^\p{L}])/iu
 
 // =========================================
 // GET CLIENT PAGE DATA (magic link)
@@ -81,7 +86,7 @@ export async function updateClientPhone(clientId: string, newPhone: string): Pro
 export async function handleIncomingMessage(fromPhone: string, messageBody = '', buttonId?: string): Promise<void> {
   const db = createServerClient()
 
-  const phone = fromPhone.replace(/\s+/g, '')
+  const phone = normalizePhone(fromPhone)
 
   // ── Conversation thread routing ────────────────────────────────────────────
   // If the sender has an active (OPEN or IN_PROGRESS) conversation, append the
@@ -296,7 +301,9 @@ export async function handleIncomingMessage(fromPhone: string, messageBody = '',
       }
     }
 
-    // ── Fallback: magic link (loyalty portal) ─────────────────────────
+    // ── Fallback: magic link (loyalty portal), only on request ────────
+    if (buttonId || !MAGIC_LINK_KEYWORDS.test(messageBody)) continue
+
     const { data: program } = await db
       .from('loyalty_programs')
       .select('id')
@@ -314,6 +321,40 @@ export async function handleIncomingMessage(fromPhone: string, messageBody = '',
     await sendWhatsAppMessage({ to: phone, text: message }).catch((err) =>
       console.error('[clients] auto-reply error:', err)
     )
+  }
+}
+
+// =========================================
+// MERCHANT ECHO (Coexistence)
+// A message typed by the merchant in the WhatsApp Business app. If a
+// conversation is open with this client, log it as an outbound message so
+// the thread in LoyaPing stays complete. Otherwise ignore it.
+// =========================================
+export async function handleBusinessEcho(toPhone: string, messageBody: string): Promise<void> {
+  const db = createServerClient()
+  const phone = normalizePhone(toPhone)
+
+  const { data: conv } = await db
+    .from('conversations')
+    .select('id, status')
+    .eq('business_id', DEFAULT_BUSINESS_ID)
+    .eq('phone', phone)
+    .neq('status', 'RESOLVED')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!conv) return
+
+  await db.from('conversation_messages').insert({
+    conversation_id: conv.id,
+    direction: 'outbound',
+    body: messageBody || '(message)',
+  })
+
+  // Same transition as a reply sent from LoyaPing
+  if (conv.status === 'TO_TREAT' || conv.status === 'OPEN') {
+    await db.from('conversations').update({ status: 'IN_PROGRESS' }).eq('id', conv.id)
   }
 }
 

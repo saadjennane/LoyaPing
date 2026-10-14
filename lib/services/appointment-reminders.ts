@@ -12,6 +12,7 @@
  */
 
 import { createServerClient } from '@/lib/supabase/server'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 const DEFAULT_BUSINESS_ID =
   process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
@@ -313,6 +314,20 @@ export async function scheduleAppointmentReminders(
   const apptDate = new Date(appt.scheduled_at as string)
   const now = new Date()
 
+  // Fallback template (Cloud API, outside the 24 h window)
+  const businessName = await getBusinessName(DEFAULT_BUSINESS_ID)
+  const fmt = (pattern: string) => interpolateMessage(pattern, apptDate, firstName, lastName, civility, businessTimezone)
+  const templateFor = (withButtons: boolean) => withButtons
+    ? waTemplate(
+        'appointment_reminder_confirm',
+        [greetingName({ first_name: firstName, civility, last_name: lastName }), businessName, fmt('{{jour}} {{date}}'), fmt('{{heure}}')],
+        CONFIRM_BUTTONS.map((b) => b.id),
+      )
+    : waTemplate(
+        'appointment_reminder',
+        [greetingName({ first_name: firstName, civility, last_name: lastName }), businessName, fmt('{{jour}} {{date}}'), fmt('{{heure}}')],
+      )
+
   const rows = cfgs
     .filter((c) => c.enabled && c.message)
     .map((c) => ({
@@ -322,6 +337,7 @@ export async function scheduleAppointmentReminders(
       to_whatsapp:  phone,
       body:         interpolateMessage(c.message, apptDate, firstName, lastName, civility, businessTimezone),
       buttons:      c.withButtons ? CONFIRM_BUTTONS : null,
+      template:     templateFor(c.withButtons),
       send_at:      computeSendAt(apptDate, c.amount, c.unit, c.fixedTime, businessTimezone).toISOString(),
     }))
     // Drop any reminders whose send time is already in the past.

@@ -4,6 +4,7 @@ import type { Client, LoyaltyProgram, LoyaltyTier, Coupon, PointsLog } from '@/l
 import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Loyalty } from '@/lib/posthog/loyalty'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 // =========================================
 // CREDIT POINTS TO CLIENT
@@ -147,7 +148,15 @@ export async function creditPoints({
         .replace(/\{\{nom\}\}/gi,        (client as {last_name?: string | null}).last_name   ?? '')
 
       try {
-        await sendWhatsAppMessage({ to: client.phone_number, text: message })
+        await sendWhatsAppMessage({
+          to: client.phone_number,
+          text: message,
+          template: waTemplate('reward_unlocked', [
+            greetingName(client as { first_name?: string | null; civility?: string | null; last_name?: string | null }),
+            await getBusinessName(businessId),
+            tier.reward_title ?? tier.reward_description ?? '',
+          ]),
+        })
       } catch (e) {
         console.error(`[loyalty] Failed to send tier notification for tier ${tier.tier_order}:`, e)
       }

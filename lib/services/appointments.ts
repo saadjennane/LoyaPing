@@ -5,6 +5,7 @@ import {
   createScheduledMessage,
 } from '@/lib/services/outbox'
 import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, ReminderStatus } from '@/lib/types'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 // ── Reminder status — single batch query from scheduled_messages ──────────────
 
@@ -201,6 +202,9 @@ export async function markAppointmentShow(
           to:          phone,
           body:        notifSettings.post_show_message,
           sendAt:      new Date(),
+          template:    waTemplate('appointment_post_show', [
+            greetingName(appt.client as Client | undefined), await getBusinessName(appt.business_id),
+          ]),
         })
       }
     }
@@ -221,7 +225,7 @@ export async function markNoShow(appointmentId: string): Promise<void> {
   // Allowed source statuses: 'scheduled' and 'show' (normal flip show → no_show).
   const { data: appt } = await db
     .from('appointments')
-    .select('business_id, client:clients(phone_number)')
+    .select('business_id, client:clients(phone_number, first_name, last_name, civility)')
     .eq('id', appointmentId)
     .in('status', ['scheduled', 'show'])
     .maybeSingle()
@@ -243,7 +247,7 @@ export async function markNoShow(appointmentId: string): Promise<void> {
         .eq('business_id', appt.business_id)
         .maybeSingle()
 
-      const clientData = appt.client as unknown as { phone_number: string } | null
+      const clientData = appt.client as unknown as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null } | null
       const phone = clientData?.phone_number
       if (phone && notifSettings?.post_messages_enabled && notifSettings?.post_no_show_message) {
         // Status flip: cancel any pending post_show from a previous show marking
@@ -269,6 +273,9 @@ export async function markNoShow(appointmentId: string): Promise<void> {
             to:          phone,
             body:        notifSettings.post_no_show_message,
             sendAt:      new Date(),
+            template:    waTemplate('appointment_post_no_show', [
+              greetingName(clientData), await getBusinessName(appt.business_id),
+            ]),
           })
         }
       }

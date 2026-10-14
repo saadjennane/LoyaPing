@@ -15,6 +15,8 @@
  */
 
 import { createServerClient } from '@/lib/supabase/server'
+import { sendWhatsAppButtons, sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import type { TemplateSpec } from '@/lib/whatsapp/templates'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ export type ScheduledMessage = {
   to_whatsapp:   string
   body:          string
   buttons:       Array<{ id: string; title: string }> | null
+  template:      TemplateSpec | null   // fallback outside the 24 h window (Cloud API)
   send_at:       string
   status:        ScheduledStatus
   claim_token:   string | null
@@ -65,6 +68,8 @@ export async function createScheduledMessage(params: {
   to:          string
   body:        string
   sendAt:      Date
+  buttons?:    Array<{ id: string; title: string }> | null
+  template?:   TemplateSpec | null
 }): Promise<ScheduledMessage> {
   const db = createServerClient()
 
@@ -77,6 +82,8 @@ export async function createScheduledMessage(params: {
       to_whatsapp:  params.to,
       body:         params.body,
       send_at:      params.sendAt.toISOString(),
+      buttons:      params.buttons?.length ? params.buttons : null,
+      template:     params.template ?? null,
     })
     .select()
     .single()
@@ -93,6 +100,15 @@ export async function createScheduledMessage(params: {
   }
 
   return data as ScheduledMessage
+}
+
+// ── Send a claimed row ────────────────────────────────────────────────────────
+
+/** Sends an outbox row with its buttons and fallback template. */
+export function sendScheduledMessage(msg: ScheduledMessage) {
+  return msg.buttons && msg.buttons.length > 0
+    ? sendWhatsAppButtons({ to: msg.to_whatsapp, body: msg.body, buttons: msg.buttons, template: msg.template })
+    : sendWhatsAppMessage({ to: msg.to_whatsapp, text: msg.body, template: msg.template })
 }
 
 // ── Cancel single message ─────────────────────────────────────────────────────

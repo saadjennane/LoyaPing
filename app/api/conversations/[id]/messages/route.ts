@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
+import { isServiceWindowOpen, sendWhatsAppMessage } from '@/lib/services/whatsapp'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -32,6 +32,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (convErr || !conv) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (conv.status === 'RESOLVED') {
       return NextResponse.json({ error: 'Cannot send message to a resolved conversation' }, { status: 409 })
+    }
+
+    // Cloud API: free-form messages are only allowed within 24 h of the
+    // client's last message
+    if ((process.env.WHATSAPP_PROVIDER ?? 'cloud_api') === 'cloud_api' && !(await isServiceWindowOpen(conv.phone as string))) {
+      return NextResponse.json(
+        { error: 'Le client ne vous a pas écrit depuis plus de 24 h : WhatsApp n\'autorise plus de message libre. Attendez qu\'il vous réécrive.' },
+        { status: 409 },
+      )
     }
 
     // Send WhatsApp message

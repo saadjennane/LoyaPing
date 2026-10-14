@@ -23,6 +23,7 @@ import {
   createScheduledMessage,
 } from '@/lib/services/outbox'
 import { Orders } from '@/lib/posthog/orders'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 const DEFAULT_BUSINESS_ID =
   process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
@@ -113,6 +114,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       to:          client.phone_number,
       body,
       sendAt,
+      template: waTemplate('order_ready', [greetingName(client), ref, await getBusinessName(DEFAULT_BUSINESS_ID)]),
     })
 
     Orders.orderReadyMarked({ order_id: orderId })

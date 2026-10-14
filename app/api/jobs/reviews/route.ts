@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppButtons } from '@/lib/services/whatsapp'
 import { REVIEW_BTN_POSITIVE, REVIEW_BTN_NEGATIVE } from '@/lib/services/clients'
 import { Reviews } from '@/lib/posthog/reviews'
+import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -70,6 +71,9 @@ export async function GET(req: NextRequest) {
 
     let totalSent = 0
     let totalReminders = 0
+    const businessName = await getBusinessName(DEFAULT_BUSINESS_ID)
+    const reviewTemplate = (c: { first_name?: string | null; civility?: string | null; last_name?: string | null }) =>
+      waTemplate('review_request', [greetingName(c), businessName], [REVIEW_BTN_POSITIVE, REVIEW_BTN_NEGATIVE])
 
     for (const client of clients) {
       try {
@@ -100,6 +104,7 @@ export async function GET(req: NextRequest) {
                 { id: REVIEW_BTN_POSITIVE, title: '👍 Oui' },
                 { id: REVIEW_BTN_NEGATIVE, title: '👎 Non' },
               ],
+              template: reviewTemplate(client),
             })
 
             await db.from('reviews_events').insert({
@@ -156,7 +161,11 @@ export async function GET(req: NextRequest) {
 
         // Send the satisfaction message with interactive buttons
         const name = client.first_name ?? ''
-        const body = satisfaction_message.replace(/\{name\}/g, name)
+        const body = satisfaction_message
+          .replace(/\{name\}/g,          name)
+          .replace(/\{\{civilite\}\}/gi,  (client as {civility?: string | null}).civility   ?? '')
+          .replace(/\{\{prenom\}\}/gi,    name)
+          .replace(/\{\{nom\}\}/gi,       (client as {last_name?: string | null}).last_name  ?? '')
 
         await sendWhatsAppButtons({
           to: client.phone_number,
@@ -165,6 +174,7 @@ export async function GET(req: NextRequest) {
             { id: REVIEW_BTN_POSITIVE, title: '👍 Oui' },
             { id: REVIEW_BTN_NEGATIVE, title: '👎 Non' },
           ],
+          template: reviewTemplate(client),
         })
 
         await db.from('reviews_events').insert({

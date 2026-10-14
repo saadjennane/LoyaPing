@@ -1,12 +1,19 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
 import type { UrgentEventType } from '@/lib/types'
+import { waTemplate } from '@/lib/whatsapp/templates'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
 const MESSAGES: Record<UrgentEventType, string> = {
   reschedule:      '⚠️ Un client souhaite replanifier son rendez-vous.\nOuvrez LoyaPing pour traiter cette demande.',
   negative_review: '❌ Nouveau retour client négatif reçu.\nOuvrez LoyaPing pour consulter.',
+}
+
+// One-line summaries for the loyaping_alerte template ({{1}})
+const TEMPLATE_SUMMARIES: Record<UrgentEventType, string> = {
+  reschedule:      'un client souhaite replanifier son rendez-vous',
+  negative_review: 'nouveau retour client négatif',
 }
 
 /**
@@ -76,9 +83,13 @@ export async function createAndNotifyUrgentEvent(
       ? `⚠️ ${pendingCount} actions urgentes à traiter dans LoyaPing.`
       : MESSAGES[type]
 
+  const template = waTemplate('urgent_alert', [
+    pendingCount > 1 ? `${pendingCount} actions urgentes à traiter` : TEMPLATE_SUMMARIES[type],
+  ])
+
   // 5. Send WhatsApp to all configured numbers
   await Promise.allSettled(
-    numbers.map((to) => sendWhatsAppMessage({ to, text: message })),
+    numbers.map((to) => sendWhatsAppMessage({ to, text: message, template })),
   )
 
   // 6. Mark all pending events as sent

@@ -14,12 +14,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { sendWhatsAppMessage } from '@/lib/services/whatsapp'
 import { createServerClient } from '@/lib/supabase/server'
 import {
   claimMessageNow,
   markSent,
   markFailed,
+  sendScheduledMessage,
 } from '@/lib/services/outbox'
 
 type Params = { params: Promise<{ id: string }> }
@@ -46,10 +46,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
   // ── Send ───────────────────────────────────────────────────────────────────
   try {
-    const result = await sendWhatsAppMessage({
-      to:   claimed.to_whatsapp,
-      text: claimed.body,
-    })
+    const result = await sendScheduledMessage(claimed)
 
     await markSent(claimed.id, claimToken)
 
