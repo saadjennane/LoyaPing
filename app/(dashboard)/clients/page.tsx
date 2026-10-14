@@ -34,6 +34,7 @@ import { useI18n } from '@/lib/i18n/provider'
 import { useModules } from '@/lib/context/modules'
 import { useClientFieldConfig } from '@/lib/context/client-field-config'
 import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
+import WhatsAppErrorBadge from '@/components/WhatsAppErrorBadge'
 
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -732,6 +733,7 @@ export default function ClientsPage() {
                           {client.whatsapp_enabled === false && (
                             <BellOff className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="WhatsApp désactivé" />
                           )}
+                          {!client.phone_number && <WhatsAppErrorBadge compact />}
                         </div>
                         <div className="text-xs text-muted-foreground">{client.phone_number}</div>
                         {loyaltyOn && tiers.length > 0 && (
@@ -855,6 +857,7 @@ export default function ClientsPage() {
                                 {client.whatsapp_enabled === false && (
                                   <BellOff className="h-3.5 w-3.5 text-muted-foreground" aria-label="WhatsApp désactivé" />
                                 )}
+                                {!client.phone_number && <WhatsAppErrorBadge compact />}
                               </div>
                               {(client.first_name || client.last_name) && (
                                 <div className="text-xs text-muted-foreground">{client.phone_number}</div>

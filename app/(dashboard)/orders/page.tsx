@@ -22,6 +22,7 @@ import PhoneInput from '@/components/PhoneInput'
 import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
+import WhatsAppErrorBadge from '@/components/WhatsAppErrorBadge'
 
 type Step = 'search' | 'new_client' | 'order'
 
@@ -658,6 +659,7 @@ export default function OrdersPage() {
                         <BellOff className="h-3 w-3" />{t('orders.reminders3')}
                       </span>
                     )}
+                    {client && !client.phone_number && <WhatsAppErrorBadge compact />}
                   </div>
                   <div className="text-xs text-muted-foreground truncate">{client ? clientFullName(client) : '—'}</div>
                   <div className="text-xs text-muted-foreground">{format(new Date(order.created_at), 'dd MMM, HH:mm', { locale: fr })}</div>
@@ -760,7 +762,9 @@ export default function OrdersPage() {
                         <div className="text-sm text-foreground">{format(new Date(order.created_at), 'dd MMM yyyy', { locale: fr })}</div>
                         <div className="text-xs text-muted-foreground">{format(new Date(order.created_at), 'HH:mm', { locale: fr })}</div>
                       </TableCell>
-                      <TableCell className="px-6 py-4">{msgBadge(order.messages)}</TableCell>
+                      <TableCell className="px-6 py-4">
+                        {client && !client.phone_number ? <WhatsAppErrorBadge /> : msgBadge(order.messages)}
+                      </TableCell>
                       <TableCell className="pr-6 py-4 text-right">
                         <div className="flex gap-2 justify-end items-center" onClick={e => e.stopPropagation()}>
                           {order.status === 'pending' && (

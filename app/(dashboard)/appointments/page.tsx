@@ -36,6 +36,7 @@ import {
   setHours, setMinutes, differenceInMinutes, startOfDay, startOfToday,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import WhatsAppErrorBadge from '@/components/WhatsAppErrorBadge'
 
 type AppView      = 'agenda' | 'semaine' | 'a_replanifier'
 type StatusFilter = 'all' | 'upcoming' | 'show' | 'no_show' | 'unassigned'
@@ -355,7 +356,9 @@ function TimeGrid({
                       <>
                         <span className="font-semibold">{format(parseISO(appt.scheduled_at), 'HH:mm')}</span>{' '}
                         {clientFullName(appt.client as Client)}
-                        {appt.reminderStatus?.hasFailed && ' ⚠'}
+                        {(appt.reminderStatus?.hasFailed || !(appt.client as Client | undefined)?.phone_number) && (
+                          <span title={!(appt.client as Client | undefined)?.phone_number ? 'Erreur WhatsApp : numéro manquant' : 'Erreur WhatsApp'}> ⚠</span>
+                        )}
                         {(appt.services?.length ?? 0) > 0 && (
                           <span className="block truncate opacity-80">{appt.services!.map((sv) => sv.name).join(' + ')}</span>
                         )}
@@ -1928,6 +1931,8 @@ export default function AppointmentsPage() {
                               <span className="inline-flex items-center text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-3 py-1">
                                 Non assigné
                               </span>
+                            ) : !item.client_phone && item.status !== 'show' && item.status !== 'no_show' ? (
+                              <WhatsAppErrorBadge />
                             ) : item.reminderStatus.hasFailed ? (
                               <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
                                 <AlertTriangle className="h-3 w-3" />Erreur WA
@@ -2756,6 +2761,11 @@ export default function AppointmentsPage() {
                     </>
                   )}
                 </div>
+
+                {/* No phone: messages for this appointment cannot be sent */}
+                {selected.client_id !== null && !(selected.client as Client | undefined)?.phone_number && (
+                  <div><WhatsAppErrorBadge /></div>
+                )}
 
                 {/* WhatsApp on/off for this appointment */}
                 {selected.client_id !== null && (
