@@ -51,10 +51,14 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // getUser() validates the session server-side — never trust getSession() alone.
-  const { data: { user } } = await supabase.auth.getUser()
+  // getClaims() verifies the JWT signature locally against the project's
+  // asymmetric signing key (JWKS, cached) — no round trip to Supabase Auth on
+  // every request, unlike getUser(). It also refreshes an expired session.
+  // Never trust getSession() alone.
+  const { data } = await supabase.auth.getClaims()
+  const userId = data?.claims?.sub
 
-  if (!user) {
+  if (!userId) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
