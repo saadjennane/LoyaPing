@@ -18,7 +18,7 @@ const DEFAULT_CABINS = ['Cabine visage', 'Cabine 2']
 
 /** Error carrying the HTTP status the route should return. */
 export class BookingError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public details?: unknown) {
     super(message)
   }
 }
@@ -159,11 +159,38 @@ export async function saveAppointmentServices(
 
 // ── Cabin conflicts ──────────────────────────────────────────────────────────
 
+export type ConflictResolution = 'shift' | 'overlap'
+
+export type CabinConflictInfo = {
+  conflicts: Array<{ id: string; scheduled_at: string; ended_at: string; client_name: string }>
+  // Cascade plan: following appointments pushed back until a gap absorbs the delay.
+  // null when shifting is impossible (an overlapping appointment starts earlier
+  // or is already past), only "overlap" is then offered.
+  shifts: Array<{ id: string; client_name: string; from: string; to: string; new_end: string }> | null
+}
+
+export type AppointmentShift = { id: string; scheduled_at: string; ended_at: string }
+
+// Statuses an appointment can be pushed back from
+const SHIFTABLE_STATUSES = ['scheduled', 'confirmed']
+
+function clientLabel(c: { first_name?: string | null; last_name?: string | null; phone_number?: string | null } | null): string {
+  if (!c) return 'Sans client'
+  return [c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number || 'Client sans nom'
+}
+
 /**
- * Throws a 409 BookingError if [start, end) overlaps another appointment
- * occupying the same cabin. `cabinId = null` (legacy) conflicts with every cabin.
+ * Checks [start, end) against the other appointments occupying the cabin
+ * (cabinId = null — legacy — conflicts with every cabin).
+ *
+ * - No conflict → returns [] (nothing to shift).
+ * - Conflict and no `resolution` → throws a 409 BookingError whose `details`
+ *   (CabinConflictInfo) list the conflicts and the cascade plan.
+ * - resolution 'overlap' → returns [] (the merchant handles it).
+ * - resolution 'shift' → returns the shifts to apply (after saving the edited
+ *   appointment) with applyAppointmentShifts().
  */
-export async function assertCabinFree(
+export async function checkCabinAvailability(
   db: Db,
   {
     businessId,
@@ -171,35 +198,97 @@ export async function assertCabinFree(
     start,
     end,
     excludeAppointmentId,
+    resolution,
   }: {
     businessId: string
     cabinId: string | null
     start: Date
     end: Date
     excludeAppointmentId?: string
+    resolution?: ConflictResolution
   },
-): Promise<void> {
-  // Any overlapping appointment starts before `end` and (at most a day) before `start`
+): Promise<AppointmentShift[]> {
+  // Overlaps start at most a day before; a cascade stays within the next day
   const lowerBound = new Date(start.getTime() - 24 * 60 * 60_000)
+  const upperBound = new Date(end.getTime() + 24 * 60 * 60_000)
 
   let query = db
     .from('appointments')
-    .select('id, cabin_id, scheduled_at, ended_at')
+    .select('id, cabin_id, status, scheduled_at, ended_at, client:clients(first_name, last_name, phone_number)')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .in('status', [...CABIN_BLOCKING_STATUSES])
-    .lt('scheduled_at', end.toISOString())
     .gt('scheduled_at', lowerBound.toISOString())
+    .lt('scheduled_at', upperBound.toISOString())
+    .order('scheduled_at', { ascending: true })
   if (excludeAppointmentId) query = query.neq('id', excludeAppointmentId)
 
   const { data, error } = await query
   if (error) throw error
 
-  const conflict = (data ?? []).find((a) =>
-    blocksCabin(a.cabin_id as string | null, cabinId) &&
-    overlaps(new Date(a.scheduled_at as string), appointmentEnd(a.scheduled_at as string, a.ended_at as string | null), start, end),
-  )
-  if (conflict) {
-    throw new BookingError('Ce créneau n\'est plus disponible dans cette cabine', 409)
+  type Row = {
+    id: string; cabin_id: string | null; status: string; scheduled_at: string; ended_at: string | null
+    client: { first_name: string | null; last_name: string | null; phone_number: string | null } | null
   }
+  const sameCabin = ((data ?? []) as unknown as Row[])
+    .filter((a) => blocksCabin(a.cabin_id, cabinId))
+    .map((a) => ({
+      ...a,
+      start: new Date(a.scheduled_at),
+      end:   appointmentEnd(a.scheduled_at, a.ended_at),
+      name:  clientLabel(Array.isArray(a.client) ? a.client[0] : a.client),
+    }))
+
+  const conflicts = sameCabin.filter((a) => overlaps(a.start, a.end, start, end))
+  if (conflicts.length === 0 || resolution === 'overlap') return []
+
+  // Cascade: push each following appointment right after the previous one
+  // until one already starts after the cursor (a gap absorbs the delay)
+  let shifts: AppointmentShift[] | null = []
+  if (conflicts.some((a) => a.start < start || !SHIFTABLE_STATUSES.includes(a.status))) {
+    shifts = null
+  } else {
+    let cursor = end
+    for (const a of sameCabin.filter((x) => x.start >= start)) {
+      if (a.start >= cursor) break
+      if (!SHIFTABLE_STATUSES.includes(a.status)) { shifts = null; break }
+      const duration = a.end.getTime() - a.start.getTime()
+      const newEnd = new Date(cursor.getTime() + duration)
+      shifts.push({ id: a.id, scheduled_at: cursor.toISOString(), ended_at: newEnd.toISOString() })
+      cursor = newEnd
+    }
+  }
+
+  if (resolution === 'shift' && shifts) return shifts
+
+  const byId = new Map(sameCabin.map((a) => [a.id, a]))
+  const info: CabinConflictInfo = {
+    conflicts: conflicts.map((a) => ({ id: a.id, scheduled_at: a.scheduled_at, ended_at: a.end.toISOString(), client_name: a.name })),
+    shifts: shifts && shifts.map((sh) => ({
+      id: sh.id,
+      client_name: byId.get(sh.id)!.name,
+      from: byId.get(sh.id)!.scheduled_at,
+      to: sh.scheduled_at,
+      new_end: sh.ended_at,
+    })),
+  }
+  throw new BookingError(
+    resolution === 'shift'
+      ? 'Impossible de repousser les RDV suivants : un RDV qui chevauche commence avant ou est déjà passé'
+      : 'Ce créneau chevauche d\'autres RDV dans cette cabine',
+    409,
+    info,
+  )
+}
+
+/** Moves appointments (cascade plan) and returns their ids. */
+export async function applyAppointmentShifts(db: Db, shifts: AppointmentShift[]): Promise<string[]> {
+  for (const sh of shifts) {
+    const { error } = await db
+      .from('appointments')
+      .update({ scheduled_at: sh.scheduled_at, ended_at: sh.ended_at })
+      .eq('id', sh.id)
+    if (error) throw error
+  }
+  return shifts.map((sh) => sh.id)
 }

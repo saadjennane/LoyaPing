@@ -4,11 +4,12 @@ import { generateGiftCardCode, GIFT_CARD_SELECT, toGiftCard } from '@/lib/servic
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
-// GET /api/gift-cards[?status=active|consumed][&recipient_id=…]
+// GET /api/gift-cards[?status=active|consumed][&recipient_id=…][&code=CC-XXXXX]
 export async function GET(req: NextRequest) {
   try {
     const status      = req.nextUrl.searchParams.get('status')
     const recipientId = req.nextUrl.searchParams.get('recipient_id')
+    const code        = req.nextUrl.searchParams.get('code')
     const db = createServerClient()
     let query = db
       .from('gift_cards')
@@ -19,6 +20,11 @@ export async function GET(req: NextRequest) {
     if (status === 'active')   query = query.is('consumed_at', null)
     if (status === 'consumed') query = query.not('consumed_at', 'is', null)
     if (recipientId)           query = query.eq('recipient_client_id', recipientId)
+    if (code) {
+      // Accept "7K3PQ", "cc-7k3pq" or "CC-7K3PQ"
+      const normalized = code.trim().toUpperCase().replace(/^CC-?/, '')
+      query = query.eq('code', `CC-${normalized}`)
+    }
 
     const { data, error } = await query
     if (error) throw error

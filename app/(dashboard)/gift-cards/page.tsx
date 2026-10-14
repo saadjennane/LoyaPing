@@ -28,6 +28,14 @@ type RecipientAppointment = {
 
 const NO_APPOINTMENT = '__none__'
 
+// Upcoming bookable appointments, soonest first
+function upcomingAppointments(appts: RecipientAppointment[]): RecipientAppointment[] {
+  const now = Date.now()
+  return appts
+    .filter((a) => ['scheduled', 'confirmed'].includes(a.status) && new Date(a.scheduled_at).getTime() >= now)
+    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
+}
+
 // Most recent appointment that already started (list is sorted newest first)
 function lastStartedAppointment(appts: RecipientAppointment[]): RecipientAppointment | undefined {
   const now = Date.now()
@@ -148,6 +156,33 @@ export default function GiftCardsPage() {
   const [consumeAppts,   setConsumeAppts]   = useState<RecipientAppointment[]>([])
   const [consumeApptId,  setConsumeApptId]  = useState(NO_APPOINTMENT)
   const [consumeLoading, setConsumeLoading] = useState(false)
+
+  // Link dialog: reserve the card for an existing upcoming appointment
+  const [linkCard,    setLinkCard]    = useState<GiftCard | null>(null)
+  const [linkAppts,   setLinkAppts]   = useState<RecipientAppointment[]>([])
+  const [linkLoading, setLinkLoading] = useState(false)
+
+  const openLink = async (card: GiftCard) => {
+    if (!card.recipient_client_id) return
+    setLinkCard(card)
+    setLinkAppts([])
+    setLinkLoading(true)
+    const json = await fetch(`/api/appointments?client_id=${card.recipient_client_id}`).then((r) => r.json()).catch(() => ({ data: [] }))
+    setLinkAppts(upcomingAppointments(json.data ?? []))
+    setLinkLoading(false)
+  }
+
+  const reserveFor = async (card: GiftCard, appointmentId: string) => {
+    setLinkCard(null)
+    const json = await fetch(`/api/gift-cards/${card.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appointment_id: appointmentId }),
+    }).then((r) => r.json()).catch(() => ({ error: 'Erreur réseau' }))
+    if (json.error) { toast.error(json.error); return }
+    setCards((prev) => prev.map((c) => (c.id === card.id ? json.data : c)))
+    toast.success(`Carte ${card.code} réservée pour ce RDV`)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -353,12 +388,21 @@ export default function GiftCardsPage() {
                         {consumed ? 'RDV du ' : 'Réservée · RDV du '}{apptLabel(card.consumed_appointment)}
                       </Link>
                     ) : !consumed && card.recipient_client_id && (
-                      <Link
-                        href={`/appointments?new=1&client=${card.recipient_client_id}&gift_card=${card.id}`}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-[#3B5BDB] hover:underline"
-                      >
-                        <CalendarPlus className="h-3 w-3" />Prendre RDV
-                      </Link>
+                      <span className="flex items-center gap-3">
+                        <Link
+                          href={`/appointments?new=1&client=${card.recipient_client_id}&gift_card=${card.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-[#3B5BDB] hover:underline"
+                        >
+                          <CalendarPlus className="h-3 w-3" />Prendre RDV
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => openLink(card)}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-[#3B5BDB] hover:underline"
+                        >
+                          <CalendarDays className="h-3 w-3" />Lier à un RDV
+                        </button>
+                      </span>
                     )}
                     {card.notes && <p className="text-xs text-muted-foreground italic">{card.notes}</p>}
                   </div>
@@ -482,6 +526,47 @@ export default function GiftCardsPage() {
                   <Check className="h-4 w-4 mr-1.5" />Marquer consommée
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Link to an existing appointment */}
+      <Dialog open={!!linkCard} onOpenChange={(o) => { if (!o) setLinkCard(null) }}>
+        <DialogContent aria-describedby={undefined} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lier à un RDV existant</DialogTitle>
+          </DialogHeader>
+          {linkCard && (
+            <div className="space-y-3 mt-2">
+              <p className="text-sm text-muted-foreground">
+                « {linkCard.service_name} » pour {personName(linkCard.recipient)} ({linkCard.code})
+              </p>
+              {linkLoading ? (
+                <p className="text-sm text-muted-foreground">Chargement des RDV…</p>
+              ) : linkAppts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun RDV à venir pour ce client.</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto space-y-1">
+                  {linkAppts.map((a) => {
+                    const services = [...(a.services ?? [])].sort((x, y) => x.position - y.position).map((sv) => sv.name).join(' + ')
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => reserveFor(linkCard, a.id)}
+                        className="w-full text-left rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/40 transition-colors"
+                      >
+                        <span className="font-medium capitalize">{apptLabel(a)}</span>
+                        {services && <span className="block text-xs text-muted-foreground">{services}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                RDV pris au nom d&apos;une autre personne : ouvrez ce RDV et saisissez le code {linkCard.code} dans « Lier une carte par son code ».
+              </p>
             </div>
           )}
         </DialogContent>

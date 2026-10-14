@@ -6,7 +6,7 @@ import { pushAppointmentToGoogle } from '@/lib/services/google-calendar-sync'
 import { pushAppointmentToMicrosoft } from '@/lib/services/microsoft-calendar-sync'
 import { Appointments } from '@/lib/posthog/appointments'
 import {
-  assertCabinExists, assertCabinFree, BookingError, resolveServices, saveAppointmentServices,
+  applyAppointmentShifts, assertCabinExists, BookingError, checkCabinAvailability, resolveServices, saveAppointmentServices,
   type ResolvedBooking,
 } from '@/lib/services/catalog'
 import { reserveGiftCard } from '@/lib/services/gift-cards'
@@ -73,7 +73,11 @@ export async function POST(req: NextRequest) {
     }
     if (!(end > start)) return NextResponse.json({ error: 'La fin doit être après le début' }, { status: 400 })
 
-    await assertCabinFree(db, { businessId: DEFAULT_BUSINESS_ID, cabinId, start, end })
+    // Overlap with other appointments of the cabin: 409 with details unless the
+    // merchant chose to push them back ('shift') or to overlap ('overlap')
+    const shifts = await checkCabinAvailability(db, {
+      businessId: DEFAULT_BUSINESS_ID, cabinId, start, end, resolution: body.conflict_resolution,
+    })
 
     const { data, error } = await db
       .from('appointments')
@@ -106,11 +110,19 @@ export async function POST(req: NextRequest) {
       throw e
     }
 
+    // Push back the following appointments (cascade), if requested
+    const shiftedIds = shifts.length > 0 ? await applyAppointmentShifts(db, shifts) : []
+
     // Schedule reminders (best-effort — don't fail the whole request)
-    try {
-      await scheduleRemindersForAppointment(data.id, DEFAULT_BUSINESS_ID)
-    } catch (e) {
-      console.error('[appointments] Failed to schedule reminders:', e)
+    for (const apptId of [data.id, ...shiftedIds]) {
+      try {
+        await scheduleRemindersForAppointment(apptId, DEFAULT_BUSINESS_ID)
+      } catch (e) {
+        console.error('[appointments] Failed to schedule reminders:', e)
+      }
+    }
+    for (const apptId of shiftedIds) {
+      pushAppointmentToGoogle(apptId, DEFAULT_BUSINESS_ID).catch((e) => console.error('[appointments] Google push failed (shift):', e))
     }
 
     // Push to connected calendars (best-effort)
@@ -125,7 +137,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data }, { status: 201 })
   } catch (err) {
-    if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: err.status })
+    if (err instanceof BookingError) return NextResponse.json({ error: err.message, conflict: err.details }, { status: err.status })
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

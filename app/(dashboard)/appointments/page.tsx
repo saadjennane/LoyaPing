@@ -24,6 +24,7 @@ import { ServiceSelector, WeekSlotGrid, type SelectedSlot } from '@/components/a
 import { formatDuration, timeToMins, type BusinessHourRow } from '@/lib/scheduling/slots'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import WhatsAppToggle from '@/components/WhatsAppToggle'
+import type { CabinConflictInfo, ConflictResolution } from '@/lib/services/catalog'
 import PhoneInput from '@/components/PhoneInput'
 import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import { useI18n } from '@/lib/i18n/provider'
@@ -436,6 +437,8 @@ export default function AppointmentsPage() {
   const [rescheduleEndHour, setRescheduleEndHour]     = useState('')
   const [rescheduleEndMinute, setRescheduleEndMinute] = useState('00')
   const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false)
+  // Services edited in "Modifier" mode (ids of the catalog)
+  const [editServiceIds,       setEditServiceIds]       = useState<string[]>([])
 
   // Loyalty program (to determine if amount modal is needed on SHOW)
   const [loyaltyProgram, setLoyaltyProgram] = useState<LoyaltyProgram | null>(null)
@@ -610,30 +613,54 @@ export default function AppointmentsPage() {
       const endDate = overMidnight ? format(addDays(parseISO(apptDate), 1), 'yyyy-MM-dd') : apptDate
       ended_at = new Date(`${endDate}T${endH}:${endM}:00`).toISOString()
     }
-    const res = await fetch('/api/appointments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: createItem.id,
-        scheduled_at,
-        // With services, the server derives cabin + end from the catalog
-        ...(hasServices
-          ? { service_ids: selectedServiceIds }
-          : { cabin_id: apptCabinId, ended_at }),
-        notes: apptNotes || null,
-        whatsapp_enabled: apptWhatsapp,
-        gift_card_id: apptGiftCardId,
-      }),
-    })
-    const json = await res.json()
-    if (json.error) { toast.error(json.error) }
-    else {
+    await submitBooking('/api/appointments', 'POST', {
+      client_id: createItem.id,
+      scheduled_at,
+      // With services, the server derives cabin + end from the catalog
+      ...(hasServices
+        ? { service_ids: selectedServiceIds }
+        : { cabin_id: apptCabinId, ended_at }),
+      notes: apptNotes || null,
+      whatsapp_enabled: apptWhatsapp,
+      gift_card_id: apptGiftCardId,
+    }, () => {
       toast.success(t('appointments.toast.created'))
       setCreateOpen(false)
       fetchAppointments()
       if (appView === 'agenda') void fetchListItems()
-    }
+    })
     setCreateSubmitting(false)
+  }
+
+  // ── Cabin conflicts: push following appointments back, or overlap ─────────
+  // The first attempt has no resolution; on a 409 with conflict details the
+  // merchant chooses, and the same request is sent again with her choice.
+  const [conflictDialog, setConflictDialog] = useState<{
+    info: CabinConflictInfo
+    resolve: (resolution: ConflictResolution) => void
+  } | null>(null)
+
+  const submitBooking = async (
+    url: string,
+    method: 'POST' | 'PATCH',
+    payload: Record<string, unknown>,
+    onSuccess: (json: { data?: { shifted?: number } }) => void,
+    resolution?: ConflictResolution,
+  ): Promise<void> => {
+    const json = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, ...(resolution ? { conflict_resolution: resolution } : {}) }),
+    }).then((r) => r.json()).catch(() => ({ error: 'Erreur réseau' }))
+    if (json.conflict && !resolution) {
+      setConflictDialog({
+        info: json.conflict as CabinConflictInfo,
+        resolve: (r) => { void submitBooking(url, method, payload, onSuccess, r) },
+      })
+      return
+    }
+    if (json.error) { toast.error(json.error); return }
+    onSuccess(json)
   }
 
   const fetchAppointments = useCallback(async () => {
@@ -884,6 +911,27 @@ export default function AppointmentsPage() {
     if (json.error) { toast.error(json.error); return }
     setClientGiftCards((prev) => prev.map((c) => (c.id === card.id ? json.data : c)))
     toast.success(appt ? `Carte ${card.code} utilisée pour ce RDV` : `Carte ${card.code} remise à disposition`)
+  }
+
+  // Link any card to the open appointment by its code (e.g. card offered to
+  // someone other than the appointment's client)
+  const [giftCodeInput, setGiftCodeInput] = useState('')
+  const linkGiftCardByCode = async (appt: Appointment) => {
+    const code = giftCodeInput.trim()
+    if (!code) return
+    setGiftCardBusy('code')
+    const json = await fetch(`/api/gift-cards?status=active&code=${encodeURIComponent(code)}`)
+      .then((r) => r.json()).catch(() => ({ data: [] }))
+    setGiftCardBusy(null)
+    const card = (json.data ?? [])[0] as GiftCard | undefined
+    if (!card) { toast.error('Carte introuvable ou déjà consommée'); return }
+    if (card.consumed_appointment_id && card.consumed_appointment_id !== appt.id) {
+      toast.error(`La carte ${card.code} est déjà réservée pour un autre RDV`)
+      return
+    }
+    setClientGiftCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [...prev, card]))
+    setGiftCodeInput('')
+    await linkGiftCard(card, appt)
   }
 
   // ── Create dialog: gift cards of the chosen client ────────────────────────
@@ -1275,22 +1323,20 @@ export default function AppointmentsPage() {
     const ended_at = rescheduleEndHour
       ? new Date(`${rescheduleDate}T${rescheduleEndHour}:${rescheduleEndMinute}:00`).toISOString()
       : null
-    const res = await fetch(`/api/appointments/${selected.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scheduled_at, ended_at }),
-    })
-    const json = await res.json()
-    setRescheduleSubmitting(false)
-    if (json.error) {
-      toast.error(json.error)
-    } else {
-      toast.success('RDV replanifié')
+    await submitBooking(`/api/appointments/${selected.id}`, 'PATCH', {
+      scheduled_at,
+      ended_at,
+      // Only when changed: the server re-snapshots services from the catalog
+      ...(servicesChanged && editServiceIds.length > 0 ? { service_ids: editServiceIds } : {}),
+    }, (json) => {
+      const shifted = json.data?.shifted ?? 0
+      toast.success(shifted > 0 ? `RDV modifié · ${shifted} RDV suivant${shifted > 1 ? 's' : ''} repoussé${shifted > 1 ? 's' : ''}` : 'RDV modifié')
       setDetailOpen(false)
       setDetailApptMode('detail')
       fetchAppointments()
       if (appView === 'agenda') void fetchListItems()
-    }
+    })
+    setRescheduleSubmitting(false)
   }
 
   const [deleteAppt, setDeleteAppt] = useState<Appointment | null>(null)
@@ -1424,8 +1470,23 @@ export default function AppointmentsPage() {
   })()
 
   // ── Reschedule: duration + cabin of the selected appointment ───────────
+  // Services chosen in "Modifier" mode, and whether they differ from the booked ones
+  const originalServiceIds = useMemo(
+    () => [...(selected?.services ?? [])].sort((a, b) => a.position - b.position)
+      .map((sv) => sv.service_id).filter((sid): sid is string => !!sid),
+    [selected],
+  )
+  const editServices = useMemo(() => {
+    const byId = new Map(services.map((sv) => [sv.id, sv]))
+    return editServiceIds.map((sid) => byId.get(sid)).filter((sv): sv is Service => !!sv)
+  }, [services, editServiceIds])
+  const servicesChanged = editServiceIds.join(',') !== originalServiceIds.join(',')
+
   const rescheduleDuration = (() => {
     if (!selected) return 60
+    if (servicesChanged && editServices.length > 0) {
+      return editServices.reduce((sum, sv) => sum + sv.duration_minutes, 0)
+    }
     const fromServices = (selected.services ?? []).reduce((sum, sv) => sum + sv.duration_minutes, 0)
     if (fromServices > 0) return fromServices
     return selected.ended_at
@@ -2500,17 +2561,33 @@ export default function AppointmentsPage() {
         <DialogContent aria-describedby={undefined} className={detailApptMode === 'reschedule' ? 'sm:max-w-xl max-h-[90vh] overflow-y-auto' : undefined}>
           <DialogHeader>
             <DialogTitle>
-              {detailApptMode === 'reschedule' ? 'Replanifier le RDV' : t('appointments.detail.title')}
+              {detailApptMode === 'reschedule' ? 'Modifier le RDV' : t('appointments.detail.title')}
             </DialogTitle>
           </DialogHeader>
           {selected && (
             detailApptMode === 'reschedule' ? (
               <form onSubmit={handleReschedule} className="space-y-4 mt-2">
+                {/* Services */}
+                <div className="rounded-lg border p-3 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-[#3B5BDB]" />Soins
+                  </p>
+                  <ServiceSelector
+                    cabins={cabins}
+                    services={services}
+                    selectedIds={editServiceIds}
+                    onChange={(ids) => { setEditServiceIds(ids); setRescheduleSlot(null) }}
+                    currency={currency}
+                  />
+                  {servicesChanged && editServiceIds.length === 0 && (
+                    <p className="text-xs text-amber-600">Choisissez au moins un soin, ou annulez pour garder les soins actuels.</p>
+                  )}
+                </div>
                 {businessHours && (
                   <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
                     <p className="text-xs text-muted-foreground">
                       Créneaux libres pour {formatDuration(rescheduleDuration)}
-                      {cabinName(selected.cabin_id) ? ` · ${cabinName(selected.cabin_id)}` : ''}
+                      {cabinName(editServices[0]?.cabin_id ?? selected.cabin_id) ? ` · ${cabinName(editServices[0]?.cabin_id ?? selected.cabin_id)}` : ''}
                     </p>
                     <WeekSlotGrid
                       weekStart={rescheduleWeek}
@@ -2518,7 +2595,7 @@ export default function AppointmentsPage() {
                       businessHours={businessHours}
                       exceptions={exceptions}
                       appointments={appointments}
-                      cabinId={selected.cabin_id ?? null}
+                      cabinId={(servicesChanged ? editServices[0]?.cabin_id : null) ?? selected.cabin_id ?? null}
                       duration={rescheduleDuration}
                       excludeAppointmentId={selected.id}
                       selected={rescheduleSlot}
@@ -2551,7 +2628,7 @@ export default function AppointmentsPage() {
                     </div>
                   </div>
                   <span className="text-muted-foreground pb-2 text-sm">→</span>
-                  {(selected.services?.length ?? 0) > 0 ? (
+                  {((selected.services?.length ?? 0) > 0 || (servicesChanged && editServiceIds.length > 0)) ? (
                     <div className="space-y-1">
                       <Label>Fin</Label>
                       <div className="h-9 flex items-center text-sm text-muted-foreground">
@@ -2583,9 +2660,9 @@ export default function AppointmentsPage() {
                   <Button type="button" variant="outline" onClick={() => setDetailApptMode('detail')}>
                     {t('common.cancel')}
                   </Button>
-                  <Button type="submit" disabled={rescheduleSubmitting || !rescheduleDate || !rescheduleHour}>
+                  <Button type="submit" disabled={rescheduleSubmitting || !rescheduleDate || !rescheduleHour || (servicesChanged && editServiceIds.length === 0)}>
                     <CalendarClock className="h-4 w-4 mr-2" />
-                    {rescheduleSubmitting ? 'Replanification...' : 'Replanifier'}
+                    {rescheduleSubmitting ? 'Enregistrement...' : 'Enregistrer'}
                   </Button>
                 </div>
               </form>
@@ -2677,7 +2754,7 @@ export default function AppointmentsPage() {
                 {(() => {
                   const used      = clientGiftCards.filter((c) => c.consumed_appointment_id === selected.id)
                   const available = clientGiftCards.filter((c) => !c.consumed_at && !c.consumed_appointment_id)
-                  if (used.length === 0 && available.length === 0) return null
+                  if (selected.client_id === null) return null
                   return (
                     <div className="space-y-1.5 rounded-lg border border-rose-200 bg-rose-50/50 dark:bg-rose-950/20 dark:border-rose-900 px-3 py-2.5">
                       {used.map((c) => (
@@ -2712,6 +2789,24 @@ export default function AppointmentsPage() {
                           </Button>
                         </div>
                       ))}
+                      {used.length === 0 && (
+                        <form
+                          className="flex items-center gap-2"
+                          onSubmit={(e) => { e.preventDefault(); void linkGiftCardByCode(selected) }}
+                        >
+                          {available.length === 0 && <Gift className="h-4 w-4 text-rose-500 shrink-0" />}
+                          <Input
+                            value={giftCodeInput}
+                            onChange={(e) => setGiftCodeInput(e.target.value)}
+                            placeholder="Lier une carte par son code (CC-…)"
+                            className="h-7 text-xs flex-1"
+                          />
+                          <Button type="submit" size="sm" variant="outline" className="h-7 text-xs"
+                            disabled={!giftCodeInput.trim() || giftCardBusy === 'code'}>
+                            Lier
+                          </Button>
+                        </form>
+                      )}
                     </div>
                   )
                 })()}
@@ -2849,10 +2944,11 @@ export default function AppointmentsPage() {
                           }
                           setRescheduleSlot(null)
                           setRescheduleWeek(startOfWeek(new Date(), { weekStartsOn: 1 }))
+                          setEditServiceIds(originalServiceIds)
                           setDetailApptMode('reschedule')
                         }}
                       >
-                        <CalendarClock className="h-3.5 w-3.5 mr-2" />Replanifier
+                        <CalendarClock className="h-3.5 w-3.5 mr-2" />Modifier
                       </Button>
                       <Button
                         variant="ghost" size="sm"
@@ -2867,6 +2963,69 @@ export default function AppointmentsPage() {
               </div>
             )
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cabin conflict: push following appointments back, or overlap */}
+      <Dialog open={!!conflictDialog} onOpenChange={(o) => { if (!o) setConflictDialog(null) }}>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />Chevauchement dans la cabine
+            </DialogTitle>
+          </DialogHeader>
+          {conflictDialog && (() => {
+            const { info, resolve } = conflictDialog
+            const hhmm = (iso: string) => format(parseISO(iso), 'HH:mm')
+            const day  = (iso: string) => format(parseISO(iso), 'EEE d MMM', { locale: fr })
+            return (
+              <div className="space-y-4 mt-1">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Ce RDV déborde sur :</p>
+                  {info.conflicts.map((c) => (
+                    <div key={c.id} className="text-sm">
+                      <span className="font-medium">{c.client_name}</span>
+                      <span className="text-muted-foreground capitalize"> · {day(c.scheduled_at)} {hhmm(c.scheduled_at)} → {hhmm(c.ended_at)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {info.shifts && info.shifts.length > 0 ? (
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Repousser {info.shifts.length === 1 ? 'le RDV suivant' : `les ${info.shifts.length} RDV suivants`} :
+                    </p>
+                    {info.shifts.map((sh) => (
+                      <div key={sh.id} className="text-sm flex items-center gap-2">
+                        <span className="flex-1 truncate">{sh.client_name}</span>
+                        <span className="tabular-nums text-muted-foreground line-through">{hhmm(sh.from)}</span>
+                        <span className="tabular-nums font-medium">→ {hhmm(sh.to)}</span>
+                      </div>
+                    ))}
+                    <p className="text-[11px] text-muted-foreground pt-1">
+                      Leurs rappels WhatsApp sont reprogrammés à la nouvelle heure. Vérifiez l&apos;heure de fermeture.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Impossible de repousser automatiquement : un RDV qui chevauche commence avant ou est déjà passé.
+                  </p>
+                )}
+
+                <div className="grid gap-2">
+                  {info.shifts && info.shifts.length > 0 && (
+                    <Button onClick={() => { setConflictDialog(null); resolve('shift') }}>
+                      Repousser {info.shifts.length === 1 ? 'le RDV suivant' : `les ${info.shifts.length} RDV suivants`}
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => { setConflictDialog(null); resolve('overlap') }}>
+                    Laisser chevaucher (je gère)
+                  </Button>
+                  <Button variant="ghost" onClick={() => setConflictDialog(null)}>Annuler</Button>
+                </div>
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 

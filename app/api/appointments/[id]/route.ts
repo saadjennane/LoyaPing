@@ -7,7 +7,7 @@ import { pushAppointmentToGoogle, deleteGoogleEvent } from '@/lib/services/googl
 import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services/microsoft-calendar-sync'
 import { reverseSourceCredit } from '@/lib/services/loyalty'
 import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
-import { assertCabinFree, BookingError } from '@/lib/services/catalog'
+import { applyAppointmentShifts, BookingError, checkCabinAvailability, resolveServices, saveAppointmentServices } from '@/lib/services/catalog'
 import { cancelAllScheduledForEntity } from '@/lib/services/outbox'
 import { appointmentEnd } from '@/lib/scheduling/slots'
 import { consumeGiftCardsForAppointment, releaseGiftCardsForAppointments } from '@/lib/services/gift-cards'
@@ -193,16 +193,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const db = createServerClient()
       const { data: current } = await db
         .from('appointments')
-        .select('cabin_id, scheduled_at, ended_at, services:appointment_services(duration_minutes)')
+        .select('cabin_id, status, scheduled_at, ended_at, services:appointment_services(duration_minutes)')
         .eq('id', id)
         .eq('business_id', DEFAULT_BUSINESS_ID)
         .maybeSingle()
       if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+      // New services (optional): they define the cabin and the duration
+      const serviceIds: string[] = Array.isArray(body.service_ids) ? body.service_ids : []
+      const newBooking = serviceIds.length > 0 ? await resolveServices(DEFAULT_BUSINESS_ID, serviceIds) : null
+      const cabinId = newBooking ? newBooking.cabinId : current.cabin_id
+
       // End time: services total > explicit ended_at > previous duration kept
       const start = new Date(scheduled_at)
-      const servicesDuration = ((current.services ?? []) as Array<{ duration_minutes: number }>)
-        .reduce((sum, s) => sum + s.duration_minutes, 0)
+      const servicesDuration = newBooking
+        ? newBooking.duration
+        : ((current.services ?? []) as Array<{ duration_minutes: number }>).reduce((sum, s) => sum + s.duration_minutes, 0)
       let end: Date | null
       if (servicesDuration > 0) {
         end = new Date(start.getTime() + servicesDuration * 60_000)
@@ -217,30 +223,49 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: 'La fin doit être après le début' }, { status: 400 })
       }
 
-      await assertCabinFree(db, {
+      const shifts = await checkCabinAvailability(db, {
         businessId: DEFAULT_BUSINESS_ID,
-        cabinId:    current.cabin_id,
+        cabinId,
         start,
         end:        end ?? appointmentEnd(start.toISOString(), null),
         excludeAppointmentId: id,
+        resolution: body.conflict_resolution,
       })
 
       const updateFields: Record<string, string | null> = {
         scheduled_at: start.toISOString(),
         ended_at:     end ? end.toISOString() : null,
+        cabin_id:     cabinId,
       }
-      // If rescheduling from reschedule_requested, reset to scheduled and clear previous
-      updateFields.status = 'scheduled'
-      updateFields.stored_previous_date = null
-      updateFields.stored_previous_time = null
+      // Upcoming appointment (incl. reschedule_requested): back to scheduled.
+      // A show / no_show appointment keeps its status (e.g. correcting the service).
+      if (['scheduled', 'confirmed', 'reschedule_requested'].includes(current.status as string)) {
+        updateFields.status = 'scheduled'
+        updateFields.stored_previous_date = null
+        updateFields.stored_previous_time = null
+      }
 
       const { error } = await db
         .from('appointments')
         .update(updateFields)
         .eq('id', id)
-        .in('status', ['scheduled', 'confirmed', 'reschedule_requested'])
+        .eq('business_id', DEFAULT_BUSINESS_ID)
 
       if (error) throw error
+
+      if (newBooking) await saveAppointmentServices(db, id, newBooking.items)
+
+      // Push back the following appointments (cascade), if requested
+      const shiftedIds = shifts.length > 0 ? await applyAppointmentShifts(db, shifts) : []
+      for (const shiftedId of shiftedIds) {
+        try {
+          await cancelPendingReminders(shiftedId)
+          await scheduleRemindersForAppointment(shiftedId, DEFAULT_BUSINESS_ID)
+        } catch (e) {
+          console.error('[appointments] Failed to reschedule reminders (shift):', e)
+        }
+        pushAppointmentToGoogle(shiftedId, DEFAULT_BUSINESS_ID).catch((e) => console.error('[appointments] Google push failed (shift):', e))
+      }
 
       // Cancel pending reminders then schedule new ones (best-effort)
       try {
@@ -258,7 +283,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         console.error('[appointments] Microsoft push failed on reschedule:', e)
       })
 
-      return NextResponse.json({ data: { id, scheduled_at } })
+      return NextResponse.json({ data: { id, scheduled_at, shifted: shiftedIds.length } })
     }
 
     // Assign a client to an unassigned appointment (client_id was null)
@@ -277,7 +302,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ error: 'Invalid payload. Use status "show"/"no_show", provide scheduled_at, or provide client_id.' }, { status: 400 })
   } catch (err) {
-    if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: err.status })
+    if (err instanceof BookingError) return NextResponse.json({ error: err.message, conflict: err.details }, { status: err.status })
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
