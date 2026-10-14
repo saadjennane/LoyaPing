@@ -71,6 +71,9 @@ export async function createScheduledMessage(params: {
   buttons?:    Array<{ id: string; title: string }> | null
   template?:   TemplateSpec | null
 }): Promise<ScheduledMessage> {
+  // Safety net: to_whatsapp is NOT NULL (clients may have no phone)
+  if (!params.to) throw new Error('createScheduledMessage: missing recipient phone')
+
   const db = createServerClient()
 
   const { data, error } = await db
@@ -109,6 +112,35 @@ export function sendScheduledMessage(msg: ScheduledMessage) {
   return msg.buttons && msg.buttons.length > 0
     ? sendWhatsAppButtons({ to: msg.to_whatsapp, body: msg.body, buttons: msg.buttons, template: msg.template })
     : sendWhatsAppMessage({ to: msg.to_whatsapp, text: msg.body, template: msg.template })
+}
+
+// ── Cancel everything still queued for an entity / a phone ──────────────────
+
+/** Cancels every SCHEDULED message of an entity (any type, any send time). */
+export async function cancelAllScheduledForEntity(entityType: string, entityId: string): Promise<number> {
+  const db = createServerClient()
+  const { data, error } = await db
+    .from('scheduled_messages')
+    .update({ status: 'CANCELLED', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('entity_type', entityType)
+    .eq('entity_id',   entityId)
+    .eq('status',      'SCHEDULED')
+    .select('id')
+  if (error) throw new Error(`cancelAllScheduledForEntity: ${error.message}`)
+  return data?.length ?? 0
+}
+
+/** Cancels every SCHEDULED message to a phone number. */
+export async function cancelAllScheduledToPhone(phone: string): Promise<number> {
+  const db = createServerClient()
+  const { data, error } = await db
+    .from('scheduled_messages')
+    .update({ status: 'CANCELLED', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('to_whatsapp', phone)
+    .eq('status',      'SCHEDULED')
+    .select('id')
+  if (error) throw new Error(`cancelAllScheduledToPhone: ${error.message}`)
+  return data?.length ?? 0
 }
 
 // ── Cancel single message ─────────────────────────────────────────────────────
@@ -229,6 +261,23 @@ export async function claimMessageNow(
  * The claim_token check ensures only the worker that claimed it
  * can mark it sent (prevents races if a stale cron run retries).
  */
+/** A claimed message that was not sent on purpose (client disabled WhatsApp). */
+export async function markSkipped(id: string, claimToken: string, reason: string): Promise<void> {
+  const db = createServerClient()
+  const { error } = await db
+    .from('scheduled_messages')
+    .update({
+      status:       'CANCELLED',
+      cancelled_at: new Date().toISOString(),
+      last_error:   reason,
+      updated_at:   new Date().toISOString(),
+    })
+    .eq('id',          id)
+    .eq('claim_token', claimToken)
+    .eq('status',      'PROCESSING')
+  if (error) throw new Error(`markSkipped: ${error.message}`)
+}
+
 export async function markSent(id: string, claimToken: string): Promise<void> {
   const db = createServerClient()
 

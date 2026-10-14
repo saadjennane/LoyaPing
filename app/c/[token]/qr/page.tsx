@@ -18,14 +18,12 @@ export default async function QRPage({ params }: Props) {
 
   if (!client) notFound()
 
-  // QR content: phone number (allows vendor to identify client by phone)
-  const qrValue = client.phone_number
-
-  // Mask phone for display
-  const masked =
-    client.phone_number.length > 4
-      ? client.phone_number.slice(0, -4).replace(/\d/g, '•') + client.phone_number.slice(-4)
-      : client.phone_number
+  // QR content: phone number (allows vendor to identify client by phone).
+  // A client without phone has no QR.
+  const phone = client.phone_number
+  const masked = phone && phone.length > 4
+    ? phone.slice(0, -4).replace(/\d/g, '•') + phone.slice(-4)
+    : phone ?? ''
 
   return (
     <div className="max-w-sm mx-auto px-4 py-8 flex flex-col items-center gap-6 min-h-screen">
@@ -43,9 +41,15 @@ export default async function QRPage({ params }: Props) {
       </div>
 
       {/* QR */}
-      <div className="bg-white rounded-3xl p-6 shadow-md border border-gray-100">
-        <QRCodeDisplay value={qrValue} size={240} />
-      </div>
+      {phone ? (
+        <div className="bg-white rounded-3xl p-6 shadow-md border border-gray-100">
+          <QRCodeDisplay value={phone} size={240} />
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500 text-center">
+          Aucun numéro de téléphone n&apos;est associé à votre compte. Donnez votre nom au comptoir pour vous identifier.
+        </p>
+      )}
 
       {/* Phone display */}
       <div className="text-center">

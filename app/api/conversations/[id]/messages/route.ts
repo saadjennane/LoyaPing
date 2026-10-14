@@ -44,7 +44,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     // Send WhatsApp message
-    await sendWhatsAppMessage({ to: conv.phone as string, text: messageBody.trim() })
+    // Manual reply typed by the merchant: allowed even if automated WhatsApp is disabled
+    await sendWhatsAppMessage({ to: conv.phone as string, text: messageBody.trim(), allowOptedOut: true })
 
     // Log outbound message
     const { data: msg, error: msgErr } = await db

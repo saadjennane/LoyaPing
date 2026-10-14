@@ -14,7 +14,7 @@ import { useI18n } from '@/lib/i18n/provider'
 function clientFullName(c: Client | null | undefined): string {
   if (!c) return '—'
   const name = [c.civility, c.first_name, c.last_name].filter(Boolean).join(' ')
-  return name || c.phone_number
+  return name || c.phone_number || 'Client sans nom'
 }
 
 export default function TrashPage() {

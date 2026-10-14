@@ -16,7 +16,7 @@ export type Client = {
   civility: string | null
   first_name: string | null
   last_name: string | null
-  phone_number: string
+  phone_number: string | null
   email: string | null
   birthday: string | null       // DATE as ISO string (YYYY-MM-DD)
   notes: string | null
@@ -26,6 +26,7 @@ export type Client = {
   total_cycles_completed: number
   created_at: string
   last_activity: string | null  // TIMESTAMPTZ, computed by v_clients view
+  whatsapp_enabled?: boolean  // false = no automated WhatsApp to this client
 }
 
 export type LoyaltyProgram = {
@@ -166,6 +167,7 @@ export type Appointment = {
   stored_previous_date:    string | null  // DATE as ISO string (YYYY-MM-DD)
   stored_previous_time:    string | null  // TIME as string (HH:MM:SS)
   cabin_id: string | null  // null = legacy appointment (blocks every cabin)
+  whatsapp_enabled?: boolean  // false = no reminder / post-visit message
   // joined
   client?: Client
   reminderStatus?: ReminderStatus
@@ -203,7 +205,7 @@ type GiftCardPerson = {
   civility: string | null
   first_name: string | null
   last_name: string | null
-  phone_number: string
+  phone_number: string | null
 }
 
 export type GiftCard = {
@@ -290,7 +292,7 @@ export type Conversation = {
     first_name:   string | null
     last_name:    string | null
     civility:     string | null
-    phone_number: string
+    phone_number: string | null
   } | null
   last_message?: string | null
 }
@@ -362,6 +364,7 @@ export type AppointmentListItem = {
   notes:          string | null
   cabin_id:       string | null
   services:       Array<{ name: string }>
+  whatsapp_enabled: boolean
   reminderStatus: ReminderStatus
   // V1.5 reschedule
   reschedule_requested_at: string | null
@@ -571,7 +574,7 @@ export type PortalBusinessData = {
 
 export type PortalGlobalData = {
   token:        string
-  phone_number: string
+  phone_number: string | null
   businesses:   PortalBusinessData[]
 }
 

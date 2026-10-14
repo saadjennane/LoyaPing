@@ -208,7 +208,7 @@ export async function scheduleAppointmentReminders(
   // ── 1. Fetch appointment + client phone + name ──────────────────────────
   const { data: appt, error: apptErr } = await db
     .from('appointments')
-    .select('id, scheduled_at, status, deleted_at, client:clients(phone_number, first_name, last_name, civility)')
+    .select('id, scheduled_at, status, deleted_at, whatsapp_enabled, client:clients(phone_number, first_name, last_name, civility, whatsapp_enabled)')
     .eq('id', appointmentId)
     .single()
 
@@ -218,10 +218,8 @@ export async function scheduleAppointmentReminders(
   if (appt.status !== 'scheduled' || appt.deleted_at) return []
 
   // Supabase may return the joined row as an object or a single-element array.
-  const clientRaw = appt.client as
-    | { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null }
-    | Array<{ phone_number: string; first_name: string | null; last_name: string | null; civility: string | null }>
-    | null
+  type ClientRow = { phone_number: string | null; first_name: string | null; last_name: string | null; civility: string | null; whatsapp_enabled: boolean | null }
+  const clientRaw = appt.client as ClientRow | ClientRow[] | null
   const clientObj = Array.isArray(clientRaw) ? clientRaw[0] : clientRaw
   const phone     = clientObj?.phone_number
   const firstName = clientObj?.first_name ?? ''
@@ -229,6 +227,12 @@ export async function scheduleAppointmentReminders(
   const civility  = clientObj?.civility   ?? ''
 
   if (!phone) return []
+
+  // WhatsApp disabled for this appointment or this client: drop queued reminders
+  if (appt.whatsapp_enabled === false || clientObj?.whatsapp_enabled === false) {
+    await cancelAppointmentReminders(appointmentId)
+    return []
+  }
 
   // ── 3. Read reminder config + business timezone ──────────────────────────
   const { data: profileRow } = await db

@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, Edit2, Coins, Gift, Trash2, ExternalLink, Minus,
   Phone, Mail, Star, CalendarDays, ArrowLeft, MoreHorizontal,
-  Cake, FileText, Activity, Check, X,
+  Cake, FileText, Activity, Check, X, BellOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -29,10 +29,11 @@ import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import PhoneInput from '@/components/PhoneInput'
+import WhatsAppToggle from '@/components/WhatsAppToggle'
 import { useI18n } from '@/lib/i18n/provider'
 import { useModules } from '@/lib/context/modules'
 import { useClientFieldConfig } from '@/lib/context/client-field-config'
-import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
+import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -45,7 +46,7 @@ const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 function clientFullName(c: Client): string {
   const parts = [c.civility, c.first_name, c.last_name].filter(Boolean)
   if (parts.length > 1 || (parts.length === 1 && parts[0] !== c.civility)) return parts.join(' ')
-  return c.phone_number
+  return c.phone_number || 'Client sans nom'
 }
 
 function getProgress(client: Client, tiers: LoyaltyTier[]) {
@@ -124,6 +125,11 @@ const SOURCE_LABEL_KEYS: Record<string, string> = {
 function apptServicesLabel(appt: Appointment | undefined): string | null {
   const services = [...(appt?.services ?? [])].sort((a, b) => a.position - b.position)
   return services.length > 0 ? services.map((sv) => sv.name).join(' + ') : null
+}
+
+// '' and null both mean "no phone"
+function samePhone(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a || null) === (b || null)
 }
 
 type InfoForm = { civility: string; first_name: string; last_name: string; phone_number: string; email: string; birthday: string; notes: string }
@@ -259,7 +265,7 @@ export default function ClientsPage() {
         civility:     detailClient.civility     ?? '',
         first_name:   detailClient.first_name   ?? '',
         last_name:    detailClient.last_name    ?? '',
-        phone_number: detailClient.phone_number,
+        phone_number: detailClient.phone_number ?? '',
         email:        detailClient.email        ?? '',
         birthday:     detailClient.birthday     ?? '',
         notes:        detailClient.notes        ?? '',
@@ -311,16 +317,32 @@ export default function ClientsPage() {
   }, [detailClient, inlineNotes, saveInlineField])
 
   // ── Inline: Edit info ─────────────────────────────────────────────────
+  // WhatsApp on/off for one client (all automated messages)
+  const [whatsappSaving, setWhatsappSaving] = useState(false)
+  const toggleClientWhatsapp = async (client: Client, enabled: boolean) => {
+    setWhatsappSaving(true)
+    const json = await fetch(`/api/clients/${client.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp_enabled: enabled }),
+    }).then((r) => r.json()).catch(() => ({ error: 'Erreur réseau' }))
+    setWhatsappSaving(false)
+    if (json.error) { toast.error(json.error); return }
+    setDetailClient((c) => (c && c.id === client.id ? { ...c, whatsapp_enabled: enabled } : c))
+    setClients((prev) => prev.map((c) => (c.id === client.id ? { ...c, whatsapp_enabled: enabled } : c)))
+    toast.success(enabled ? 'Messages WhatsApp réactivés pour ce client' : 'Plus aucun message WhatsApp automatique pour ce client')
+  }
+
   const handleDvInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!detailClient) return
     if (dvInfoForm.email && !isValidEmail(dvInfoForm.email)) { toast.error('Adresse email invalide'); return }
     setDvSubmitting(true)
-    if (dvInfoForm.phone_number !== detailClient.phone_number) {
+    if (!samePhone(dvInfoForm.phone_number, detailClient.phone_number)) {
       const r = await fetch(`/api/clients/${detailClient.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: dvInfoForm.phone_number }),
+        body: JSON.stringify({ phone_number: dvInfoForm.phone_number || null }),
       })
       const j = await r.json()
       if (j.error) { toast.error(j.error); setDvSubmitting(false); return }
@@ -342,8 +364,7 @@ export default function ClientsPage() {
     if (json.error) { toast.error(json.error) }
     else {
       const updated: Client = json.data
-      const digits = updated.phone_number.replace(/\D/g, '')
-      addToIndex({ id: updated.id, display_name: [updated.first_name, updated.last_name].filter(Boolean).join(' ') || updated.phone_number, phone: updated.phone_number, phone_digits: digits, phone_last4: digits.slice(-4), last_activity_at: null })
+      addToIndex(clientToIndexItem(updated, null))
       toast.success(t('clients.toast.updated'))
       setDetailView('main')
       fetchAll()
@@ -430,7 +451,7 @@ export default function ClientsPage() {
         civility:     createForm.civility   || null,
         first_name:   createForm.first_name || null,
         last_name:    createForm.last_name  || null,
-        phone_number: createForm.phone_number,
+        phone_number: createForm.phone_number || null,
         email:        createForm.email      || null,
         birthday:     createForm.birthday   || null,
         notes:        createForm.notes      || null,
@@ -440,8 +461,7 @@ export default function ClientsPage() {
     if (json.error) { toast.error(json.error) }
     else {
       const created: Client = json.data
-      const digits = created.phone_number.replace(/\D/g, '')
-      addToIndex({ id: created.id, display_name: [created.first_name, created.last_name].filter(Boolean).join(' ') || created.phone_number, phone: created.phone_number, phone_digits: digits, phone_last4: digits.slice(-4), last_activity_at: null })
+      addToIndex(clientToIndexItem(created, null))
       toast.success(t('clients.toast.added')); setCreateOpen(false); setCreateForm(EMPTY_INFO); fetchAll()
     }
     setCreateSubmitting(false)
@@ -455,7 +475,7 @@ export default function ClientsPage() {
       civility:     client.civility     ?? '',
       first_name:   client.first_name   ?? '',
       last_name:    client.last_name    ?? '',
-      phone_number: client.phone_number,
+      phone_number: client.phone_number ?? '',
       email:        client.email        ?? '',
       birthday:     client.birthday     ?? '',
       notes:        client.notes        ?? '',
@@ -467,11 +487,11 @@ export default function ClientsPage() {
     if (!editInfo) return
     if (infoForm.email && !isValidEmail(infoForm.email)) { toast.error('Adresse email invalide'); return }
     setInfoSubmitting(true)
-    if (infoForm.phone_number !== editInfo.phone_number) {
+    if (!samePhone(infoForm.phone_number, editInfo.phone_number)) {
       const r = await fetch(`/api/clients/${editInfo.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: infoForm.phone_number }),
+        body: JSON.stringify({ phone_number: infoForm.phone_number || null }),
       })
       const j = await r.json()
       if (j.error) { toast.error(j.error); setInfoSubmitting(false); return }
@@ -493,8 +513,7 @@ export default function ClientsPage() {
     if (json.error) { toast.error(json.error) }
     else {
       const updated: Client = json.data
-      const digits = updated.phone_number.replace(/\D/g, '')
-      addToIndex({ id: updated.id, display_name: [updated.first_name, updated.last_name].filter(Boolean).join(' ') || updated.phone_number, phone: updated.phone_number, phone_digits: digits, phone_last4: digits.slice(-4), last_activity_at: null })
+      addToIndex(clientToIndexItem(updated, null))
       toast.success(t('clients.toast.updated')); setEditInfo(null); fetchAll()
     }
     setInfoSubmitting(false)
@@ -708,7 +727,12 @@ export default function ClientsPage() {
                       {!mobileSelectMode && <ClientAvatar client={client} />}
 
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm truncate">{clientFullName(client)}</div>
+                        <div className="font-medium text-sm truncate flex items-center gap-1.5">
+                          <span className="truncate">{clientFullName(client)}</span>
+                          {client.whatsapp_enabled === false && (
+                            <BellOff className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="WhatsApp désactivé" />
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">{client.phone_number}</div>
                         {loyaltyOn && tiers.length > 0 && (
                           <div className="mt-1.5 space-y-0.5">
@@ -826,7 +850,12 @@ export default function ClientsPage() {
                           <div className="flex items-center gap-3">
                             <ClientAvatar client={client} />
                             <div className="min-w-0">
-                              <div className="font-medium">{clientFullName(client)}</div>
+                              <div className="font-medium flex items-center gap-1.5">
+                                {clientFullName(client)}
+                                {client.whatsapp_enabled === false && (
+                                  <BellOff className="h-3.5 w-3.5 text-muted-foreground" aria-label="WhatsApp désactivé" />
+                                )}
+                              </div>
                               {(client.first_name || client.last_name) && (
                                 <div className="text-xs text-muted-foreground">{client.phone_number}</div>
                               )}
@@ -955,7 +984,7 @@ export default function ClientsPage() {
           <DialogHeader><DialogTitle>{t('clients.actions.editInfoTitle')}</DialogTitle></DialogHeader>
           <form onSubmit={handleInfoSubmit} className="space-y-3 mt-2">
             <ClientFormFields form={infoForm} onChange={setInfoForm} />
-            {infoForm.phone_number !== editInfo?.phone_number && (
+            {editInfo && !samePhone(infoForm.phone_number, editInfo.phone_number) && (
               <p className="text-xs text-amber-600">
                 {t('clients.magicLinkWarning')}
               </p>
@@ -1191,9 +1220,11 @@ export default function ClientsPage() {
                 <div className="space-y-4 mt-1">
                   {/* Compact header info */}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5" />{detailClient.phone_number}
-                    </span>
+                    {detailClient.phone_number && (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5" />{detailClient.phone_number}
+                      </span>
+                    )}
                     {config.detail_birthday && detailClient.birthday && (
                       <span className="flex items-center gap-1.5">
                         <Cake className="h-3.5 w-3.5" />
@@ -1208,6 +1239,16 @@ export default function ClientsPage() {
                       </span>
                     )}
                   </div>
+
+                  {/* WhatsApp on/off for every automated message to this client */}
+                  <WhatsAppToggle
+                    label="Messages WhatsApp"
+                    description="Rappels, commandes, fidélité, anniversaire, avis"
+                    checked={detailClient.whatsapp_enabled !== false}
+                    disabled={whatsappSaving}
+                    lockedReason={detailClient.phone_number ? null : 'Aucun numéro de téléphone'}
+                    onChange={(v) => toggleClientWhatsapp(detailClient, v)}
+                  />
 
                   {/* Tabs */}
                   <Tabs defaultValue="infos">
@@ -1475,7 +1516,7 @@ export default function ClientsPage() {
               {detailView === 'edit_info' && (
                 <form onSubmit={handleDvInfoSubmit} className="space-y-3 mt-2">
                   <ClientFormFields form={dvInfoForm} onChange={setDvInfoForm} />
-                  {dvInfoForm.phone_number !== detailClient?.phone_number && (
+                  {detailClient && !samePhone(dvInfoForm.phone_number, detailClient.phone_number) && (
                     <p className="text-xs text-amber-600">
                       {t('clients.magicLinkWarning')}
                     </p>
@@ -1630,9 +1671,8 @@ function ClientFormFields({
         </div>
       </div>
       <div className="space-y-1">
-        <Label>{t('clients.form.phone')} <span className="text-destructive">*</span></Label>
+        <Label>{t('clients.form.phone')}</Label>
         <PhoneInput
-          required
           value={form.phone_number}
           onChange={(v) => onChange({ ...form, phone_number: v })}
         />

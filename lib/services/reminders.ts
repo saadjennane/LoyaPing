@@ -48,6 +48,7 @@ export async function processDueReminders(): Promise<{ sent: number; errors: num
         .maybeSingle()
 
       if (existingSend) continue // already sent
+      if (!appt.client?.phone_number) continue // client without phone: nothing to send
 
       try {
         await sendWhatsAppMessage({

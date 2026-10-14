@@ -28,13 +28,14 @@ export async function GET(req: NextRequest) {
     }
 
     const items: CustomerIndexItem[] = rows.map((row) => {
+      const phone = (row.phone_number as string | null) ?? ''
       const display_name =
-        [row.first_name, row.last_name].filter(Boolean).join(' ') || row.phone_number
-      const phone_digits = row.phone_number.replace(/\D/g, '')
+        [row.first_name, row.last_name].filter(Boolean).join(' ') || phone || 'Client sans nom'
+      const phone_digits = phone.replace(/\D/g, '')
       return {
         id:               row.id,
         display_name,
-        phone:            row.phone_number,
+        phone,
         phone_digits,
         phone_last4:      phone_digits.slice(-4),
         last_activity_at: row.created_at,

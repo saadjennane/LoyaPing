@@ -19,7 +19,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import PhoneInput from '@/components/PhoneInput'
-import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
+import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 
@@ -30,7 +30,7 @@ type Step = 'search' | 'new_client' | 'order'
 function clientFullName(c: Client | undefined): string {
   if (!c) return ''
   const name = [c.civility, c.first_name, c.last_name].filter(Boolean).join(' ')
-  return name || c.phone_number
+  return name || c.phone_number || 'Client sans nom'
 }
 
 function TimelineItem({ done, label, date }: { done: boolean; label: string; date: string | null }) {
@@ -244,15 +244,7 @@ export default function OrdersPage() {
     if (json.error) { toast.error(json.error); setSubmitting(false); return }
     const created: Client = json.data
     // Update the customer index with the new client
-    const phoneDigits = created.phone_number.replace(/\D/g, '')
-    const indexItem: CustomerIndexItem = {
-      id:               created.id,
-      display_name:     [created.first_name, created.last_name].filter(Boolean).join(' ') || created.phone_number,
-      phone:            created.phone_number,
-      phone_digits:     phoneDigits,
-      phone_last4:      phoneDigits.slice(-4),
-      last_activity_at: created.created_at,
-    }
+    const indexItem = clientToIndexItem(created)
     addOrUpdate(indexItem)
     setSelectedItem(indexItem)
     setStep('order')

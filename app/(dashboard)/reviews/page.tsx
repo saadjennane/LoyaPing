@@ -18,14 +18,14 @@ function clientName(event: ReviewEvent): string {
   const c = event.client
   if (!c) return 'Client inconnu'
   const parts = [c.civility, c.first_name, c.last_name].filter(Boolean)
-  return parts.length > 0 ? parts.join(' ') : c.phone_number
+  return parts.length > 0 ? parts.join(' ') : (c.phone_number || 'Client sans nom')
 }
 
 function convClientName(conv: Conversation): string {
   const c = conv.client
   if (!c) return conv.phone
   const parts = [c.civility, c.first_name, c.last_name].filter(Boolean)
-  return parts.length > 0 ? parts.join(' ') : c.phone_number
+  return parts.length > 0 ? parts.join(' ') : (c.phone_number || 'Client sans nom')
 }
 
 function isWindowOpen(lastInbound: string): boolean {

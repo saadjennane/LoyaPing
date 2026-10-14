@@ -89,7 +89,8 @@ export async function createAndNotifyUrgentEvent(
 
   // 5. Send WhatsApp to all configured numbers
   await Promise.allSettled(
-    numbers.map((to) => sendWhatsAppMessage({ to, text: message, template })),
+    // Alerts go to the merchant's own numbers, never subject to client opt-out
+    numbers.map((to) => sendWhatsAppMessage({ to, text: message, template, allowOptedOut: true })),
   )
 
   // 6. Mark all pending events as sent

@@ -11,6 +11,8 @@ export type WhatsAppMessage = {
   text: string
   // Fallback used by the Cloud API outside the 24 h customer service window
   template?: TemplateSpec | null
+  // Send even if the recipient disabled WhatsApp (manual replies, merchant alerts)
+  allowOptedOut?: boolean
 }
 
 export type WhatsAppButtonMessage = {
@@ -18,12 +20,39 @@ export type WhatsAppButtonMessage = {
   body: string  // message text shown above the buttons
   buttons: Array<{ id: string; title: string }>  // max 3 buttons
   template?: TemplateSpec | null
+  allowOptedOut?: boolean
+}
+
+export type WhatsAppSendResult = {
+  success: boolean
+  messageId?: string
+  skipped?: 'opted_out'   // not sent: WhatsApp disabled for this client
 }
 
 /** "212 612-345 678" / "212612345678" → "+212612345678" */
 export function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   return digits ? `+${digits}` : phone
+}
+
+// =========================================
+// PER-CLIENT OPT-OUT
+// =========================================
+
+/** True when a client with this phone has WhatsApp disabled. */
+export async function isWhatsAppDisabledFor(phone: string): Promise<boolean> {
+  const db = createServerClient()
+  const { data, error } = await db
+    .from('clients')
+    .select('id')
+    .eq('phone_number', normalizePhone(phone))
+    .eq('whatsapp_enabled', false)
+    .limit(1)
+  if (error) {
+    console.error('[WhatsApp] opt-out check error:', error.message)
+    return false
+  }
+  return (data?.length ?? 0) > 0
 }
 
 // =========================================
@@ -57,7 +86,12 @@ export async function isServiceWindowOpen(phone: string): Promise<boolean> {
 // =========================================
 // SEND TEXT MESSAGE (provider abstraction)
 // =========================================
-export async function sendWhatsAppMessage(msg: WhatsAppMessage): Promise<{ success: boolean; messageId?: string }> {
+export async function sendWhatsAppMessage(msg: WhatsAppMessage): Promise<WhatsAppSendResult> {
+  if (!msg.allowOptedOut && await isWhatsAppDisabledFor(msg.to)) {
+    console.log(`[WhatsApp] skipped ${msg.to}: WhatsApp disabled for this client`)
+    return { success: true, skipped: 'opted_out' }
+  }
+
   const provider = process.env.WHATSAPP_PROVIDER ?? 'cloud_api'
 
   switch (provider) {
@@ -80,7 +114,12 @@ export async function sendWhatsAppMessage(msg: WhatsAppMessage): Promise<{ succe
 // =========================================
 // SEND INTERACTIVE BUTTON MESSAGE
 // =========================================
-export async function sendWhatsAppButtons(msg: WhatsAppButtonMessage): Promise<{ success: boolean; messageId?: string }> {
+export async function sendWhatsAppButtons(msg: WhatsAppButtonMessage): Promise<WhatsAppSendResult> {
+  if (!msg.allowOptedOut && await isWhatsAppDisabledFor(msg.to)) {
+    console.log(`[WhatsApp] skipped ${msg.to}: WhatsApp disabled for this client`)
+    return { success: true, skipped: 'opted_out' }
+  }
+
   const provider = process.env.WHATSAPP_PROVIDER ?? 'cloud_api'
 
   switch (provider) {
@@ -96,7 +135,7 @@ export async function sendWhatsAppButtons(msg: WhatsAppButtonMessage): Promise<{
       return { success: true, messageId: `mock_${Date.now()}` }
     default:
       // Fallback to plain text for providers without button support
-      return sendWhatsAppMessage({ to: msg.to, text: msg.body, template: msg.template })
+      return sendWhatsAppMessage({ to: msg.to, text: msg.body, template: msg.template, allowOptedOut: true })
   }
 }
 

@@ -134,7 +134,7 @@ export async function processBirthdayRewards(): Promise<{
   // makes this a single index scan regardless of total client count.
   const { data: todayBirthdays, error: clientsErr } = await db
     .from('clients')
-    .select('id, phone_number, first_name, last_name, civility')
+    .select('id, phone_number, first_name, last_name, civility, whatsapp_enabled')
     .eq('business_id',   DEFAULT_BUSINESS_ID)
     .eq('birthday_mmdd', localMMDD)          // 'MM-DD', e.g. '02-23'
 
@@ -255,7 +255,8 @@ export async function processBirthdayRewards(): Promise<{
       }
 
       // ── 5c. Queue WhatsApp message via outbox ──────────────────────────
-      if (birthday_message_enabled && birthday_message_template) {
+      // A client without phone still gets the coupon, but no message
+      if (birthday_message_enabled && birthday_message_template && client.phone_number && client.whatsapp_enabled !== false) {
         const rewardTitle = (birthday_reward_title as string | null) ?? 'un cadeau'
         const messageBody = (birthday_message_template as string)
           .replace(/#{cadeau}/g,       rewardTitle)
@@ -289,7 +290,7 @@ export async function processBirthdayRewards(): Promise<{
           .update({ scheduled_message_id: msg.id })
           .eq('id', sendRecordId)
       } else {
-        // Message disabled — mark as SKIPPED (coupon was still created)
+        // Message disabled, no phone or WhatsApp disabled — mark as SKIPPED (coupon was still created)
         await db
           .from('birthday_sends')
           .update({ status: 'SKIPPED', scheduled_message_id: null })

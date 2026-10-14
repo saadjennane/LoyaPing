@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { updateClientPhone } from '@/lib/services/clients'
 import { undoLastCredit } from '@/lib/services/loyalty'
+import { cancelAllScheduledToPhone } from '@/lib/services/outbox'
+import { scheduleRemindersForAppointment } from '@/lib/services/appointment-reminders'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -107,9 +109,42 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ data })
     }
 
-    // ── Phone number change (regenerates magic token) ──────────────────────
-    if (body.phone_number) {
-      const client = await updateClientPhone(id, body.phone_number)
+    // ── WhatsApp toggle for this client (all automated messages) ───────────
+    if (typeof body.whatsapp_enabled === 'boolean') {
+      const db = createServerClient()
+      const { data: client, error } = await db
+        .from('clients')
+        .update({ whatsapp_enabled: body.whatsapp_enabled })
+        .eq('id', id)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+        .select()
+        .single()
+      if (error) throw error
+
+      if (!body.whatsapp_enabled) {
+        // Drop everything still queued for this client
+        if (client.phone_number) await cancelAllScheduledToPhone(client.phone_number)
+      } else {
+        // Reschedule reminders of upcoming appointments that allow WhatsApp
+        const { data: appts } = await db
+          .from('appointments')
+          .select('id')
+          .eq('client_id', id)
+          .eq('status', 'scheduled')
+          .eq('whatsapp_enabled', true)
+          .is('deleted_at', null)
+          .gte('scheduled_at', new Date().toISOString())
+        for (const a of appts ?? []) {
+          await scheduleRemindersForAppointment(a.id, DEFAULT_BUSINESS_ID)
+            .catch((e) => console.error('[clients] reschedule reminders error:', e))
+        }
+      }
+      return NextResponse.json({ data: client })
+    }
+
+    // ── Phone number change or removal (regenerates magic token) ───────────
+    if ('phone_number' in body) {
+      const client = await updateClientPhone(id, body.phone_number || null)
       return NextResponse.json({ data: client })
     }
 

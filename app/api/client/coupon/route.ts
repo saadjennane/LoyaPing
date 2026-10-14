@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { isSamePerson } from '@/lib/services/clients'
 
 // GET /api/client/coupon?token=...&coupon_id=...
 // Returns coupon info for the redeem page — validates ownership via magic_token
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     .eq('id', coupon.client_id)
     .maybeSingle()
 
-  if (!couponClient || couponClient.phone_number !== baseClient.phone_number) {
+  if (!couponClient || !isSamePerson(couponClient, baseClient)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   }
 

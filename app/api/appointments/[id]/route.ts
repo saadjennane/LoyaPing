@@ -8,6 +8,7 @@ import { pushAppointmentToMicrosoft, deleteMicrosoftEvent } from '@/lib/services
 import { reverseSourceCredit } from '@/lib/services/loyalty'
 import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
 import { assertCabinFree, BookingError } from '@/lib/services/catalog'
+import { cancelAllScheduledForEntity } from '@/lib/services/outbox'
 import { appointmentEnd } from '@/lib/scheduling/slots'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
@@ -39,6 +40,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { id } = await params
     const body = await req.json()
     const { status, amount, scheduled_at, client_id } = body
+
+    // ── WhatsApp toggle for this appointment ────────────────────────────────
+    // Off: cancel every queued message (reminders, post-visit).
+    // On: reschedule the reminders that are still in the future.
+    if (typeof body.whatsapp_enabled === 'boolean') {
+      const db = createServerClient()
+      const { error } = await db
+        .from('appointments')
+        .update({ whatsapp_enabled: body.whatsapp_enabled })
+        .eq('id', id)
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+      if (error) throw error
+      if (body.whatsapp_enabled) {
+        await scheduleRemindersForAppointment(id, DEFAULT_BUSINESS_ID)
+      } else {
+        await cancelAllScheduledForEntity('appointment', id)
+      }
+      return NextResponse.json({ data: { id, whatsapp_enabled: body.whatsapp_enabled } })
+    }
 
     // ── Force override (silent correction) ──────────────────────────────────
     // Corrects a wrong status (show↔no_show↔scheduled) without triggering

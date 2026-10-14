@@ -29,7 +29,7 @@ function clientFullName(c: Client | null | undefined): string {
   if (!c) return '—'
   const parts = [c.civility, c.first_name, c.last_name].filter(Boolean)
   if (parts.length > 1 || (parts.length === 1 && parts[0] !== c.civility)) return parts.join(' ')
-  return c.phone_number
+  return c.phone_number || 'Client sans nom'
 }
 
 const EXPIRING_SOON_DAYS = 7
@@ -178,7 +178,7 @@ export default function CouponsPage() {
     : allClients.filter((c) => {
         const q = searchQuery.toLowerCase()
         const name = `${c.first_name ?? ''} ${c.last_name ?? ''}`.toLowerCase()
-        return c.phone_number.includes(q) || name.includes(q)
+        return (c.phone_number ?? '').includes(q) || name.includes(q)
       }).slice(0, 6)
 
   // ── Handlers ───────────────────────────────────────────────────────────────

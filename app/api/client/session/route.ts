@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (!client) return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
 
   // Mask phone: keep last 4 digits
-  const masked = client.phone_number.replace(/.(?=.{4})/g, '*')
+  const masked = client.phone_number ? client.phone_number.replace(/.(?=.{4})/g, '*') : null
 
   return NextResponse.json({ data: { phone_masked: masked } })
 }

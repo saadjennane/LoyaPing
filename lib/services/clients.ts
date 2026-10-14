@@ -24,6 +24,19 @@ export const APPT_RESCHEDULE_PREFIX = 'appt_reschedule_'
 const MAGIC_LINK_KEYWORDS = /(^|[^\p{L}])(lien|link|espace|compte|points?|fid[eé]lit[eé]|r[eé]compenses?|carte|solde)(?=$|[^\p{L}])/iu
 
 // =========================================
+// SAME PERSON (portal ownership checks)
+// The same person has one client row per business, linked by phone number.
+// A client without phone only matches itself — never compare null phones.
+// =========================================
+export function isSamePerson(
+  a: { id: string; phone_number: string | null },
+  b: { id: string; phone_number: string | null },
+): boolean {
+  if (a.id === b.id) return true
+  return !!a.phone_number && a.phone_number === b.phone_number
+}
+
+// =========================================
 // GET CLIENT PAGE DATA (magic link)
 // =========================================
 export async function getClientPageData(token: string): Promise<ClientPageData | null> {
@@ -61,7 +74,7 @@ export async function getClientPageData(token: string): Promise<ClientPageData |
 // =========================================
 // CHANGE PHONE NUMBER → regenerate token
 // =========================================
-export async function updateClientPhone(clientId: string, newPhone: string): Promise<Client> {
+export async function updateClientPhone(clientId: string, newPhone: string | null): Promise<Client> {
   const db = createServerClient()
 
   // Generate new token using crypto
@@ -374,10 +387,11 @@ export async function getPortalGlobalData(token: string): Promise<PortalGlobalDa
   if (!baseClient) return null
 
   // 2) Find ALL client records sharing this phone number
+  //    (a client without phone only has its own record)
   const { data: allClients } = await db
     .from('clients')
     .select('id, business_id, current_cycle_points')
-    .eq('phone_number', baseClient.phone_number)
+    .eq(baseClient.phone_number ? 'phone_number' : 'id', baseClient.phone_number ?? baseClient.id)
 
   if (!allClients || allClients.length === 0) return null
 
@@ -461,11 +475,12 @@ export async function getPortalBusinessData(
     .maybeSingle()
   if (!baseClient) return null
 
-  // Find the client record for this specific business (same phone)
+  // Find the client record for this specific business (same phone, or the
+  // client itself when it has no phone)
   const { data: clientRow } = await db
     .from('clients')
     .select('id, business_id, current_cycle_points')
-    .eq('phone_number', baseClient.phone_number)
+    .eq(baseClient.phone_number ? 'phone_number' : 'id', baseClient.phone_number ?? baseClient.id)
     .eq('business_id', businessId)
     .maybeSingle()
   if (!clientRow) return null

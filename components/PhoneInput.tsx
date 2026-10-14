@@ -33,12 +33,14 @@ export default function PhoneInput({ value, onChange, required, disabled, autoFo
 
   const wrapperRef = useRef<HTMLDivElement>(null)
 
-  // Sync if value is set externally (e.g. pre-fill from phone search)
+  // Sync if value is set or cleared externally (e.g. pre-fill from phone search, form reset)
   useEffect(() => {
     if (value && value !== `${prefix}${local}`) {
       const parsed = splitPhonePrefix(value, prefix)
       setPrefix(parsed.prefix)
       setLocal(parsed.number)
+    } else if (!value && local) {
+      setLocal('')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])

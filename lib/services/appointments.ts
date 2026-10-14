@@ -178,7 +178,9 @@ export async function markAppointmentShow(
       .maybeSingle()
 
     const phone = (appt.client as Client | undefined)?.phone_number
-    if (phone && notifSettings?.post_messages_enabled && notifSettings?.post_show_message) {
+    // Skipped when WhatsApp is disabled for this appointment
+    // (client-level opt-out is enforced at send time)
+    if (phone && appt.whatsapp_enabled !== false && notifSettings?.post_messages_enabled && notifSettings?.post_show_message) {
       // Status flip: cancel any pending post_no_show from a previous no_show marking
       await cancelExistingScheduledForEntity('appointment', appointmentId, 'appointment_post_no_show')
 
@@ -225,7 +227,7 @@ export async function markNoShow(appointmentId: string): Promise<void> {
   // Allowed source statuses: 'scheduled' and 'show' (normal flip show → no_show).
   const { data: appt } = await db
     .from('appointments')
-    .select('business_id, client:clients(phone_number, first_name, last_name, civility)')
+    .select('business_id, whatsapp_enabled, client:clients(phone_number, first_name, last_name, civility)')
     .eq('id', appointmentId)
     .in('status', ['scheduled', 'show'])
     .maybeSingle()
@@ -249,7 +251,7 @@ export async function markNoShow(appointmentId: string): Promise<void> {
 
       const clientData = appt.client as unknown as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null } | null
       const phone = clientData?.phone_number
-      if (phone && notifSettings?.post_messages_enabled && notifSettings?.post_no_show_message) {
+      if (phone && appt.whatsapp_enabled !== false && notifSettings?.post_messages_enabled && notifSettings?.post_no_show_message) {
         // Status flip: cancel any pending post_show from a previous show marking
         await cancelExistingScheduledForEntity('appointment', appointmentId, 'appointment_post_show')
 
@@ -317,7 +319,7 @@ export async function getAllAppointments(businessId: string): Promise<Appointmen
 
   const { data, error } = await db
     .from('appointments')
-    .select('*, client:clients!left(id, civility, first_name, last_name, phone_number, magic_token), services:appointment_services(*)')
+    .select('*, client:clients!left(id, civility, first_name, last_name, phone_number, magic_token, whatsapp_enabled), services:appointment_services(*)')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('scheduled_at', { ascending: true })
@@ -355,7 +357,7 @@ export async function getAppointmentList(params: {
 
   let query = db
     .from('appointments')
-    .select('id, client_id, scheduled_at, ended_at, status, notes, cabin_id, services:appointment_services(name, position, price, duration_minutes), client:clients(civility, first_name, last_name, phone_number)')
+    .select('id, client_id, scheduled_at, ended_at, status, notes, cabin_id, whatsapp_enabled, services:appointment_services(name, position, price, duration_minutes), client:clients(civility, first_name, last_name, phone_number)')
     .eq('business_id', params.businessId)
     .is('deleted_at', null)
     .gte('scheduled_at', fromDt.toISOString())
@@ -383,6 +385,7 @@ export async function getAppointmentList(params: {
     status: 'scheduled' | 'confirmed' | 'reschedule_requested' | 'show' | 'no_show'
     notes: string | null
     cabin_id: string | null
+    whatsapp_enabled: boolean | null
     services: Array<{ name: string; position: number; price: number; duration_minutes: number }> | null
     client: { civility: string | null; first_name: string | null; last_name: string | null; phone_number: string } | null
   }
@@ -412,6 +415,7 @@ export async function getAppointmentList(params: {
       status:                  r.status,
       notes:                   r.notes ?? null,
       cabin_id:                r.cabin_id ?? null,
+      whatsapp_enabled:        r.whatsapp_enabled !== false,
       services:                sortServices(r.services).map((sv) => ({ name: sv.name })),
       reminderStatus:          reminderMap.get(r.id) ?? emptyReminderStatus(),
       reschedule_requested_at: null,

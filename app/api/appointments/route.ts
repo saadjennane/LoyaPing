@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
         cabin_id: cabinId,
         notes: notes ?? null,
         status: 'scheduled',
+        whatsapp_enabled: body.whatsapp_enabled !== false,
       })
       .select()
       .single()

@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
-  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock, UserPlus, Gift,
+  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock, UserPlus, Gift, BellOff,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -23,8 +23,9 @@ import type { Appointment, AppointmentListItem, Cabin, Client, LoyaltyProgram, C
 import { ServiceSelector, WeekSlotGrid, type SelectedSlot } from '@/components/appointments/ServiceSlotPicker'
 import { formatDuration, timeToMins, type BusinessHourRow } from '@/lib/scheduling/slots'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
+import WhatsAppToggle from '@/components/WhatsAppToggle'
 import PhoneInput from '@/components/PhoneInput'
-import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
+import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 import {
@@ -65,7 +66,7 @@ function clientFullName(client: Client | null | undefined): string {
   if (parts.length > 1 || (parts.length === 1 && parts[0] !== client.civility)) {
     return parts.join(' ')
   }
-  return client.phone_number
+  return client.phone_number || 'Client sans nom'
 }
 
 function statusLabel(status: string, t: (k: string) => string): string {
@@ -457,6 +458,7 @@ export default function AppointmentsPage() {
   const [apptEndHour, setApptEndHour]     = useState('')
   const [apptEndMinute, setApptEndMinute] = useState('00')
   const [apptNotes, setApptNotes]         = useState('')
+  const [apptWhatsapp, setApptWhatsapp]   = useState(true)
   const [createSubmitting, setCreateSubmitting] = useState(false)
 
   const [calendarConnected, setCalendarConnected] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false })
@@ -528,6 +530,7 @@ export default function AppointmentsPage() {
     setApptEndHour('')
     setApptEndMinute('00')
     setApptNotes('')
+    setApptWhatsapp(true)
     setCreateSubmitting(false)
     setSelectedSlot(null)
     setSlotWeek(startOfWeek(new Date(), { weekStartsOn: 1 }))
@@ -556,15 +559,7 @@ export default function AppointmentsPage() {
     const json = await res.json()
     if (json.error) { toast.error(json.error); setCreateSubmitting(false); return }
     const created: Client = json.data
-    const phoneDigits = created.phone_number.replace(/\D/g, '')
-    const indexItem: CustomerIndexItem = {
-      id:               created.id,
-      display_name:     [created.first_name, created.last_name].filter(Boolean).join(' ') || created.phone_number,
-      phone:            created.phone_number,
-      phone_digits:     phoneDigits,
-      phone_last4:      phoneDigits.slice(-4),
-      last_activity_at: created.created_at,
-    }
+    const indexItem = clientToIndexItem(created)
     addOrUpdate(indexItem)
     setCreateItem(indexItem)
     setCreateStep('details')
@@ -625,6 +620,7 @@ export default function AppointmentsPage() {
           ? { service_ids: selectedServiceIds }
           : { cabin_id: apptCabinId, ended_at }),
         notes: apptNotes || null,
+        whatsapp_enabled: apptWhatsapp,
       }),
     })
     const json = await res.json()
@@ -851,6 +847,23 @@ export default function AppointmentsPage() {
       .catch(() => {})
     return () => { cancelled = true; setClientGiftCards([]) }
   }, [selectedClientId])
+
+  // WhatsApp on/off for one appointment (cancels or reschedules its messages)
+  const [whatsappSaving, setWhatsappSaving] = useState(false)
+  const toggleAppointmentWhatsapp = async (appt: Appointment, enabled: boolean) => {
+    setWhatsappSaving(true)
+    const json = await fetch(`/api/appointments/${appt.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whatsapp_enabled: enabled }),
+    }).then((r) => r.json()).catch(() => ({ error: 'Erreur réseau' }))
+    setWhatsappSaving(false)
+    if (json.error) { toast.error(json.error); return }
+    setSelected((prev) => (prev && prev.id === appt.id ? { ...prev, whatsapp_enabled: enabled } : prev))
+    setAppointments((prev) => prev.map((a) => (a.id === appt.id ? { ...a, whatsapp_enabled: enabled } : a)))
+    setListItems((prev) => prev.map((i) => (i.id === appt.id ? { ...i, whatsapp_enabled: enabled } : i)))
+    toast.success(enabled ? 'Messages WhatsApp réactivés pour ce RDV' : 'Aucun message WhatsApp ne sera envoyé pour ce RDV')
+  }
 
   const linkGiftCard = async (card: GiftCard, appointmentId: string | null) => {
     setGiftCardBusy(card.id)
@@ -1743,6 +1756,9 @@ export default function AppointmentsPage() {
                               <span className={`font-semibold${isUnassigned ? ' text-orange-700' : ''}`}>
                                 {isUnassigned ? (item.client_name === '—' ? 'Sans client' : item.client_name) : item.client_name}
                               </span>
+                              {!item.whatsapp_enabled && (
+                                <BellOff className="inline h-3.5 w-3.5 ml-1.5 text-muted-foreground align-[-2px]" aria-label="WhatsApp désactivé" />
+                              )}
                               {item.services.length > 0 && (
                                 <span className="font-normal text-[#3B5BDB] ml-1.5">{item.services.map((sv) => sv.name).join(' + ')}</span>
                               )}
@@ -2274,6 +2290,15 @@ export default function AppointmentsPage() {
                         </Select>
                       </div>
                     )}
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300"
+                        checked={apptWhatsapp}
+                        onChange={(e) => setApptWhatsapp(e.target.checked)}
+                      />
+                      Envoyer les messages WhatsApp (rappels, après le RDV)
+                    </label>
                     <div className="space-y-1">
                       <Label>{t('appointments.form.notesLabel')} <span className="text-xs text-gray-400 font-normal">{t('appointments.form.notesHint')}</span></Label>
                       <Input placeholder="Coupe + couleur…" value={apptNotes}
@@ -2536,6 +2561,20 @@ export default function AppointmentsPage() {
                     </>
                   )}
                 </div>
+
+                {/* WhatsApp on/off for this appointment */}
+                {selected.client_id !== null && (
+                  <WhatsAppToggle
+                    label="Messages WhatsApp"
+                    description="Rappels et message après le RDV"
+                    checked={selected.whatsapp_enabled !== false}
+                    disabled={whatsappSaving}
+                    lockedReason={(selected.client as Client | undefined)?.whatsapp_enabled === false
+                      ? 'Désactivés pour ce client (fiche client)'
+                      : null}
+                    onChange={(v) => toggleAppointmentWhatsapp(selected, v)}
+                  />
+                )}
 
                 {/* Gift cards: the one used for this RDV, or the client's available ones */}
                 {(() => {

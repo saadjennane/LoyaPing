@@ -24,8 +24,8 @@ function searchItems(query: string, items: CustomerIndexItem[]): CustomerIndexIt
   const scored: { item: CustomerIndexItem; score: number }[] = []
   for (const item of items) {
     const name = item.display_name.toLowerCase()
-    const digits = item.phone_digits
-    const last4 = item.phone_last4
+    const digits = item.phone_digits ?? ''
+    const last4 = item.phone_last4 ?? ''
     let score = 0
 
     // Name match
@@ -188,4 +188,21 @@ export function useCustomerIndex(): CustomerIndexContextValue {
   const ctx = useContext(CustomerIndexContext)
   if (!ctx) throw new Error('useCustomerIndex must be used within CustomerIndexProvider')
   return ctx
+}
+
+/** Index entry for a client just created or edited (phone is optional). */
+export function clientToIndexItem(
+  client: { id: string; first_name: string | null; last_name: string | null; phone_number: string | null; created_at?: string },
+  lastActivityAt: string | null = client.created_at ?? null,
+): CustomerIndexItem {
+  const phone  = client.phone_number ?? ''
+  const digits = phone.replace(/\D/g, '')
+  return {
+    id:               client.id,
+    display_name:     [client.first_name, client.last_name].filter(Boolean).join(' ') || phone || 'Client sans nom',
+    phone,
+    phone_digits:     digits,
+    phone_last4:      digits.slice(-4),
+    last_activity_at: lastActivityAt,
+  }
 }

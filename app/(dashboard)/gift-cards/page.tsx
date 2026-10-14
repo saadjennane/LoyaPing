@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import PhoneInput from '@/components/PhoneInput'
-import { useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
+import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import type { Client, CustomerIndexItem, GiftCard, Service } from '@/lib/types'
 import { formatDuration } from '@/lib/scheduling/slots'
 
@@ -41,7 +41,7 @@ function apptLabel(a: { scheduled_at: string }): string {
 function personName(p: GiftCard['buyer']): string {
   if (!p) return 'Client supprimé'
   const name = [p.first_name, p.last_name].filter(Boolean).join(' ')
-  return name || p.phone_number
+  return name || p.phone_number || 'Client sans nom'
 }
 
 // ─── Client picker (existing client or quick creation) ───────────────────────
@@ -71,15 +71,7 @@ function ClientPicker({
     setSaving(false)
     if (json.error) { toast.error(json.error); return }
     const created: Client = json.data
-    const digits = created.phone_number.replace(/\D/g, '')
-    const item: CustomerIndexItem = {
-      id:               created.id,
-      display_name:     [created.first_name, created.last_name].filter(Boolean).join(' ') || created.phone_number,
-      phone:            created.phone_number,
-      phone_digits:     digits,
-      phone_last4:      digits.slice(-4),
-      last_activity_at: created.created_at,
-    }
+    const item = clientToIndexItem(created)
     addOrUpdate(item)
     onChange(item)
     setCreating(false)

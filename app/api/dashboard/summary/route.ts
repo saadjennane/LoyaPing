@@ -119,8 +119,8 @@ export async function GET() {
         (r) => r.created_at >= todayIso && r.created_at < tomorrowIso,
       )
 
-      const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string } | null) =>
-        c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number) : '—'
+      const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string | null } | null) =>
+        c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number || 'Client sans nom') : '—'
 
       // Sort pending rows by created_at desc (most recent first)
       const pendingRowsSorted = [...pendingRows].sort(
@@ -167,8 +167,8 @@ export async function GET() {
         ? ((apptsTomorrowRes as { count: number | null }).count ?? 0)
         : 0
 
-      const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string } | null) =>
-        c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number) : '—'
+      const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string | null } | null) =>
+        c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number || 'Client sans nom') : '—'
 
       const list: DashboardApptItem[] = rows.map((r) => ({
         id:           r.id,
@@ -206,8 +206,8 @@ export async function GET() {
       const expiringSoon    = rows.filter((r) => r.expires_at <= sevenDaysIso)
       const birthdayCoupons = rows.filter((r) => r.source === 'birthday')
 
-      const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string } | null) =>
-        c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number) : '—'
+      const clientName = (c: { first_name: string | null; last_name: string | null; phone_number: string | null } | null) =>
+        c ? ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.phone_number || 'Client sans nom') : '—'
 
       const list: DashboardLoyaltyItem[] = rows.slice(0, 8).map((r) => {
         const tier = Array.isArray(r.tier) ? r.tier[0] : r.tier

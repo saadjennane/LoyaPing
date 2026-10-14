@@ -55,6 +55,8 @@ export async function sendReadyCorrection(orderId: string): Promise<void> {
     Array.isArray(order.client) ? order.client[0] : order.client
   ) as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null }
 
+  if (!client?.phone_number) throw new Error('Ce client n\'a pas de numéro de téléphone')
+
   const { data: settings } = await db
     .from('order_notification_settings')
     .select('order_ready_correction_template')

@@ -23,7 +23,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { claimDueMessages, markSent, markFailed, sendScheduledMessage } from '@/lib/services/outbox'
+import { claimDueMessages, markSent, markFailed, markSkipped, sendScheduledMessage } from '@/lib/services/outbox'
 import { Appointments } from '@/lib/posthog/appointments'
 
 // Messages per cron invocation. Keep small to stay within Vercel's
@@ -63,6 +63,12 @@ export async function GET(req: NextRequest) {
     for (const msg of messages) {
       try {
         const result = await sendScheduledMessage(msg)
+
+        if (result.skipped) {
+          await markSkipped(msg.id, claimToken, 'WhatsApp désactivé pour ce client')
+          console.log(`[dispatch] SKIPPED ${msg.id} (${msg.entity_type}/${msg.message_type}): ${result.skipped}`)
+          continue
+        }
 
         await markSent(msg.id, claimToken)
 

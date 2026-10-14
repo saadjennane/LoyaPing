@@ -10,7 +10,8 @@ type Props = { params: Promise<{ token: string }> }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function maskPhone(phone: string) {
+function maskPhone(phone: string | null) {
+  if (!phone) return ''
   if (phone.length <= 4) return phone
   return phone.slice(0, -4).replace(/\d/g, '*') + phone.slice(-4)
 }

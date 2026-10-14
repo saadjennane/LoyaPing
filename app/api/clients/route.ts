@@ -24,16 +24,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { phone_number, civility, first_name, last_name, email, birthday, notes } = body
 
-    if (!phone_number) {
-      return NextResponse.json({ error: 'phone_number is required' }, { status: 400 })
-    }
-
     const db = createServerClient()
     const { data, error } = await db
       .from('clients')
       .insert({
         business_id: DEFAULT_BUSINESS_ID,
-        phone_number,
+        phone_number: phone_number || null,   // optional — never store '' (UNIQUE)
         civility:   civility   || null,
         first_name: first_name || null,
         last_name:  last_name  || null,

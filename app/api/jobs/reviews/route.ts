@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
       .select('id, first_name, last_name, civility, phone_number, last_review_request_at, review_reminder_sent, review_intent')
       .eq('business_id', DEFAULT_BUSINESS_ID)
       .not('phone_number', 'is', null)
+      .eq('whatsapp_enabled', true)   // client disabled WhatsApp: never ask for a review
       .or(`review_intent.is.null,review_intent.eq.false`)
       .or(`last_review_request_at.is.null,last_review_request_at.lt.${cooldownThreshold}`)
 

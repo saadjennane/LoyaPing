@@ -19,6 +19,7 @@ import {
   claimMessageNow,
   markSent,
   markFailed,
+  markSkipped,
   sendScheduledMessage,
 } from '@/lib/services/outbox'
 
@@ -47,6 +48,11 @@ export async function POST(_req: NextRequest, { params }: Params) {
   // ── Send ───────────────────────────────────────────────────────────────────
   try {
     const result = await sendScheduledMessage(claimed)
+
+    if (result.skipped) {
+      await markSkipped(claimed.id, claimToken, 'WhatsApp désactivé pour ce client')
+      return NextResponse.json({ data: { sent: false, skipped: result.skipped } })
+    }
 
     await markSent(claimed.id, claimToken)
 
