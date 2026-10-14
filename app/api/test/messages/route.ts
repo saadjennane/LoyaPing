@@ -44,8 +44,8 @@ export async function GET() {
       db.from('business_profile').select('name').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
       db.from('order_notification_settings').select('ready_message,order_ready_correction_template,reminder1_enabled,reminder1_message,reminder2_enabled,reminder2_message,reminder3_enabled,reminder3_message').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
       db.from('appointment_notification_settings').select('reminder1_enabled,reminder1_message,reminder2_enabled,reminder2_message,reminder3_enabled,reminder3_message').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
-      db.from('loyalty_programs').select('birthday_message_enabled,birthday_message_template,birthday_reward_title').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
-      db.from('loyalty_tiers').select('id,reward_title,reward_description,notification_message_template,validity_days').eq('business_id', DEFAULT_BUSINESS_ID).eq('notify_on_tier', true).order('threshold', { ascending: true }).limit(1).maybeSingle(),
+      db.from('loyalty_programs').select('birthday_message_enabled,birthday_message_template,birthday_reward_title,notify_on_tier').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
+      db.from('loyalty_tiers').select('id,reward_title,reward_description,notification_message_template,validity_days').eq('business_id', DEFAULT_BUSINESS_ID).eq('is_enabled', true).order('tier_order', { ascending: true }).limit(1).maybeSingle(),
       db.from('review_settings').select('is_active,satisfaction_message,positive_message,negative_message,google_review_link').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
     ])
 
@@ -69,7 +69,8 @@ export async function GET() {
       appointment_reminder_1:   (an?.reminder1_enabled && an?.reminder1_message) ? an.reminder1_message : null,
       appointment_reminder_2:   (an?.reminder2_enabled && an?.reminder2_message) ? an.reminder2_message : null,
       appointment_reminder_3:   (an?.reminder3_enabled && an?.reminder3_message) ? an.reminder3_message : null,
-      loyalty_tier:             lt ? (lt.notification_message_template ?? `Félicitations ! Vous avez atteint le palier "${tierLabel}".`).replace(/#{reward_title}/g, tierLabel).replace(/#{expiry_date}/g, expiryDate) : null,
+      // Like the real send: only when tier notifications are enabled on the program
+      loyalty_tier:             (lp?.notify_on_tier && lt) ? (lt.notification_message_template ?? `Félicitations ! Vous avez atteint le palier "${tierLabel}".`).replace(/#{reward_title}/g, tierLabel).replace(/#{expiry_date}/g, expiryDate) : null,
       loyalty_birthday:         (lp?.birthday_message_enabled && lp?.birthday_message_template) ? lp.birthday_message_template.replace(/#{cadeau}/g, birthdayReward).replace(/#{reward}/g, birthdayReward) : null,
       review_request:           rv?.is_active ? (rv.satisfaction_message ?? `Étiez-vous satisfait(e) de votre expérience chez ${businessName} ?`).replace(/\{name\}/g, 'Client') : null,
       review_positive:          rv?.is_active ? ((rv.positive_message ?? 'Super ! Vous pouvez nous laisser un avis 🙏') + (rv.google_review_link ? `\n${rv.google_review_link}` : '')) : null,
