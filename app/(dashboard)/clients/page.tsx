@@ -65,10 +65,46 @@ function getProgress(client: Client, tiers: LoyaltyTier[]) {
 }
 
 type ClientStatus = 'pending' | 'ready' | 'scheduled'
-const STATUS_CONFIG: Record<ClientStatus, { labelKey: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  pending:   { labelKey: 'clients.status.pending',   variant: 'secondary' },
-  ready:     { labelKey: 'clients.status.ready',     variant: 'default' },
-  scheduled: { labelKey: 'clients.status.scheduled', variant: 'outline' },
+// Colors follow the module colors of the sidebar (orders = amber/green, appointments = violet)
+const STATUS_CONFIG: Record<ClientStatus, { labelKey: string; className: string }> = {
+  // Order in progress
+  pending:   { labelKey: 'clients.status.pending',   className: 'border-transparent bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' },
+  // Order ready, waiting for pickup
+  ready:     { labelKey: 'clients.status.ready',     className: 'border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  // Upcoming appointment
+  scheduled: { labelKey: 'clients.status.scheduled', className: 'border-transparent bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300' },
+}
+
+// Initials avatar — stable color per client
+const AVATAR_COLORS = [
+  'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+  'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300',
+  'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300',
+]
+
+function ClientAvatar({ client, size = 'h-9 w-9 text-xs' }: { client: Client; size?: string }) {
+  const initials = ((client.first_name?.[0] ?? '') + (client.last_name?.[0] ?? '')).toUpperCase() || '#'
+  let hash = 0
+  for (const ch of client.id) hash = (hash * 31 + ch.charCodeAt(0)) | 0
+  const color = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+  return (
+    <div className={`${size} ${color} shrink-0 rounded-full flex items-center justify-center font-semibold`}>
+      {initials}
+    </div>
+  )
+}
+
+// Loyalty progress bar: indigo → violet, green once the tier is reached
+function progressClass(progress: number, height: string): string {
+  const fill = progress >= 100
+    ? '[&>[data-slot=progress-indicator]]:bg-emerald-500'
+    : '[&>[data-slot=progress-indicator]]:bg-gradient-to-r [&>[data-slot=progress-indicator]]:from-indigo-500 [&>[data-slot=progress-indicator]]:to-violet-500'
+  return `${height} bg-indigo-500/15 ${fill}`
 }
 
 const APPT_LABEL_KEYS: Record<string, string> = {
@@ -669,19 +705,21 @@ export default function ClientsPage() {
                         </div>
                       )}
 
+                      {!mobileSelectMode && <ClientAvatar client={client} />}
+
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">{clientFullName(client)}</div>
                         <div className="text-xs text-muted-foreground">{client.phone_number}</div>
                         {loyaltyOn && tiers.length > 0 && (
                           <div className="mt-1.5 space-y-0.5">
                             <div className="text-xs text-muted-foreground tabular-nums">{current}/{target} pts</div>
-                            <Progress value={progress} className="h-1" />
+                            <Progress value={progress} className={progressClass(progress, 'h-1')} />
                           </div>
                         )}
                         {statuses.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {statuses.map((s) => (
-                              <Badge key={s} variant={STATUS_CONFIG[s].variant} className="text-[10px] px-1.5 py-0">
+                              <Badge key={s} variant="outline" className={`text-[10px] px-1.5 py-0 ${STATUS_CONFIG[s].className}`}>
                                 {t(STATUS_CONFIG[s].labelKey)}
                               </Badge>
                             ))}
@@ -693,7 +731,7 @@ export default function ClientsPage() {
                       {!mobileSelectMode && (
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                           {loyaltyOn && (
-                            <span className="text-sm font-semibold tabular-nums text-indigo-600">
+                            <span className="text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
                               {client.loyalty_points}<span className="text-xs font-normal text-muted-foreground ml-0.5">pts</span>
                             </span>
                           )}
@@ -785,10 +823,15 @@ export default function ClientsPage() {
                           />
                         </TableCell>
                         <TableCell className="pl-6 py-4">
-                          <div className="font-medium">{clientFullName(client)}</div>
-                          {(client.first_name || client.last_name) && (
-                            <div className="text-xs text-muted-foreground">{client.phone_number}</div>
-                          )}
+                          <div className="flex items-center gap-3">
+                            <ClientAvatar client={client} />
+                            <div className="min-w-0">
+                              <div className="font-medium">{clientFullName(client)}</div>
+                              {(client.first_name || client.last_name) && (
+                                <div className="text-xs text-muted-foreground">{client.phone_number}</div>
+                              )}
+                            </div>
+                          </div>
                         </TableCell>
                         {showEmailCol && (
                           <TableCell className="px-6 py-4 text-muted-foreground text-sm">
@@ -809,7 +852,7 @@ export default function ClientsPage() {
                             ) : (
                               <div className="flex flex-wrap gap-1">
                                 {statuses.map((s) => (
-                                  <Badge key={s} variant={STATUS_CONFIG[s].variant}>
+                                  <Badge key={s} variant="outline" className={STATUS_CONFIG[s].className}>
                                     {t(STATUS_CONFIG[s].labelKey)}
                                   </Badge>
                                 ))}
@@ -819,7 +862,7 @@ export default function ClientsPage() {
                         )}
                         {loyaltyOn && (
                           <TableCell className="px-6 py-4">
-                            <span className="font-semibold tabular-nums">{client.loyalty_points}</span>
+                            <span className={`font-semibold tabular-nums ${client.loyalty_points > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground'}`}>{client.loyalty_points}</span>
                             <span className="text-xs text-muted-foreground ml-1">pts</span>
                           </TableCell>
                         )}
@@ -830,10 +873,10 @@ export default function ClientsPage() {
                                 <div className="flex justify-between text-xs text-muted-foreground">
                                   <span className="tabular-nums">{current}/{target} pts</span>
                                   {nextTier && (
-                                    <span className="truncate max-w-[110px] ml-2">{nextTier.reward_description}</span>
+                                    <span className="truncate max-w-[110px] ml-2 font-medium text-violet-600 dark:text-violet-400">{nextTier.reward_description}</span>
                                   )}
                                 </div>
-                                <Progress value={progress} className="h-1.5" />
+                                <Progress value={progress} className={progressClass(progress, 'h-1.5')} />
                               </div>
                             ) : (
                               <span className="text-muted-foreground text-sm">—</span>
@@ -1357,7 +1400,7 @@ export default function ClientsPage() {
                                     <span className="text-green-600 font-medium text-xs">{t('clients.maxTier')}</span>
                                   )}
                                 </div>
-                                <Progress value={progress} className="h-2" />
+                                <Progress value={progress} className={progressClass(progress, 'h-2')} />
                               </div>
 
                               {/* Paliers */}
