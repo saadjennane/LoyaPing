@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useMemo } from 'react'
+import { Suspense, useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { Button } from '@/components/ui/button'
@@ -38,13 +38,20 @@ function LoginForm() {
   const [loading, setLoading] = useState<'email' | 'google' | 'azure' | null>(null)
   const [sent, setSent]       = useState(false)
   const [error, setError]     = useState<string | null>(
-    callbackError === 'auth' ? 'Échec de l\'authentification. Réessayez.' : null,
+    callbackError === 'auth' ? 'Échec de l\'authentification. Réessayez.'
+      : callbackError === 'not_allowed' ? 'Ce compte n\'a pas accès à cette application. Connectez-vous avec un compte autorisé.'
+      : null,
   )
 
   const supabase = useMemo(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   ), [])
+
+  // Refused account: drop its session so another account can sign in
+  useEffect(() => {
+    if (callbackError === 'not_allowed') void supabase.auth.signOut()
+  }, [callbackError, supabase])
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()

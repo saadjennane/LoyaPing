@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
+import { isEmailAllowed } from '@/lib/auth/allowlist'
 
 // API routes reachable without a merchant session. Each one authenticates
 // its caller another way:
@@ -64,6 +65,17 @@ export async function middleware(request: NextRequest) {
     }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // Signed in, but not one of the business accounts
+  if (!isEmailAllowed(data?.claims?.email as string | undefined)) {
+    if (isApi) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.search = '?error=not_allowed'
     return NextResponse.redirect(url)
   }
 
