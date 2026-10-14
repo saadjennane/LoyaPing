@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { consumeGiftCardsForAppointment, releaseGiftCardsForAppointments } from '@/lib/services/gift-cards'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -27,6 +28,10 @@ export async function PATCH(req: NextRequest) {
       .eq('business_id', DEFAULT_BUSINESS_ID)
     if (error) throw error
 
+    if (status === 'show') {
+      await Promise.allSettled((ids as string[]).map((id) => consumeGiftCardsForAppointment(db, id)))
+    }
+
     return NextResponse.json({ data: { success: true, count: ids.length } })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -46,6 +51,9 @@ export async function DELETE(req: NextRequest) {
       .in('id', ids)
       .eq('business_id', DEFAULT_BUSINESS_ID)
     if (error) throw error
+
+    // Gift cards reserved for these appointments become available again
+    await releaseGiftCardsForAppointments(db, ids as string[]).catch((e) => console.error('[appointments/bulk] gift card release error:', e))
 
     // Cancel SCHEDULED outbox reminders for all deleted appointments (best-effort).
     // Run concurrently — each RPC call is cheap (single UPDATE with WHERE clause).

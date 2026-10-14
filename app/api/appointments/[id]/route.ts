@@ -10,6 +10,7 @@ import { createAndNotifyUrgentEvent } from '@/lib/services/urgent-notifications'
 import { assertCabinFree, BookingError } from '@/lib/services/catalog'
 import { cancelAllScheduledForEntity } from '@/lib/services/outbox'
 import { appointmentEnd } from '@/lib/scheduling/slots'
+import { consumeGiftCardsForAppointment, releaseGiftCardsForAppointments } from '@/lib/services/gift-cards'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -95,6 +96,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
       const { error } = await db.from('appointments').update(updates).eq('id', id)
       if (error) throw error
+
+      // Gift cards follow the status: show → consumed, back to scheduled → reserved again
+      if (status === 'show') {
+        await consumeGiftCardsForAppointment(db, id).catch((e) => console.error('[appointments] gift card consume error:', e))
+      } else if (status === 'scheduled') {
+        await db.from('gift_cards').update({ consumed_at: null }).eq('consumed_appointment_id', id)
+      }
       return NextResponse.json({ data: { id, status, forced: true, whatsappQueued: false } })
     }
 
@@ -292,6 +300,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
     if (error) throw error
+
+    // Gift cards reserved for this appointment become available again
+    await releaseGiftCardsForAppointments(db, [id]).catch((e) => console.error('[appointments] gift card release error:', e))
 
     // Cancel any SCHEDULED outbox reminders for this appointment (best-effort).
     try {

@@ -6,6 +6,7 @@ import {
 } from '@/lib/services/outbox'
 import type { Appointment, AppointmentListItem, Client, LoyaltyProgram, ReminderStatus } from '@/lib/types'
 import { getBusinessName, greetingName, waTemplate } from '@/lib/whatsapp/templates'
+import { consumeGiftCardsForAppointment } from '@/lib/services/gift-cards'
 
 // ── Reminder status — single batch query from scheduled_messages ──────────────
 
@@ -112,6 +113,10 @@ export async function markAppointmentShow(
     .single()
 
   if (error || !appt) throw new Error('Appointment not found or already marked as show')
+
+  // Gift cards reserved for this appointment are now consumed (best-effort)
+  await consumeGiftCardsForAppointment(db, appointmentId)
+    .catch((e) => console.error('[appointments] gift card consume error:', e))
 
   const now = new Date().toISOString()
 

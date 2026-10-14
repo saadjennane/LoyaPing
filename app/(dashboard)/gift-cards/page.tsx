@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { Plus, Search, Check, Trash2, X, UserPlus, Gift, CalendarDays } from 'lucide-react'
+import { Plus, Search, Check, Trash2, X, UserPlus, Gift, CalendarDays, CalendarPlus } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -228,7 +228,9 @@ export default function GiftCardsPage() {
     const json = await fetch(`/api/appointments?client_id=${card.recipient_client_id}`).then((r) => r.json()).catch(() => ({ data: [] }))
     const appts: RecipientAppointment[] = json.data ?? []
     setConsumeAppts(appts)
-    setConsumeApptId(lastStartedAppointment(appts)?.id ?? NO_APPOINTMENT)
+    // Preselect the reserved appointment, else the last one that started
+    const reserved = card.consumed_appointment_id && appts.find((a) => a.id === card.consumed_appointment_id)
+    setConsumeApptId(reserved ? reserved.id : lastStartedAppointment(appts)?.id ?? NO_APPOINTMENT)
     setConsumeLoading(false)
   }
 
@@ -342,12 +344,20 @@ export default function GiftCardsPage() {
                       Vendue le {format(parseISO(card.sold_at), 'd MMM yyyy', { locale: fr })} · {card.amount_paid} {currency}
                       {consumed && <> · <span className="text-green-700">consommée le {format(parseISO(card.consumed_at!), 'd MMM yyyy', { locale: fr })}</span></>}
                     </p>
-                    {card.consumed_appointment && (
+                    {card.consumed_appointment ? (
                       <Link
                         href={`/appointments?id=${card.consumed_appointment.id}`}
                         className="inline-flex items-center gap-1 text-xs text-[#3B5BDB] hover:underline"
                       >
-                        <CalendarDays className="h-3 w-3" />RDV du {apptLabel(card.consumed_appointment)}
+                        <CalendarDays className="h-3 w-3" />
+                        {consumed ? 'RDV du ' : 'Réservée · RDV du '}{apptLabel(card.consumed_appointment)}
+                      </Link>
+                    ) : !consumed && card.recipient_client_id && (
+                      <Link
+                        href={`/appointments?new=1&client=${card.recipient_client_id}&gift_card=${card.id}`}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-[#3B5BDB] hover:underline"
+                      >
+                        <CalendarPlus className="h-3 w-3" />Prendre RDV
                       </Link>
                     )}
                     {card.notes && <p className="text-xs text-muted-foreground italic">{card.notes}</p>}

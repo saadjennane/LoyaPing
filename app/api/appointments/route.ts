@@ -9,6 +9,7 @@ import {
   assertCabinExists, assertCabinFree, BookingError, resolveServices, saveAppointmentServices,
   type ResolvedBooking,
 } from '@/lib/services/catalog'
+import { reserveGiftCard } from '@/lib/services/gift-cards'
 
 const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-0000-0000-000000000001'
 
@@ -90,6 +91,12 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) throw error
+
+    // Gift card used for this appointment: reserve it (consumed when marked show)
+    if (body.gift_card_id) {
+      await reserveGiftCard(db, body.gift_card_id, data.id, DEFAULT_BUSINESS_ID)
+        .catch((e) => console.error('[appointments] gift card reserve error:', e))
+    }
 
     try {
       await saveAppointmentServices(db, data.id, items)

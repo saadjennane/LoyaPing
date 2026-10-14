@@ -531,6 +531,7 @@ export default function AppointmentsPage() {
     setApptEndMinute('00')
     setApptNotes('')
     setApptWhatsapp(true)
+    setApptGiftCardId(null)
     setCreateSubmitting(false)
     setSelectedSlot(null)
     setSlotWeek(startOfWeek(new Date(), { weekStartsOn: 1 }))
@@ -621,6 +622,7 @@ export default function AppointmentsPage() {
           : { cabin_id: apptCabinId, ended_at }),
         notes: apptNotes || null,
         whatsapp_enabled: apptWhatsapp,
+        gift_card_id: apptGiftCardId,
       }),
     })
     const json = await res.json()
@@ -865,18 +867,84 @@ export default function AppointmentsPage() {
     toast.success(enabled ? 'Messages WhatsApp réactivés pour ce RDV' : 'Aucun message WhatsApp ne sera envoyé pour ce RDV')
   }
 
-  const linkGiftCard = async (card: GiftCard, appointmentId: string | null) => {
+  // Gift card ↔ appointment from the detail dialog:
+  //   use     → reserved for this RDV (consumed directly if the RDV is already "show")
+  //   release → available again (and no longer consumed)
+  const linkGiftCard = async (card: GiftCard, appt: Appointment | null) => {
+    const payload = appt
+      ? (appt.status === 'show' ? { consumed: true, appointment_id: appt.id } : { appointment_id: appt.id })
+      : (card.consumed_at ? { consumed: false } : { appointment_id: null })
     setGiftCardBusy(card.id)
     const json = await fetch(`/api/gift-cards/${card.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(appointmentId ? { consumed: true, appointment_id: appointmentId } : { consumed: false }),
+      body: JSON.stringify(payload),
     }).then((r) => r.json()).catch(() => ({ error: 'Erreur réseau' }))
     setGiftCardBusy(null)
     if (json.error) { toast.error(json.error); return }
     setClientGiftCards((prev) => prev.map((c) => (c.id === card.id ? json.data : c)))
-    toast.success(appointmentId ? `Carte ${card.code} utilisée pour ce RDV` : `Carte ${card.code} remise à disposition`)
+    toast.success(appt ? `Carte ${card.code} utilisée pour ce RDV` : `Carte ${card.code} remise à disposition`)
   }
+
+  // ── Create dialog: gift cards of the chosen client ────────────────────────
+  const [createGiftCards,  setCreateGiftCards]  = useState<GiftCard[]>([])
+  const [apptGiftCardId,   setApptGiftCardId]   = useState<string | null>(null)
+  const createClientId = createOpen ? createItem?.id ?? null : null
+  useEffect(() => {
+    if (!createClientId) return
+    let cancelled = false
+    fetch(`/api/gift-cards?recipient_id=${createClientId}&status=active`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return
+        // Only cards not already reserved for another appointment
+        const cards = ((j.data ?? []) as GiftCard[]).filter((c) => !c.consumed_appointment_id)
+        setCreateGiftCards(cards)
+        // Drop a card chosen for a previously selected client
+        setApptGiftCardId((prev) => (prev && cards.some((c) => c.id === prev) ? prev : null))
+      })
+      .catch(() => {})
+    return () => { cancelled = true; setCreateGiftCards([]) }
+  }, [createClientId])
+
+  // Choosing a card adds its service to the appointment (same-cabin rule:
+  // a service from another cabin replaces the current selection)
+  const chooseGiftCard = (card: GiftCard | null) => {
+    setApptGiftCardId(card?.id ?? null)
+    if (!card?.service_id) return
+    const cardService = services.find((sv) => sv.id === card.service_id)
+    setSelectedServiceIds((prev) => {
+      if (prev.includes(card.service_id!)) return prev
+      const prevCabin = services.find((sv) => sv.id === prev[0])?.cabin_id
+      return cardService && prevCabin && prevCabin !== cardService.cabin_id ? [card.service_id!] : [...prev, card.service_id!]
+    })
+    setSelectedSlot(null)
+  }
+
+  // Open the create dialog from a gift card: /appointments?new=1&client=…&gift_card=…
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const clientId = params.get('client')
+    if (params.get('new') !== '1' || !clientId) return
+    const giftCardId = params.get('gift_card')
+    window.history.replaceState(null, '', '/appointments')
+    Promise.all([
+      fetch(`/api/clients/${clientId}`).then((r) => r.json()),
+      giftCardId ? fetch(`/api/gift-cards?recipient_id=${clientId}&status=active`).then((r) => r.json()) : Promise.resolve(null),
+    ]).then(([clientJson, cardsJson]) => {
+      if (!clientJson.data) { toast.error('Client introuvable'); return }
+      resetCreate()
+      setCreateItem(clientToIndexItem(clientJson.data))
+      setCreateStep('details')
+      setCreateOpen(true)
+      const card = ((cardsJson?.data ?? []) as GiftCard[]).find((c) => c.id === giftCardId)
+      if (card) {
+        setApptGiftCardId(card.id)
+        if (card.service_id) setSelectedServiceIds([card.service_id])
+      }
+    }).catch(() => toast.error('Impossible d\'ouvrir la prise de RDV'))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
@@ -2212,6 +2280,35 @@ export default function AppointmentsPage() {
                       <div className="text-xs text-gray-500">{createItem.phone}</div>
                     )}
                   </div>
+                  {/* Gift cards of this client: choosing one adds its service */}
+                  {createGiftCards.length > 0 && (
+                    <div className="space-y-1.5 rounded-lg border border-rose-200 bg-rose-50/50 dark:bg-rose-950/20 dark:border-rose-900 px-3 py-2.5">
+                      <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
+                        <Gift className="h-3.5 w-3.5" />
+                        {createGiftCards.length === 1 ? 'Carte cadeau disponible' : `${createGiftCards.length} cartes cadeaux disponibles`}
+                      </p>
+                      {createGiftCards.map((c) => {
+                        const chosen = apptGiftCardId === c.id
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => chooseGiftCard(chosen ? null : c)}
+                            className={`w-full flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
+                              chosen ? 'border-rose-400 bg-white dark:bg-rose-950/40' : 'border-transparent hover:bg-white/70 dark:hover:bg-rose-950/30'
+                            }`}
+                          >
+                            <span className={`h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center ${chosen ? 'border-rose-500 bg-rose-500 text-white' : 'border-muted-foreground/40'}`}>
+                              {chosen && <Check className="h-2.5 w-2.5" />}
+                            </span>
+                            <span className="flex-1">{c.service_name}</span>
+                            <span className="font-mono text-[11px] text-muted-foreground">{c.code}</span>
+                          </button>
+                        )
+                      })}
+                      <p className="text-[11px] text-muted-foreground">La carte sera marquée consommée quand le RDV passera en « présent ».</p>
+                    </div>
+                  )}
                   {/* Pill — slot pre-selected from left panel */}
                   {selectedSlot && apptDate && apptHour && (
                     <div className="flex items-center gap-1.5 text-xs text-[#3B5BDB] bg-[#EDF2FF] rounded-md px-2.5 py-1.5">
@@ -2579,7 +2676,7 @@ export default function AppointmentsPage() {
                 {/* Gift cards: the one used for this RDV, or the client's available ones */}
                 {(() => {
                   const used      = clientGiftCards.filter((c) => c.consumed_appointment_id === selected.id)
-                  const available = clientGiftCards.filter((c) => !c.consumed_at)
+                  const available = clientGiftCards.filter((c) => !c.consumed_at && !c.consumed_appointment_id)
                   if (used.length === 0 && available.length === 0) return null
                   return (
                     <div className="space-y-1.5 rounded-lg border border-rose-200 bg-rose-50/50 dark:bg-rose-950/20 dark:border-rose-900 px-3 py-2.5">
@@ -2587,7 +2684,8 @@ export default function AppointmentsPage() {
                         <div key={c.id} className="flex items-center gap-2 text-sm">
                           <Gift className="h-4 w-4 text-rose-500 shrink-0" />
                           <span className="flex-1">
-                            Réglé avec la carte cadeau <span className="font-mono text-xs">{c.code}</span> · {c.service_name}
+                            {c.consumed_at ? 'Réglé avec la carte cadeau' : 'Carte cadeau réservée pour ce RDV'}{' '}
+                            <span className="font-mono text-xs">{c.code}</span> · {c.service_name}
                           </span>
                           <button
                             type="button"
@@ -2608,7 +2706,7 @@ export default function AppointmentsPage() {
                           <Button
                             type="button" size="sm" variant="outline" className="h-7 text-xs"
                             disabled={giftCardBusy === c.id}
-                            onClick={() => linkGiftCard(c, selected.id)}
+                            onClick={() => linkGiftCard(c, selected)}
                           >
                             Utiliser pour ce RDV
                           </Button>

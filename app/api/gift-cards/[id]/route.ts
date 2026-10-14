@@ -37,6 +37,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
       }
     }
+    // Reserve for an appointment (or release) without consuming the card
+    if (!('consumed' in body) && 'appointment_id' in body) {
+      if (body.appointment_id) {
+        const { data: appt } = await db
+          .from('appointments')
+          .select('id')
+          .eq('id', body.appointment_id)
+          .eq('business_id', DEFAULT_BUSINESS_ID)
+          .is('deleted_at', null)
+          .maybeSingle()
+        if (!appt) return NextResponse.json({ error: 'RDV introuvable' }, { status: 400 })
+        updates.consumed_appointment_id = appt.id
+      } else {
+        updates.consumed_appointment_id = null
+      }
+    }
     if ('notes' in body) updates.notes = typeof body.notes === 'string' && body.notes.trim() ? body.notes.trim() : null
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Rien à modifier' }, { status: 400 })
