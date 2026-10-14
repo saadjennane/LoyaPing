@@ -195,6 +195,38 @@ export type Service = {
   created_at: string
 }
 
+// =========================================
+// GIFT CARDS (cartes cadeaux)
+// =========================================
+type GiftCardPerson = {
+  id: string
+  civility: string | null
+  first_name: string | null
+  last_name: string | null
+  phone_number: string
+}
+
+export type GiftCard = {
+  id: string
+  business_id: string
+  code: string
+  buyer_client_id: string | null
+  recipient_client_id: string | null
+  service_id: string | null
+  service_name: string
+  service_price: number
+  amount_paid: number
+  notes: string | null
+  sold_at: string
+  consumed_at: string | null
+  consumed_appointment_id: string | null
+  created_at: string
+  // joined
+  buyer?: GiftCardPerson | null
+  recipient?: GiftCardPerson | null
+  consumed_appointment?: { id: string; scheduled_at: string } | null
+}
+
 // Snapshot of a service at booking time
 export type AppointmentService = {
   id: string

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutGrid, Package, CalendarDays, UsersRound, Tag, Settings2,
-  ChevronLeft, ChevronRight, Sun, Moon, Monitor, FlaskConical, Star,
+  ChevronLeft, ChevronRight, Sun, Moon, Monitor, FlaskConical, Star, Gift,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useModules } from '@/lib/context/modules'
@@ -38,6 +38,13 @@ const navItems = (modules: { orders_enabled: boolean; appointments_enabled: bool
     icon: CalendarDays,
     label: 'RDV',
     gradient: 'from-violet-400 to-purple-500',
+    show: modules.appointments_enabled,
+  },
+  {
+    href: '/gift-cards',
+    icon: Gift,
+    label: 'Cartes cadeaux',
+    gradient: 'from-rose-400 to-red-500',
     show: modules.appointments_enabled,
   },
   {

@@ -14,6 +14,22 @@ const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? '00000000-0000-00
 
 export async function GET(req: NextRequest) {
   try {
+    // One client's appointments (most recent first), e.g. to link a gift card
+    const clientId = req.nextUrl.searchParams.get('client_id')
+    if (clientId) {
+      const db = createServerClient()
+      const { data, error } = await db
+        .from('appointments')
+        .select('id, scheduled_at, ended_at, status, services:appointment_services(name, position)')
+        .eq('business_id', DEFAULT_BUSINESS_ID)
+        .eq('client_id', clientId)
+        .is('deleted_at', null)
+        .order('scheduled_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      return NextResponse.json({ data: data ?? [] })
+    }
+
     const all = req.nextUrl.searchParams.get('all') === 'true'
     const appts = all
       ? await getAllAppointments(DEFAULT_BUSINESS_ID)

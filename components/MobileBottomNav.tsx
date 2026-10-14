@@ -92,8 +92,18 @@ type MoreItem = {
 
 function buildMoreItems(modules: {
   reviews_enabled: boolean
+  appointments_enabled: boolean
 }, pendingCount: number): MoreItem[] {
   const items: MoreItem[] = []
+
+  if (modules.appointments_enabled) {
+    items.push({
+      href: '/gift-cards',
+      icon: Gift,
+      label: 'Cartes cadeaux',
+      gradient: 'from-rose-400 to-red-500',
+    })
+  }
 
   if (modules.reviews_enabled) {
     items.push({

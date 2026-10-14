@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Plus, ChevronLeft, ChevronRight,
   UserCheck, UserX, AlertTriangle, Trash2, ArrowLeft, AlertCircle, Search, Check, CalendarClock, RefreshCw, X,
-  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock, UserPlus,
+  MoreHorizontal, Pencil, Sparkles, CalendarX, Clock, UserPlus, Gift,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { Appointment, AppointmentListItem, Cabin, Client, LoyaltyProgram, CustomerIndexItem, Service } from '@/lib/types'
+import type { Appointment, AppointmentListItem, Cabin, Client, LoyaltyProgram, CustomerIndexItem, GiftCard, Service } from '@/lib/types'
 import { ServiceSelector, WeekSlotGrid, type SelectedSlot } from '@/components/appointments/ServiceSlotPicker'
 import { formatDuration, timeToMins, type BusinessHourRow } from '@/lib/scheduling/slots'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
@@ -477,6 +477,9 @@ export default function AppointmentsPage() {
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const [apptCabinId,        setApptCabinId]        = useState('')   // RDV sans soin only
   const [rescheduleSlot,     setRescheduleSlot]     = useState<SelectedSlot | null>(null)
+  // Gift cards of the selected appointment's client (detail dialog)
+  const [clientGiftCards,    setClientGiftCards]    = useState<GiftCard[]>([])
+  const [giftCardBusy,       setGiftCardBusy]       = useState<string | null>(null)
   const [rescheduleWeek,     setRescheduleWeek]     = useState<Date>(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
   // ── Inline hours editor ────────────────────────────────────────────────────
   const [hoursDialogOpen, setHoursDialogOpen] = useState(false)
@@ -836,6 +839,31 @@ export default function AppointmentsPage() {
     }).catch(() => setSlotHoursLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createOpen, detailApptMode])
+
+  // Load the client's gift cards when an appointment detail opens
+  const selectedClientId = detailOpen ? selected?.client_id ?? null : null
+  useEffect(() => {
+    if (!selectedClientId) return
+    let cancelled = false
+    fetch(`/api/gift-cards?recipient_id=${selectedClientId}`)
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setClientGiftCards(j.data ?? []) })
+      .catch(() => {})
+    return () => { cancelled = true; setClientGiftCards([]) }
+  }, [selectedClientId])
+
+  const linkGiftCard = async (card: GiftCard, appointmentId: string | null) => {
+    setGiftCardBusy(card.id)
+    const json = await fetch(`/api/gift-cards/${card.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(appointmentId ? { consumed: true, appointment_id: appointmentId } : { consumed: false }),
+    }).then((r) => r.json()).catch(() => ({ error: 'Erreur réseau' }))
+    setGiftCardBusy(null)
+    if (json.error) { toast.error(json.error); return }
+    setClientGiftCards((prev) => prev.map((c) => (c.id === card.id ? json.data : c)))
+    toast.success(appointmentId ? `Carte ${card.code} utilisée pour ce RDV` : `Carte ${card.code} remise à disposition`)
+  }
 
   // Auto-open detail or apply filter from URL param (e.g. from dashboard click)
   useEffect(() => {
@@ -2508,6 +2536,48 @@ export default function AppointmentsPage() {
                     </>
                   )}
                 </div>
+
+                {/* Gift cards: the one used for this RDV, or the client's available ones */}
+                {(() => {
+                  const used      = clientGiftCards.filter((c) => c.consumed_appointment_id === selected.id)
+                  const available = clientGiftCards.filter((c) => !c.consumed_at)
+                  if (used.length === 0 && available.length === 0) return null
+                  return (
+                    <div className="space-y-1.5 rounded-lg border border-rose-200 bg-rose-50/50 dark:bg-rose-950/20 dark:border-rose-900 px-3 py-2.5">
+                      {used.map((c) => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm">
+                          <Gift className="h-4 w-4 text-rose-500 shrink-0" />
+                          <span className="flex-1">
+                            Réglé avec la carte cadeau <span className="font-mono text-xs">{c.code}</span> · {c.service_name}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={giftCardBusy === c.id}
+                            onClick={() => linkGiftCard(c, null)}
+                            className="text-xs text-muted-foreground hover:text-foreground underline"
+                          >
+                            Retirer
+                          </button>
+                        </div>
+                      ))}
+                      {used.length === 0 && available.map((c) => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm">
+                          <Gift className="h-4 w-4 text-rose-500 shrink-0" />
+                          <span className="flex-1">
+                            Carte cadeau disponible : {c.service_name} <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
+                          </span>
+                          <Button
+                            type="button" size="sm" variant="outline" className="h-7 text-xs"
+                            disabled={giftCardBusy === c.id}
+                            onClick={() => linkGiftCard(c, selected.id)}
+                          >
+                            Utiliser pour ce RDV
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
 
                 {/* Unassigned appointment — assign client or delete */}
                 {selected.client_id === null ? (
