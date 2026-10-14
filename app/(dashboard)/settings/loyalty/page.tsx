@@ -12,6 +12,8 @@ import type { LoyaltyProgram, LoyaltyTier } from '@/lib/types'
 import { useI18n } from '@/lib/i18n/provider'
 import { useConfigStatus } from '@/lib/context/config-status'
 import { WORLD_CURRENCIES } from '@/lib/currencies'
+import { addDays, format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 const TIER_VARS = [
   { label: "Date d'expiration", variable: '#{expiry_date}'  },
@@ -20,14 +22,19 @@ const TIER_VARS = [
   { label: 'Prénom',            variable: '{{prenom}}'      },
   { label: 'Nom',               variable: '{{nom}}'         },
 ]
-const TIER_PREVIEW = { expiry_date: '15 avril 2026', reward_title: 'Café offert', civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
-function renderTierPreview(msg: string): string {
+// Sample client for previews; reward and expiry come from the tier being edited
+const PREVIEW_CLIENT = { civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
+function renderTierPreview(msg: string, tier: { reward_title: string; validity_days: string }): string {
+  const days = parseInt(tier.validity_days)
+  const expiry = days > 0
+    ? format(addDays(new Date(), days), 'd MMMM yyyy', { locale: fr })
+    : 'sans expiration'
   return msg
-    .replace(/#{expiry_date}/g,    TIER_PREVIEW.expiry_date)
-    .replace(/#{reward_title}/g,   TIER_PREVIEW.reward_title)
-    .replace(/\{\{civilite\}\}/gi, TIER_PREVIEW.civilite)
-    .replace(/\{\{prenom\}\}/gi,   TIER_PREVIEW.prenom)
-    .replace(/\{\{nom\}\}/gi,      TIER_PREVIEW.nom)
+    .replace(/#{expiry_date}/g,    expiry)
+    .replace(/#{reward_title}/g,   tier.reward_title.trim() || 'Récompense')
+    .replace(/\{\{civilite\}\}/gi, PREVIEW_CLIENT.civilite)
+    .replace(/\{\{prenom\}\}/gi,   PREVIEW_CLIENT.prenom)
+    .replace(/\{\{nom\}\}/gi,      PREVIEW_CLIENT.nom)
 }
 
 const BIRTHDAY_VARS = [
@@ -36,14 +43,15 @@ const BIRTHDAY_VARS = [
   { label: 'Prénom',   variable: '{{prenom}}'    },
   { label: 'Nom',      variable: '{{nom}}'       },
 ]
-const BIRTHDAY_PREVIEW = { cadeau: 'un café offert', civilite: 'Mme', prenom: 'Yasmine', nom: 'Benali' }
-function renderBirthdayPreview(msg: string): string {
+function renderBirthdayPreview(msg: string, rewardTitle: string): string {
+  // Same default as the birthday job when no reward title is set
+  const cadeau = rewardTitle.trim() || 'un cadeau'
   return msg
-    .replace(/#{cadeau}/g,         BIRTHDAY_PREVIEW.cadeau)
-    .replace(/#{reward}/g,         BIRTHDAY_PREVIEW.cadeau)
-    .replace(/\{\{civilite\}\}/gi, BIRTHDAY_PREVIEW.civilite)
-    .replace(/\{\{prenom\}\}/gi,   BIRTHDAY_PREVIEW.prenom)
-    .replace(/\{\{nom\}\}/gi,      BIRTHDAY_PREVIEW.nom)
+    .replace(/#{cadeau}/g,         cadeau)
+    .replace(/#{reward}/g,         cadeau)
+    .replace(/\{\{civilite\}\}/gi, PREVIEW_CLIENT.civilite)
+    .replace(/\{\{prenom\}\}/gi,   PREVIEW_CLIENT.prenom)
+    .replace(/\{\{nom\}\}/gi,      PREVIEW_CLIENT.nom)
 }
 
 function insertVar(
@@ -361,9 +369,9 @@ export default function LoyaltySettingsPage() {
                             >{label}</button>
                           ))}
                         </div>
-                        {tier.notification_message_template && /#{/.test(tier.notification_message_template) && (
+                        {tier.notification_message_template && /#{|\{\{/.test(tier.notification_message_template) && (
                           <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
-                            {renderTierPreview(tier.notification_message_template)}
+                            {renderTierPreview(tier.notification_message_template, tier)}
                           </div>
                         )}
                       </div>
@@ -498,9 +506,9 @@ export default function LoyaltySettingsPage() {
                           >{label}</button>
                         ))}
                       </div>
-                      {birthdayForm.birthday_message_template && /#{/.test(birthdayForm.birthday_message_template) && (
+                      {birthdayForm.birthday_message_template && /#{|\{\{/.test(birthdayForm.birthday_message_template) && (
                         <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground italic border border-dashed">
-                          {renderBirthdayPreview(birthdayForm.birthday_message_template)}
+                          {renderBirthdayPreview(birthdayForm.birthday_message_template, birthdayForm.birthday_reward_title)}
                         </div>
                       )}
                       </div>

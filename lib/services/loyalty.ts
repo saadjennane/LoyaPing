@@ -136,12 +136,12 @@ export async function creditPoints({
       const template = tier.notification_message_template
       if (!template) continue
 
-      let message = template
-      if (tier.validity_days) {
-        const expiry = format(addDays(new Date(), tier.validity_days), 'd MMMM yyyy', { locale: fr })
-        message = message.replace(/#{expiry_date}/g, expiry)
-      }
-      message = message
+      // Same rendering as the settings preview: no validity → "sans expiration"
+      const expiry = tier.validity_days
+        ? format(addDays(new Date(), tier.validity_days), 'd MMMM yyyy', { locale: fr })
+        : 'sans expiration'
+      const message = template
+        .replace(/#{expiry_date}/g,      expiry)
         .replace(/#{reward_title}/g,     tier.reward_title ?? tier.reward_description ?? '')
         .replace(/\{\{civilite\}\}/gi,   (client as {civility?: string | null}).civility   ?? '')
         .replace(/\{\{prenom\}\}/gi,     (client as {first_name?: string | null}).first_name ?? '')

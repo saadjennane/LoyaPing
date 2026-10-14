@@ -45,7 +45,7 @@ export async function GET() {
       db.from('order_notification_settings').select('ready_message,order_ready_correction_template,reminder1_enabled,reminder1_message,reminder2_enabled,reminder2_message,reminder3_enabled,reminder3_message').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
       db.from('appointment_notification_settings').select('reminder1_enabled,reminder1_message,reminder2_enabled,reminder2_message,reminder3_enabled,reminder3_message').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
       db.from('loyalty_programs').select('birthday_message_enabled,birthday_message_template,birthday_reward_title').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
-      db.from('loyalty_tiers').select('id,reward_title,reward_description,notification_message_template').eq('business_id', DEFAULT_BUSINESS_ID).eq('notify_on_tier', true).order('threshold', { ascending: true }).limit(1).maybeSingle(),
+      db.from('loyalty_tiers').select('id,reward_title,reward_description,notification_message_template,validity_days').eq('business_id', DEFAULT_BUSINESS_ID).eq('notify_on_tier', true).order('threshold', { ascending: true }).limit(1).maybeSingle(),
       db.from('review_settings').select('is_active,satisfaction_message,positive_message,negative_message,google_review_link').eq('business_id', DEFAULT_BUSINESS_ID).maybeSingle(),
     ])
 
@@ -57,7 +57,10 @@ export async function GET() {
     const rv = reviewRes.data
 
     const tierLabel = lt?.reward_title ?? lt?.reward_description ?? 'Palier atteint'
-    const expiryDate = new Date(Date.now() + 30 * 86_400_000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    // Same rendering as the real send: tier validity, or "sans expiration"
+    const expiryDate = lt?.validity_days
+      ? new Date(Date.now() + lt.validity_days * 86_400_000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'sans expiration'
     const birthdayReward = lp?.birthday_reward_title ?? 'un cadeau'
 
     const previews: Record<TestScenario, string | null> = {
