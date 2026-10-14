@@ -51,13 +51,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    const client = order.client as unknown as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null } | null
-    if (!client?.phone_number) {
-      return NextResponse.json(
-        { error: 'Order has no associated client phone number' },
-        { status: 422 },
-      )
-    }
+    const client = order.client as unknown as { phone_number: string | null; first_name: string | null; last_name: string | null; civility: string | null } | null
 
     // ── 2. Guard: reject if a message is currently being sent ─────────────
     const { data: processing } = await db
@@ -83,6 +77,12 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       .eq('id', orderId)
 
     if (updateErr) throw updateErr
+
+    // Client without phone: the order is ready, but there is nobody to notify
+    if (!client?.phone_number) {
+      Orders.orderReadyMarked({ order_id: orderId })
+      return NextResponse.json({ data: { scheduledMessageId: null, mode: 'no_phone' } })
+    }
 
     // ── 4. Build WhatsApp message body ────────────────────────────────────
     const { data: notifSettings } = await db

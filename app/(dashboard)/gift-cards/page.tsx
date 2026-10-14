@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
+import CopyCode from '@/components/CopyCode'
 import PhoneInput from '@/components/PhoneInput'
 import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
 import type { Client, CustomerIndexItem, GiftCard, Service } from '@/lib/types'
@@ -69,7 +70,7 @@ function ClientPicker({
   const [saving, setSaving] = useState(false)
 
   const handleCreate = async () => {
-    if (!form.first_name.trim() || !form.phone_number) return
+    if (!form.first_name.trim()) return
     setSaving(true)
     const json = await fetch('/api/clients', {
       method: 'POST',
@@ -106,9 +107,10 @@ function ClientPicker({
               onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
           </div>
           <PhoneInput value={form.phone_number} onChange={(v) => setForm({ ...form, phone_number: v })} />
+          <p className="text-[11px] text-muted-foreground">Téléphone facultatif : sans numéro, aucun message WhatsApp n&apos;est envoyé.</p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setCreating(false)}>Annuler</Button>
-            <Button type="button" size="sm" disabled={saving || !form.first_name.trim() || !form.phone_number} onClick={handleCreate}>
+            <Button type="button" size="sm" disabled={saving || !form.first_name.trim()} onClick={handleCreate}>
               {saving ? 'Création…' : 'Créer le client'}
             </Button>
           </div>
@@ -369,7 +371,7 @@ export default function GiftCardsPage() {
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold text-sm ${consumed ? 'line-through text-muted-foreground' : ''}`}>{card.service_name}</span>
-                      <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{card.code}</span>
+                      <CopyCode code={card.code} />
                     </div>
                     <p className="text-sm">
                       <span className="text-muted-foreground">Pour</span> <span className="font-medium">{personName(card.recipient)}</span>

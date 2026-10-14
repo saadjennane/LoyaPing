@@ -900,9 +900,8 @@ export default function OrdersPage() {
                       onChange={e => setNewClientForm({ ...newClientForm, last_name: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <Label>{t('common.phone')}</Label>
+                    <Label>{t('common.phone')} <span className="text-xs text-muted-foreground font-normal">(facultatif)</span></Label>
                     <PhoneInput
-                      required
                       value={newClientForm.phone_number}
                       onChange={v => setNewClientForm({ ...newClientForm, phone_number: v })}
                     />

@@ -24,6 +24,7 @@ import { ServiceSelector, WeekSlotGrid, type SelectedSlot } from '@/components/a
 import { formatDuration, timeToMins, type BusinessHourRow } from '@/lib/scheduling/slots'
 import CustomerAutocomplete from '@/components/CustomerAutocomplete'
 import WhatsAppToggle from '@/components/WhatsAppToggle'
+import CopyCode from '@/components/CopyCode'
 import type { CabinConflictInfo, ConflictResolution } from '@/lib/services/catalog'
 import PhoneInput from '@/components/PhoneInput'
 import { clientToIndexItem, useCustomerIndex } from '@/lib/hooks/useCustomerIndex'
@@ -931,6 +932,27 @@ export default function AppointmentsPage() {
     }
     setClientGiftCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [...prev, card]))
     setGiftCodeInput('')
+    await linkGiftCard(card, appt)
+  }
+
+  // Browse every available card (any recipient) to link it to the open RDV
+  const [giftBrowseOpen,    setGiftBrowseOpen]    = useState(false)
+  const [giftBrowseCards,   setGiftBrowseCards]   = useState<GiftCard[]>([])
+  const [giftBrowseSearch,  setGiftBrowseSearch]  = useState('')
+  const [giftBrowseLoading, setGiftBrowseLoading] = useState(false)
+
+  const openGiftBrowse = async () => {
+    setGiftBrowseOpen(true)
+    setGiftBrowseSearch('')
+    setGiftBrowseLoading(true)
+    const json = await fetch('/api/gift-cards?status=active').then((r) => r.json()).catch(() => ({ data: [] }))
+    setGiftBrowseCards(((json.data ?? []) as GiftCard[]).filter((c) => !c.consumed_appointment_id))
+    setGiftBrowseLoading(false)
+  }
+
+  const pickBrowsedCard = async (card: GiftCard, appt: Appointment) => {
+    setGiftBrowseOpen(false)
+    setClientGiftCards((prev) => (prev.some((c) => c.id === card.id) ? prev : [...prev, card]))
     await linkGiftCard(card, appt)
   }
 
@@ -2318,9 +2340,8 @@ export default function AppointmentsPage() {
                         onChange={(e) => setNewClientForm({ ...newClientForm, last_name: e.target.value })} />
                     </div>
                     <div className="space-y-1">
-                      <Label>{t('common.phone')}</Label>
+                      <Label>{t('common.phone')} <span className="text-xs text-muted-foreground font-normal">(facultatif)</span></Label>
                       <PhoneInput
-                        required
                         value={newClientForm.phone_number}
                         onChange={v => setNewClientForm({ ...newClientForm, phone_number: v })}
                       />
@@ -2762,7 +2783,7 @@ export default function AppointmentsPage() {
                           <Gift className="h-4 w-4 text-rose-500 shrink-0" />
                           <span className="flex-1">
                             {c.consumed_at ? 'Réglé avec la carte cadeau' : 'Carte cadeau réservée pour ce RDV'}{' '}
-                            <span className="font-mono text-xs">{c.code}</span> · {c.service_name}
+                            <CopyCode code={c.code} /> · {c.service_name}
                           </span>
                           <button
                             type="button"
@@ -2778,7 +2799,7 @@ export default function AppointmentsPage() {
                         <div key={c.id} className="flex items-center gap-2 text-sm">
                           <Gift className="h-4 w-4 text-rose-500 shrink-0" />
                           <span className="flex-1">
-                            Carte cadeau disponible : {c.service_name} <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
+                            Carte cadeau disponible : {c.service_name} <CopyCode code={c.code} />
                           </span>
                           <Button
                             type="button" size="sm" variant="outline" className="h-7 text-xs"
@@ -2804,6 +2825,9 @@ export default function AppointmentsPage() {
                           <Button type="submit" size="sm" variant="outline" className="h-7 text-xs"
                             disabled={!giftCodeInput.trim() || giftCardBusy === 'code'}>
                             Lier
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-[#3B5BDB]" onClick={openGiftBrowse}>
+                            Parcourir
                           </Button>
                         </form>
                       )}
@@ -2963,6 +2987,43 @@ export default function AppointmentsPage() {
               </div>
             )
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Browse available gift cards to link one to the open appointment */}
+      <Dialog open={giftBrowseOpen} onOpenChange={setGiftBrowseOpen}>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-md max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Gift className="h-4 w-4 text-rose-500" />Choisir une carte cadeau</DialogTitle>
+          </DialogHeader>
+          <div className="relative mt-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input autoFocus className="pl-9" placeholder="Nom, code, soin…" value={giftBrowseSearch} onChange={(e) => setGiftBrowseSearch(e.target.value)} />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-1 mt-2">
+            {giftBrowseLoading ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Chargement…</p>
+            ) : (() => {
+              const person = (p: GiftCard['buyer']) => (p ? [p.first_name, p.last_name].filter(Boolean).join(' ') || p.phone_number || 'Client sans nom' : 'Client supprimé')
+              const q = giftBrowseSearch.trim().toLowerCase()
+              const list = giftBrowseCards.filter((c) => !q || [c.code, c.service_name, person(c.recipient), person(c.buyer)].some((v) => v.toLowerCase().includes(q)))
+              if (list.length === 0) return <p className="text-sm text-muted-foreground py-4 text-center">Aucune carte disponible.</p>
+              return list.map((c) => (
+                <div key={c.id} className="flex items-center gap-2 rounded-md border px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{c.service_name}</div>
+                    <div className="text-xs text-muted-foreground truncate">Pour {person(c.recipient)} · offerte par {person(c.buyer)}</div>
+                    <CopyCode code={c.code} className="mt-1" />
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs shrink-0"
+                    disabled={!selected}
+                    onClick={() => selected && pickBrowsedCard(c, selected)}>
+                    Lier
+                  </Button>
+                </div>
+              ))
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
 

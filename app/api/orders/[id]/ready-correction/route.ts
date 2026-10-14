@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const client = order.client as unknown as { phone_number: string; first_name: string | null; last_name: string | null; civility: string | null } | null
     if (!client?.phone_number) {
       return NextResponse.json(
-        { error: 'Order has no associated client phone number' },
+        { error: 'Ce client n\'a pas de numéro de téléphone : aucun message ne peut être envoyé' },
         { status: 422 },
       )
     }
